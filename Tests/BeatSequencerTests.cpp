@@ -57,9 +57,9 @@ TEST_CASE("BeatStepSequencer presets configure expected 32-step patterns", "[seq
 
 TEST_CASE("BeatStepSequencer advances gate and detects active transitions", "[sequencer]") {
     BeatStepSequencer seq;
+    seq.applyPreset(StepPatternPreset::Last32nd); // Only step 31 enabled
     seq.prepare(48000.0);
     seq.setSmoothingTimeMs(0.1f);
-    seq.applyPreset(StepPatternPreset::Last32nd); // Only step 31 enabled
 
     bool enteredActive = false;
     float envInactive = seq.advanceSample(120.0, true, true, 0.5, enteredActive);
@@ -71,5 +71,5 @@ TEST_CASE("BeatStepSequencer advances gate and detects active transitions", "[se
     float envActive = seq.advanceSample(120.0, true, true, 3.90, enteredActive);
     REQUIRE(enteredActive);
     REQUIRE(seq.getCurrentStep() == 31);
-    REQUIRE(envActive > 0.0f);
+    REQUIRE(envActive > 0.1f);
 }

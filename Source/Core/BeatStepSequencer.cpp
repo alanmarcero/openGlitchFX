@@ -97,7 +97,7 @@ void BeatStepSequencer::applyPreset(StepPatternPreset preset) {
 }
 
 void BeatStepSequencer::setSmoothingTimeMs(float ms) {
-    smoothingTimeMs_ = std::clamp(ms, 0.1f, 50.0f);
+    smoothingTimeMs_ = std::clamp(ms, 0.0f, 50.0f);
     updateSmoothingCoeff();
 }
 
