@@ -49,7 +49,6 @@ TEST_CASE("GlitchProcessorCore passes dry audio when current beat step is disabl
 
     core.processBlock(procL.data(), procR.data(), kN);
 
-    // After tiny initial smoothing, output must match dry input
     for (int i = 64; i < kN; ++i) {
         REQUIRE_THAT(procL[static_cast<size_t>(i)], Catch::Matchers::WithinAbs(dryL[static_cast<size_t>(i)], 1e-4f));
         REQUIRE_THAT(procR[static_cast<size_t>(i)], Catch::Matchers::WithinAbs(dryR[static_cast<size_t>(i)], 1e-4f));
@@ -128,4 +127,42 @@ TEST_CASE("Bitrate Crush knob scales distortion monotonically with knob amount",
     REQUIRE(diffZero < 1e-5f);
     REQUIRE(diffLow > 0.01f);
     REQUIRE(diffHigh > diffLow);
+}
+
+TEST_CASE("Per-pad FX routing enables an effect on only a single 1/32 pad while other pads run different FX", "[core][per-pad]") {
+    constexpr double kSr = 48000.0;
+    constexpr int kN = 512;
+
+    GlitchProcessorCore core;
+    core.applyPatternPreset(StepPatternPreset::AllOn);
+    // Assign ONLY Bitcrush (bit 0) to Pad 31 (the last 1/32 of the bar), and ONLY Wavefold (bit 9) to Pad 0
+    core.setAllStepsFxMask(0u);
+    core.setStepFxEnabled(0, GlitchFxId::Wavefold, true);
+    core.setStepFxEnabled(31, GlitchFxId::Bitcrush, true);
+
+    core.prepare(kSr);
+    core.setGateSmoothingMs(0.0f);
+
+    // Turn up Bitcrush to 90%, leave Wavefold at 0%
+    core.setEffectEnabled(GlitchFxId::Bitcrush, true);
+    core.setEffectAmount(GlitchFxId::Bitcrush, 0.90f);
+    core.setEffectEnabled(GlitchFxId::Wavefold, true);
+    core.setEffectAmount(GlitchFxId::Wavefold, 0.0f);
+
+    std::vector<float> dryL(kN), dryR(kN);
+    fillSineStereo(dryL, dryR, kSr, 440.0);
+
+    // 1. At Pad 0 (PPQ = 0.0), Bitcrush is NOT assigned to Pad 0, so output must be completely dry
+    auto pad0L = dryL;
+    auto pad0R = dryR;
+    core.setTransport(120.0, true, true, 0.0);
+    core.processBlock(pad0L.data(), pad0R.data(), kN);
+    REQUIRE(computeRmsDifference(dryL, pad0L) < 1e-5f);
+
+    // 2. At Pad 31 (PPQ = 3.90), Bitcrush IS assigned to Pad 31, so Bitcrush engages
+    auto pad31L = dryL;
+    auto pad31R = dryR;
+    core.setTransport(120.0, true, true, 3.90);
+    core.processBlock(pad31L.data(), pad31R.data(), kN);
+    REQUIRE(computeRmsDifference(dryL, pad31L) > 0.05f);
 }

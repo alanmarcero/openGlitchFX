@@ -35,15 +35,17 @@ private:
     juce::Slider internalBpmSlider_;
     juce::Label internalBpmLabel_{ {}, "BPM" };
 
-    // 32-Step Beat Sequencer & Pattern Quick-Select Buttons
+    // 32-Step Beat Sequencer, Paint Brush Selector & Pattern Quick-Select Buttons
     openglitch::ui::StepSequencerComponent sequencerGrid_;
+    juce::Label paintBrushLabel_{ {}, "PAD BRUSH:" };
+    juce::ComboBox paintBrushBox_;
     juce::TextButton presetAllBtn_{ "ALL 32" };
-    juce::TextButton presetLastBeatBtn_{ "LAST BEAT (25-32)" };
-    juce::TextButton presetLast4StepsBtn_{ "LAST 4 STEPS" };
+    juce::TextButton presetLastBeatBtn_{ "LAST BEAT" };
+    juce::TextButton presetLast4StepsBtn_{ "LAST 4" };
     juce::TextButton presetLast32ndBtn_{ "LAST 1/32" };
-    juce::TextButton presetBackbeatBtn_{ "BEATS 2 & 4" };
+    juce::TextButton presetBackbeatBtn_{ "BEATS 2&4" };
     juce::TextButton preset16thBtn_{ "1/16 ALT" };
-    juce::TextButton presetInvertBtn_{ "INVERT" };
+    juce::TextButton presetResetFxBtn_{ "ALL FX" };
     juce::TextButton presetClearBtn_{ "CLEAR" };
 
     // 10 Glitch FX Slot UI (2 rows x 5 columns)

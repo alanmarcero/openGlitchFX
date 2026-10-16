@@ -5,9 +5,9 @@
 namespace openglitch::core {
 
 BeatStepSequencer::BeatStepSequencer() {
-    // Default to all steps ON so signal passes through glitch FX out-of-the-box,
-    // or user can toggle any of the 32 steps / presets.
     steps_.fill(true);
+    stepFxMasks_.fill(kAllFxMask);
+    fxEnvelopes_.fill(1.0f);
     updateSmoothingCoeff();
 }
 
@@ -21,8 +21,14 @@ void BeatStepSequencer::reset() {
     internalPpq_ = 0.0;
     currentStep_ = 0;
     currentBarPhase_ = 0.0;
-    wasActiveStep_ = steps_[0];
+    const uint16_t activeMask0 = steps_[0] ? (stepFxMasks_[0] & kAllFxMask) : 0u;
+    wasActiveStep_ = (activeMask0 != 0u);
+    wasActiveFxMask_ = activeMask0;
     envelope_ = wasActiveStep_ ? 1.0f : 0.0f;
+    for (int fx = 0; fx < kNumFxSlots; ++fx) {
+        const bool fxOn = ((activeMask0 >> fx) & 1u) != 0u;
+        fxEnvelopes_[static_cast<size_t>(fx)] = fxOn ? 1.0f : 0.0f;
+    }
 }
 
 void BeatStepSequencer::setStep(int stepIndex, bool enabled) {
@@ -36,6 +42,42 @@ bool BeatStepSequencer::getStep(int stepIndex) const {
         return steps_[static_cast<size_t>(stepIndex)];
     }
     return false;
+}
+
+void BeatStepSequencer::setStepFxMask(int stepIndex, uint16_t fxMask) {
+    if (stepIndex >= 0 && stepIndex < kNumSteps) {
+        stepFxMasks_[static_cast<size_t>(stepIndex)] = (fxMask & kAllFxMask);
+    }
+}
+
+uint16_t BeatStepSequencer::getStepFxMask(int stepIndex) const {
+    if (stepIndex >= 0 && stepIndex < kNumSteps) {
+        return stepFxMasks_[static_cast<size_t>(stepIndex)] & kAllFxMask;
+    }
+    return 0u;
+}
+
+void BeatStepSequencer::setStepFxEnabled(int stepIndex, int fxIndex, bool enabled) {
+    if (stepIndex >= 0 && stepIndex < kNumSteps && fxIndex >= 0 && fxIndex < kNumFxSlots) {
+        const uint16_t bit = static_cast<uint16_t>(1u << fxIndex);
+        if (enabled) {
+            stepFxMasks_[static_cast<size_t>(stepIndex)] |= bit;
+        } else {
+            stepFxMasks_[static_cast<size_t>(stepIndex)] &= static_cast<uint16_t>(~bit);
+        }
+        stepFxMasks_[static_cast<size_t>(stepIndex)] &= kAllFxMask;
+    }
+}
+
+bool BeatStepSequencer::isStepFxEnabled(int stepIndex, int fxIndex) const {
+    if (stepIndex >= 0 && stepIndex < kNumSteps && fxIndex >= 0 && fxIndex < kNumFxSlots) {
+        return ((stepFxMasks_[static_cast<size_t>(stepIndex)] >> fxIndex) & 1u) != 0u;
+    }
+    return false;
+}
+
+void BeatStepSequencer::setAllStepsFxMask(uint16_t fxMask) {
+    stepFxMasks_.fill(fxMask & kAllFxMask);
 }
 
 void BeatStepSequencer::setAllSteps(bool enabled) {
@@ -124,7 +166,21 @@ int BeatStepSequencer::computeStepFromPpq(double ppqPosition, double* outBarPhas
 }
 
 bool BeatStepSequencer::isCurrentStepEnabled() const {
-    return getStep(currentStep_);
+    return getCurrentStepActiveFxMask() != 0u;
+}
+
+uint16_t BeatStepSequencer::getCurrentStepActiveFxMask() const {
+    if (currentStep_ >= 0 && currentStep_ < kNumSteps && steps_[static_cast<size_t>(currentStep_)]) {
+        return stepFxMasks_[static_cast<size_t>(currentStep_)] & kAllFxMask;
+    }
+    return 0u;
+}
+
+float BeatStepSequencer::getFxEnvelope(int fxIndex) const {
+    if (fxIndex >= 0 && fxIndex < kNumFxSlots) {
+        return fxEnvelopes_[static_cast<size_t>(fxIndex)];
+    }
+    return 0.0f;
 }
 
 float BeatStepSequencer::advanceSample(double bpm,
@@ -132,6 +188,17 @@ float BeatStepSequencer::advanceSample(double bpm,
                                        bool hasValidHostPpq,
                                        double hostPpqAtSample,
                                        bool& stepTransitionedToActive) {
+    uint16_t dummyFxTransitionMask = 0u;
+    return advanceSampleWithFxMask(bpm, useHostSync, hasValidHostPpq, hostPpqAtSample,
+                                   stepTransitionedToActive, dummyFxTransitionMask);
+}
+
+float BeatStepSequencer::advanceSampleWithFxMask(double bpm,
+                                                 bool useHostSync,
+                                                 bool hasValidHostPpq,
+                                                 double hostPpqAtSample,
+                                                 bool& stepTransitionedToActive,
+                                                 uint16_t& fxTransitionedToActiveMask) {
     const double safeBpm = std::clamp(bpm, 20.0, 300.0);
     double effectivePpq = 0.0;
 
@@ -148,15 +215,28 @@ float BeatStepSequencer::advanceSample(double bpm,
     }
 
     currentStep_ = computeStepFromPpq(effectivePpq, &currentBarPhase_);
-    const bool activeNow = steps_[static_cast<size_t>(currentStep_)];
+    const uint16_t activeFxMaskNow = getCurrentStepActiveFxMask();
+    const bool activeNow = (activeFxMaskNow != 0u);
 
     stepTransitionedToActive = (!wasActiveStep_ && activeNow);
+    fxTransitionedToActiveMask = static_cast<uint16_t>(activeFxMaskNow & ~wasActiveFxMask_);
+
     wasActiveStep_ = activeNow;
+    wasActiveFxMask_ = activeFxMaskNow;
 
     const float target = activeNow ? 1.0f : 0.0f;
     envelope_ = target + smoothCoeff_ * (envelope_ - target);
     if (envelope_ < 1e-5f) envelope_ = 0.0f;
     if (envelope_ > 0.99999f) envelope_ = 1.0f;
+
+    for (int fx = 0; fx < kNumFxSlots; ++fx) {
+        const bool fxActive = ((activeFxMaskNow >> fx) & 1u) != 0u;
+        const float fxTarget = fxActive ? 1.0f : 0.0f;
+        float& fxEnv = fxEnvelopes_[static_cast<size_t>(fx)];
+        fxEnv = fxTarget + smoothCoeff_ * (fxEnv - fxTarget);
+        if (fxEnv < 1e-5f) fxEnv = 0.0f;
+        if (fxEnv > 0.99999f) fxEnv = 1.0f;
+    }
 
     return envelope_;
 }

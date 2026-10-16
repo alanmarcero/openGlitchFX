@@ -1,9 +1,14 @@
 #include "Parameters.h"
+#include "../Core/BeatStepSequencer.h"
 
 namespace openglitch::params {
 
 juce::String stepParamId(int stepIndex) {
     return juce::String::formatted("step_%02d", stepIndex + 1);
+}
+
+juce::String stepFxParamId(int stepIndex) {
+    return juce::String::formatted("step_fx_%02d", stepIndex + 1);
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout() {
@@ -34,7 +39,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout() {
         2.5f,
         juce::AudioParameterFloatAttributes().withLabel("ms")));
 
-    // 32 Selectable Spots in a 4/4 Bar (Default: Last Beat [Steps 25..32] enabled)
+    // 32 Selectable Spots in a 4/4 Bar + Per-Pad 10-Bit FX Routing Mask
+    constexpr int kAllFxInt = static_cast<int>(openglitch::core::BeatStepSequencer::kAllFxMask);
     for (int i = 0; i < 32; ++i) {
         const bool defaultActive = (i >= 24);
         const auto id = stepParamId(i);
@@ -43,6 +49,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout() {
             juce::ParameterID{ id, 1 },
             name,
             defaultActive));
+
+        const auto fxMaskId = stepFxParamId(i);
+        const auto fxMaskName = juce::String::formatted("Step %02d FX Mask", i + 1);
+        layout.push_back(std::make_unique<juce::AudioParameterInt>(
+            juce::ParameterID{ fxMaskId, 1 },
+            fxMaskName,
+            0,
+            kAllFxInt,
+            kAllFxInt));
     }
 
     auto addFxParam = [&](const char* amtId, const char* onId, const char* title, float defaultPct) {

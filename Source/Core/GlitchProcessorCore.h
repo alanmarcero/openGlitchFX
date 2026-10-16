@@ -3,6 +3,7 @@
 #include "BeatStepSequencer.h"
 #include "GlitchEffects.h"
 #include <array>
+#include <cstdint>
 
 namespace openglitch::core {
 
@@ -31,6 +32,7 @@ struct MeterTelemetry {
     int currentStep = 0;
     float barPhase = 0.0f;
     bool stepEnabled = true;
+    uint16_t currentStepFxMask = BeatStepSequencer::kAllFxMask;
 };
 
 class GlitchProcessorCore {
@@ -42,9 +44,15 @@ public:
     void prepare(double sampleRate);
     void reset();
 
-    // 32-Step Sequencer access
+    // 32-Step Sequencer access (global step enable + per-step 10-FX assignment bitmask)
     void setStep(int stepIndex, bool enabled);
     bool getStep(int stepIndex) const;
+    void setStepFxMask(int stepIndex, uint16_t fxMask);
+    uint16_t getStepFxMask(int stepIndex) const;
+    void setStepFxEnabled(int stepIndex, GlitchFxId fxId, bool enabled);
+    bool isStepFxEnabled(int stepIndex, GlitchFxId fxId) const;
+    void setAllStepsFxMask(uint16_t fxMask);
+
     void setAllSteps(bool enabled);
     void setPatternBitmask(uint32_t mask);
     uint32_t getPatternBitmask() const;

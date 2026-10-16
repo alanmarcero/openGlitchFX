@@ -29,8 +29,24 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
     internalBpmSlider_.setTextValueSuffix(" BPM");
     addAndMakeVisible(internalBpmSlider_);
 
-    // 32-Step Beat Sequencer Grid & Quick Pattern Buttons
+    // 32-Step Beat Sequencer Grid, Paint-Brush FX Selector & Quick Pattern Buttons
     addAndMakeVisible(sequencerGrid_);
+
+    paintBrushLabel_.setFont(juce::FontOptions(10.0f, juce::Font::bold));
+    paintBrushLabel_.setJustificationType(juce::Justification::centredRight);
+    addAndMakeVisible(paintBrushLabel_);
+
+    paintBrushBox_.addItem("ALL ACTIVE FX (DEFAULT)", 1);
+    for (int fx = 0; fx < 10; ++fx) {
+        const auto& desc = openglitch::params::kFxDescriptors[static_cast<size_t>(fx)];
+        paintBrushBox_.addItem(juce::String::formatted("ONLY: %s [%s]", desc.name, desc.shortCode), fx + 2);
+    }
+    paintBrushBox_.setSelectedId(1, juce::dontSendNotification);
+    paintBrushBox_.onChange = [this]() {
+        const int idx = paintBrushBox_.getSelectedItemIndex(); // 0 = All (-1), 1..10 = FX 0..9
+        sequencerGrid_.setPaintTargetFx(idx - 1);
+    };
+    addAndMakeVisible(paintBrushBox_);
 
     auto setupPresetBtn = [this](juce::TextButton& btn, std::function<void()> fn) {
         btn.onClick = std::move(fn);
@@ -44,7 +60,7 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
     setupPresetBtn(presetLast32ndBtn_,   [this]() { sequencerGrid_.applyPreset(StepPatternPreset::Last32nd); });
     setupPresetBtn(presetBackbeatBtn_,   [this]() { sequencerGrid_.applyPreset(StepPatternPreset::Backbeat2And4); });
     setupPresetBtn(preset16thBtn_,       [this]() { sequencerGrid_.applyPreset(StepPatternPreset::Stutter16ths); });
-    setupPresetBtn(presetInvertBtn_,     [this]() { sequencerGrid_.invertPattern(); });
+    setupPresetBtn(presetResetFxBtn_,    [this]() { sequencerGrid_.resetAllStepFxMasksToAll(); });
     setupPresetBtn(presetClearBtn_,      [this]() { sequencerGrid_.applyPreset(StepPatternPreset::ClearAll); });
 
     // 10 Glitch FX Slots (2 Rows x 5 Columns)
@@ -58,17 +74,17 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
 
     const std::array<FxMeta, kNumUiFx> metas = {{
         // Row 1: Initial 5 Glitch FX
-        { "BITCRUSH",     "BITRATE & DEPTH",  kBitcrushAmt,    kBitcrushOn    },
-        { "DOWNSAMPLE",   "SAMPLE & HOLD",    kDownsampleAmt,  kDownsampleOn  },
-        { "STUTTER",      "BEAT REPEAT",      kStutterAmt,     kStutterOn     },
-        { "TAPE STOP",    "VINYL BRAKE",      kTapeStopAmt,    kTapeStopOn    },
-        { "RING MOD",     "CYBER CARRIER",    kRingModAmt,     kRingModOn     },
+        { "BITCRUSH [BC]",     "BITRATE & DEPTH",  kBitcrushAmt,    kBitcrushOn    },
+        { "DOWNSAMPLE [DS]",   "SAMPLE & HOLD",    kDownsampleAmt,  kDownsampleOn  },
+        { "STUTTER [ST]",      "BEAT REPEAT",      kStutterAmt,     kStutterOn     },
+        { "TAPE STOP [TS]",    "VINYL BRAKE",      kTapeStopAmt,    kTapeStopOn    },
+        { "RING MOD [RM]",     "CYBER CARRIER",    kRingModAmt,     kRingModOn     },
         // Row 2: 5 Additional Glitch FX (10 Total)
-        { "REVERSE",      "BACKWARDS GRAIN",  kReverseAmt,     kReverseOn     },
-        { "CHOPPER",      "RHYTHMIC SLICER",  kChopperAmt,     kChopperOn     },
-        { "PITCH GLITCH", "OCTAVE ARPEGGIO",  kPitchGlitchAmt, kPitchGlitchOn },
-        { "COMB RESO",    "METALLIC FLANGE",  kCombResoAmt,    kCombResoOn    },
-        { "WAVEFOLD",     "HARMONIC FOLD",    kWavefoldAmt,    kWavefoldOn    }
+        { "REVERSE [RV]",      "BACKWARDS GRAIN",  kReverseAmt,     kReverseOn     },
+        { "CHOPPER [CH]",      "RHYTHMIC SLICER",  kChopperAmt,     kChopperOn     },
+        { "PITCH GLITCH [PG]", "OCTAVE ARPEGGIO",  kPitchGlitchAmt, kPitchGlitchOn },
+        { "COMB RESO [CR]",    "METALLIC FLANGE",  kCombResoAmt,    kCombResoOn    },
+        { "WAVEFOLD [WF]",     "HARMONIC FOLD",    kWavefoldAmt,    kWavefoldOn    }
     }};
 
     for (size_t i = 0; i < kNumUiFx; ++i) {
@@ -139,6 +155,7 @@ void OpenGlitchFXEditor::applyTheme(int themeIndex) {
     const auto& pal = lookAndFeel_.getPalette();
 
     themeLabel_.setColour(juce::Label::textColourId, pal.textMuted);
+    paintBrushLabel_.setColour(juce::Label::textColourId, pal.accentPrimary);
     smoothLabel_.setColour(juce::Label::textColourId, pal.textMuted);
     masterMixLabel_.setColour(juce::Label::textColourId, pal.textMuted);
     masterGainLabel_.setColour(juce::Label::textColourId, pal.textMuted);
@@ -150,7 +167,7 @@ void OpenGlitchFXEditor::applyTheme(int themeIndex) {
 void OpenGlitchFXEditor::timerCallback() {
     const auto tel = processor_.getTelemetry();
     sequencerGrid_.setPlayheadState(tel.currentStep, tel.barPhase, tel.stepEnabled, tel.activeGate);
-    repaint(0, 0, getWidth(), 62);
+    repaint();
 }
 
 void OpenGlitchFXEditor::paint(juce::Graphics& g) {
@@ -205,7 +222,7 @@ void OpenGlitchFXEditor::paint(juce::Graphics& g) {
 
     g.setColour(pal.accentPrimary);
     g.setFont(juce::FontOptions(10.5f, juce::Font::bold));
-    g.drawText("32-STEP 4/4 BEAT-SYNCED 10-FX GLITCH PROCESSOR", static_cast<int>(w * 0.5f - 200.0f), 32, 400, 14, juce::Justification::centred);
+    g.drawText("32-STEP 4/4 BEAT-SYNCED PER-PAD 10-FX GLITCH PROCESSOR", static_cast<int>(w * 0.5f - 220.0f), 32, 440, 14, juce::Justification::centred);
 
     // Live Gate Status Pill Indicator in Header
     const auto tel = processor_.getTelemetry();
@@ -226,23 +243,26 @@ void OpenGlitchFXEditor::paint(juce::Graphics& g) {
     g.setColour(pal.cardBorder);
     g.drawLine(28.0f, 58.0f, w - 28.0f, 58.0f, 1.0f);
 
-    // 3. Draw 10 FX Slot Cards (2x5 Matrix)
-    for (const auto& slot : fxSlots_) {
+    // 3. Draw 10 FX Slot Cards (2x5 Matrix) — highlight when active on the current 1/32 pad!
+    for (size_t i = 0; i < kNumUiFx; ++i) {
+        const auto& slot = fxSlots_[i];
         const auto& r = slot.cardBounds;
-        const bool active = slot.enableBtn.getToggleState() && slot.knob.getValue() > 0.1;
+        const bool moduleArmed = slot.enableBtn.getToggleState() && slot.knob.getValue() > 0.1;
+        const bool routedOnCurrentPad = ((tel.currentStepFxMask >> i) & 1u) != 0u;
+        const bool firingNow = moduleArmed && routedOnCurrentPad && gateOpen;
 
         g.setColour(pal.cardBg);
         g.fillRoundedRectangle(r, 6.0f);
 
-        g.setColour(active ? pal.cardActiveBorder : pal.cardBorder);
-        g.drawRoundedRectangle(r, 6.0f, active ? 1.5f : 1.0f);
+        g.setColour(firingNow ? pal.accentSecondary : (moduleArmed ? pal.cardActiveBorder : pal.cardBorder));
+        g.drawRoundedRectangle(r, 6.0f, firingNow ? 2.0f : (moduleArmed ? 1.4f : 1.0f));
 
         juce::Rectangle<float> hdr(r.getX() + 6.0f, r.getY() + 5.0f, r.getWidth() - 12.0f, 28.0f);
-        g.setColour(pal.headerPlate);
+        g.setColour(firingNow ? pal.accentSecondary.withAlpha(0.25f) : pal.headerPlate);
         g.fillRoundedRectangle(hdr, 4.0f);
 
-        g.setColour(active ? pal.accentPrimary : pal.textBright);
-        g.setFont(juce::FontOptions(11.5f, juce::Font::bold));
+        g.setColour(firingNow ? pal.textBright : (moduleArmed ? pal.accentPrimary : pal.textBright));
+        g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
         g.drawText(slot.title, hdr.withTrimmedBottom(12.0f).toNearestInt(), juce::Justification::centred);
 
         g.setColour(pal.textMuted);
@@ -281,17 +301,21 @@ void OpenGlitchFXEditor::resized() {
     // 32-Step Beat Sequencer Section
     sequencerGrid_.setBounds(static_cast<int>(margin), 68, static_cast<int>(w - margin * 2.0f), 120);
 
-    // Quick Pattern Preset Row below Sequencer
+    // Paint Brush Selector + Quick Pattern Preset Row below Sequencer
     const float presetY = 194.0f;
     const float presetH = 24.0f;
+    paintBrushLabel_.setBounds(static_cast<int>(margin), static_cast<int>(presetY), 74, static_cast<int>(presetH));
+    paintBrushBox_.setBounds(static_cast<int>(margin + 78.0f), static_cast<int>(presetY), 196, static_cast<int>(presetH));
+
     juce::Button* presetBtns[8] = {
         &presetAllBtn_, &presetLastBeatBtn_, &presetLast4StepsBtn_, &presetLast32ndBtn_,
-        &presetBackbeatBtn_, &preset16thBtn_, &presetInvertBtn_, &presetClearBtn_
+        &presetBackbeatBtn_, &preset16thBtn_, &presetResetFxBtn_, &presetClearBtn_
     };
-    const float gap = 6.0f;
-    const float btnW = (w - margin * 2.0f - gap * 7.0f) / 8.0f;
+    const float btnsStartX = margin + 282.0f;
+    const float gap = 5.0f;
+    const float btnW = (w - margin - btnsStartX - gap * 7.0f) / 8.0f;
     for (int i = 0; i < 8; ++i) {
-        presetBtns[i]->setBounds(static_cast<int>(margin + static_cast<float>(i) * (btnW + gap)),
+        presetBtns[i]->setBounds(static_cast<int>(btnsStartX + static_cast<float>(i) * (btnW + gap)),
                                  static_cast<int>(presetY),
                                  static_cast<int>(btnW),
                                  static_cast<int>(presetH));

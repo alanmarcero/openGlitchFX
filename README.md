@@ -25,23 +25,34 @@ Unlike traditional glitch plugins that run continuously or require complex MIDI 
 
 ---
 
-## Core Differentiator: 32-Step 4/4 Beat-Synced Sequencer
+## Core Differentiator: 32-Step 4/4 Beat-Synced Sequencer & Per-Pad Effect Routing
 
 - **32 Selectable Spots per 4/4 Bar:**
   - Every 4/4 bar (4 quarter-note beats) is subdivided into **32 steps** (`8 steps per beat × 4 beats = 32 steps`, each representing `1/32` of a bar).
   - Click or drag across any of the 32 pads in the sequencer to toggle glitch processing **ON** or **OFF** for that exact `1/32` slice of the bar.
+- **Per-Pad (1/32 Step) Effect Assignment (Single FX, Multi-FX, or All FX per Pad):**
+  - Each of the 32 pads stores its own **10-bit FX Routing Mask** (`step_fx_01` .. `step_fx_32`), backed by **10 independent smoothed DSP gate envelopes** so different pads can trigger completely different effects (e.g., *Bitcrush* on Pad 25, *Stutter* on Pads 29–31, and *Tape Stop* only on Pad 32).
+  - **Right-Click Any Pad (Context Menu):**
+    - **Enable ALL 10 FX on Pad (`ALL`)** or **Disable Pad (Dry Pass-Through)**.
+    - **Solo Single Effect on Pad:** One-click soloing of any of the 10 FX (`Only BITCRUSH (BC)`, `Only TAPE STOP (TS)`, etc.) on that single `1/32` pad (automatically waking up the effect's dial to `50%` if currently at `0%`).
+    - **Toggle Multi-FX Combination on Pad:** Check/uncheck any combination of the 10 effects on that pad.
+    - **Copy Pad FX Routing:** Copy a pad's FX assignment to the current 8-step beat or across all 32 pads.
+  - **Left-Click `PAD BRUSH` Mode:**
+    - Use the **`PAD BRUSH:`** dropdown (`ALL ACTIVE FX` or `ONLY: BITCRUSH [BC]` .. `ONLY: WAVEFOLD [WF]`) to left-click and drag-paint a specific effect across any pads in the bar.
+  - **On-Pad Visual Feedback:**
+    - Each pad displays a live routing badge (`ALL`, `BC`, `TS`, `3FX`, etc.) plus a **2×5 mini LED dot matrix** indicating which of the 10 effects are assigned to that pad.
 - **One-Click Musical Pattern Presets:**
   - **ALL 32:** Continuous glitch processing across the entire bar.
   - **LAST BEAT (25-32):** Engages only on Beat 4 of every bar for automatic end-of-bar turnarounds and fills.
-  - **LAST 4 STEPS (29-32):** Engages for the final half-beat (`4/32`) of the bar.
+  - **LAST 4 (29-32):** Engages for the final half-beat (`4/32`) of the bar.
   - **LAST 1/32 (Step 32):** Micro-glitch burst on only the very last `1/32` note of the bar.
-  - **BEATS 2 & 4:** Backbeat-synced glitching on snare beats.
+  - **BEATS 2&4:** Backbeat-synced glitching on snare beats.
   - **1/16 ALT:** Alternating 16th-note rhythmic gating.
-  - **INVERT / CLEAR:** Instant pattern manipulation.
+  - **ALL FX / CLEAR:** Instant FX routing reset or pattern clear.
 - **Sample-Accurate DAW Sync & Anti-Click Gate Envelope:**
   - Locks directly to the DAW host playhead (`PPQ` bar position and `BPM`) or runs on an internal BPM clock when host transport is stopped.
-  - Adjustable **DE-CLICK** smoothing (`0.5 ms` to `25 ms`) ensures zero pops or clicks when transitioning between dry pass-through and active glitch steps.
-  - Automatically triggers buffer capture for time-based effects (`STUTTER`, `TAPE STOP`, `REVERSE`) on the exact sample a disabled-to-enabled step boundary is crossed.
+  - Adjustable **DE-CLICK** smoothing (`0.5 ms` to `25 ms`) ensures zero pops or clicks when transitioning between dry pass-through and active glitch steps, or when switching between different effects on adjacent pads.
+  - Automatically triggers buffer capture for time-based effects (`STUTTER`, `TAPE STOP`, `REVERSE`) on the exact sample **that specific effect's** pad assignment transitions from inactive to active.
 
 ---
 

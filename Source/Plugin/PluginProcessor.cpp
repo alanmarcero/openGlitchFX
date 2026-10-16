@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include <cmath>
 
 OpenGlitchFXProcessor::OpenGlitchFXProcessor()
     : AudioProcessor(BusesProperties()
@@ -32,10 +33,14 @@ void OpenGlitchFXProcessor::syncParametersToCore() {
     using namespace openglitch::params;
     using openglitch::core::GlitchFxId;
 
-    // 1. 32-Step Beat Sequencer Pattern
+    // 1. 32-Step Beat Sequencer Pattern + Per-Pad 10-FX Routing Bitmask
     for (int i = 0; i < 32; ++i) {
         if (auto* raw = parameters.getRawParameterValue(stepParamId(i))) {
             core_.setStep(i, raw->load() > 0.5f);
+        }
+        if (auto* fxRaw = parameters.getRawParameterValue(stepFxParamId(i))) {
+            const int maskInt = static_cast<int>(std::round(fxRaw->load()));
+            core_.setStepFxMask(i, static_cast<uint16_t>(std::clamp(maskInt, 0, 1023)));
         }
     }
 

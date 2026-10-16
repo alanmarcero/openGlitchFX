@@ -52,6 +52,26 @@ bool GlitchProcessorCore::getStep(int stepIndex) const {
     return sequencer_.getStep(stepIndex);
 }
 
+void GlitchProcessorCore::setStepFxMask(int stepIndex, uint16_t fxMask) {
+    sequencer_.setStepFxMask(stepIndex, fxMask);
+}
+
+uint16_t GlitchProcessorCore::getStepFxMask(int stepIndex) const {
+    return sequencer_.getStepFxMask(stepIndex);
+}
+
+void GlitchProcessorCore::setStepFxEnabled(int stepIndex, GlitchFxId fxId, bool enabled) {
+    sequencer_.setStepFxEnabled(stepIndex, static_cast<int>(fxId), enabled);
+}
+
+bool GlitchProcessorCore::isStepFxEnabled(int stepIndex, GlitchFxId fxId) const {
+    return sequencer_.isStepFxEnabled(stepIndex, static_cast<int>(fxId));
+}
+
+void GlitchProcessorCore::setAllStepsFxMask(uint16_t fxMask) {
+    sequencer_.setAllStepsFxMask(fxMask);
+}
+
 void GlitchProcessorCore::setAllSteps(bool enabled) {
     sequencer_.setAllSteps(enabled);
 }
@@ -136,7 +156,9 @@ void GlitchProcessorCore::processBlock(float* leftChannel, float* rightChannel, 
 
         const double sampleHostPpq = blockStartPpq_ + static_cast<double>(i) * ppqPerSample;
         bool enteredActive = false;
-        const float stepGate = sequencer_.advanceSample(bpm_, useHostSync_, hasValidHostPpq_, sampleHostPpq, enteredActive);
+        uint16_t fxTransitionMask = 0u;
+        const float stepGate = sequencer_.advanceSampleWithFxMask(
+            bpm_, useHostSync_, hasValidHostPpq_, sampleHostPpq, enteredActive, fxTransitionMask);
         lastGate = stepGate;
 
         if (masterBypassed_) {
@@ -145,9 +167,14 @@ void GlitchProcessorCore::processBlock(float* leftChannel, float* rightChannel, 
             continue;
         }
 
-        if (enteredActive) {
+        // Trigger time-buffered effects when their specific per-pad assignment transitions to active
+        if ((fxTransitionMask & (1u << static_cast<int>(GlitchFxId::Stutter))) != 0u) {
             stutter_.triggerCapture();
+        }
+        if ((fxTransitionMask & (1u << static_cast<int>(GlitchFxId::TapeStop))) != 0u) {
             tapeStop_.triggerBrake();
+        }
+        if ((fxTransitionMask & (1u << static_cast<int>(GlitchFxId::Reverse))) != 0u) {
             reverseGrain_.triggerGrain();
         }
 
@@ -159,49 +186,61 @@ void GlitchProcessorCore::processBlock(float* leftChannel, float* rightChannel, 
             float wetL = dryL;
             float wetR = dryR;
 
-            auto isFxActive = [&](GlitchFxId id) {
+            // Helper: returns the per-pad smoothed FX envelope (0..1) if the FX module is enabled
+            auto getFxGate = [&](GlitchFxId id) -> float {
                 const auto idx = static_cast<size_t>(id);
-                return fxEnabled_[idx] && fxAmount_[idx] > 1e-4f;
+                if (!fxEnabled_[idx] || fxAmount_[idx] <= 1e-4f) {
+                    return 0.0f;
+                }
+                return sequencer_.getFxEnvelope(static_cast<int>(id));
             };
-            auto amtOf = [&](GlitchFxId id) {
-                return fxAmount_[static_cast<size_t>(id)];
+
+            auto applyGatedFx = [&](GlitchFxId id, auto&& processFn) {
+                const float g = getFxGate(id);
+                if (g > 1e-5f) {
+                    float fxL = wetL;
+                    float fxR = wetR;
+                    processFn(fxAmount_[static_cast<size_t>(id)], fxL, fxR);
+                    wetL = wetL * (1.0f - g) + fxL * g;
+                    wetR = wetR * (1.0f - g) + fxR * g;
+                }
             };
 
-            // Time/Buffer FX first
-            if (isFxActive(GlitchFxId::Stutter)) {
-                stutter_.processSample(amtOf(GlitchFxId::Stutter), bpm_, wetL, wetR);
-            }
-            if (isFxActive(GlitchFxId::Reverse)) {
-                reverseGrain_.processSample(amtOf(GlitchFxId::Reverse), wetL, wetR);
-            }
-            if (isFxActive(GlitchFxId::TapeStop)) {
-                tapeStop_.processSample(amtOf(GlitchFxId::TapeStop), wetL, wetR);
-            }
-            if (isFxActive(GlitchFxId::PitchGlitch)) {
-                pitchGlitch_.processSample(amtOf(GlitchFxId::PitchGlitch), wetL, wetR);
-            }
+            // 1. Time/Buffer FX
+            applyGatedFx(GlitchFxId::Stutter, [&](float amt, float& l, float& r) {
+                stutter_.processSample(amt, bpm_, l, r);
+            });
+            applyGatedFx(GlitchFxId::Reverse, [&](float amt, float& l, float& r) {
+                reverseGrain_.processSample(amt, l, r);
+            });
+            applyGatedFx(GlitchFxId::TapeStop, [&](float amt, float& l, float& r) {
+                tapeStop_.processSample(amt, l, r);
+            });
+            applyGatedFx(GlitchFxId::PitchGlitch, [&](float amt, float& l, float& r) {
+                pitchGlitch_.processSample(amt, l, r);
+            });
 
-            // Harmonic / Spectral / Bitrate FX
-            if (isFxActive(GlitchFxId::Bitcrush)) {
-                bitcrusher_.processSample(amtOf(GlitchFxId::Bitcrush), wetL, wetR);
-            }
-            if (isFxActive(GlitchFxId::Downsample)) {
-                decimator_.processSample(amtOf(GlitchFxId::Downsample), wetL, wetR);
-            }
-            if (isFxActive(GlitchFxId::Wavefold)) {
-                wavefolder_.processSample(amtOf(GlitchFxId::Wavefold), wetL, wetR);
-            }
-            if (isFxActive(GlitchFxId::RingMod)) {
-                ringMod_.processSample(amtOf(GlitchFxId::RingMod), wetL, wetR);
-            }
-            if (isFxActive(GlitchFxId::CombReso)) {
-                combResonator_.processSample(amtOf(GlitchFxId::CombReso), wetL, wetR);
-            }
+            // 2. Harmonic / Spectral / Bitrate FX
+            applyGatedFx(GlitchFxId::Bitcrush, [&](float amt, float& l, float& r) {
+                bitcrusher_.processSample(amt, l, r);
+            });
+            applyGatedFx(GlitchFxId::Downsample, [&](float amt, float& l, float& r) {
+                decimator_.processSample(amt, l, r);
+            });
+            applyGatedFx(GlitchFxId::Wavefold, [&](float amt, float& l, float& r) {
+                wavefolder_.processSample(amt, l, r);
+            });
+            applyGatedFx(GlitchFxId::RingMod, [&](float amt, float& l, float& r) {
+                ringMod_.processSample(amt, l, r);
+            });
+            applyGatedFx(GlitchFxId::CombReso, [&](float amt, float& l, float& r) {
+                combResonator_.processSample(amt, l, r);
+            });
 
-            // Rhythmic Chopper Slicer at end of glitch chain
-            if (isFxActive(GlitchFxId::Chopper)) {
-                chopperGate_.processSample(amtOf(GlitchFxId::Chopper), bpm_, wetL, wetR);
-            }
+            // 3. Rhythmic Chopper Slicer
+            applyGatedFx(GlitchFxId::Chopper, [&](float amt, float& l, float& r) {
+                chopperGate_.processSample(amt, bpm_, l, r);
+            });
 
             outL = (dryL * (1.0f - effectiveWet) + wetL * effectiveWet) * masterGainLinear_;
             outR = (dryR * (1.0f - effectiveWet) + wetR * effectiveWet) * masterGainLinear_;
@@ -232,6 +271,7 @@ void GlitchProcessorCore::processBlock(float* leftChannel, float* rightChannel, 
     telemetry_.currentStep = sequencer_.getCurrentStep();
     telemetry_.barPhase = static_cast<float>(sequencer_.getCurrentBarPhase());
     telemetry_.stepEnabled = sequencer_.isCurrentStepEnabled();
+    telemetry_.currentStepFxMask = sequencer_.getCurrentStepActiveFxMask();
 }
 
 } // namespace openglitch::core

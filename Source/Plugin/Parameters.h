@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <string>
 
@@ -45,7 +46,28 @@ inline constexpr const char* kCombResoOn     = "combreso_on";
 inline constexpr const char* kWavefoldAmt    = "wavefold_amt";
 inline constexpr const char* kWavefoldOn     = "wavefold_on";
 
-juce::String stepParamId(int stepIndex); // 0..31 -> "step_01".."step_32"
+struct FxDescriptor {
+    const char* name;
+    const char* shortCode;
+    const char* amtParamId;
+    const char* onParamId;
+};
+
+inline constexpr std::array<FxDescriptor, 10> kFxDescriptors = {{
+    { "BITCRUSH",     "BC", kBitcrushAmt,    kBitcrushOn    },
+    { "DOWNSAMPLE",   "DS", kDownsampleAmt,  kDownsampleOn  },
+    { "STUTTER",      "ST", kStutterAmt,     kStutterOn     },
+    { "TAPE STOP",    "TS", kTapeStopAmt,    kTapeStopOn    },
+    { "RING MOD",     "RM", kRingModAmt,     kRingModOn     },
+    { "REVERSE",      "RV", kReverseAmt,     kReverseOn     },
+    { "CHOPPER",      "CH", kChopperAmt,     kChopperOn     },
+    { "PITCH GLITCH", "PG", kPitchGlitchAmt, kPitchGlitchOn },
+    { "COMB RESO",    "CR", kCombResoAmt,    kCombResoOn    },
+    { "WAVEFOLD",     "WF", kWavefoldAmt,    kWavefoldOn    }
+}};
+
+juce::String stepParamId(int stepIndex);   // 0..31 -> "step_01".."step_32"
+juce::String stepFxParamId(int stepIndex); // 0..31 -> "step_fx_01".."step_fx_32"
 
 juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
