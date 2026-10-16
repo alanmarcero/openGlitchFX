@@ -1,0 +1,9 @@
+build/
+.cache/
+.DS_Store
+*.vst3
+*.component
+*.app
+compile_commands.json
+.idea/
+.vscode/
