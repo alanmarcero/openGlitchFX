@@ -46,7 +46,7 @@ private:
     juce::TextButton presetInvertBtn_{ "INVERT" };
     juce::TextButton presetClearBtn_{ "CLEAR" };
 
-    // Glitch FX Slot UI
+    // 10 Glitch FX Slot UI (2 rows x 5 columns)
     struct FxSlotUi {
         juce::String title;
         juce::String subtitle;
@@ -57,7 +57,7 @@ private:
         juce::Rectangle<float> cardBounds;
     };
 
-    static constexpr int kNumUiFx = 5;
+    static constexpr int kNumUiFx = 10;
     std::array<FxSlotUi, kNumUiFx> fxSlots_;
 
     // Master Output Strip Controls

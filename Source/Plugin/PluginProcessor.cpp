@@ -43,7 +43,7 @@ void OpenGlitchFXProcessor::syncParametersToCore() {
     const float smoothMs = *parameters.getRawParameterValue(kSmoothMs);
     core_.setGateSmoothingMs(smoothMs);
 
-    // 3. 5 Glitch FX (Phase 1)
+    // 3. All 10 Glitch FX (Phase 1 + Phase 2)
     auto syncFx = [&](GlitchFxId id, const char* amtId, const char* onId) {
         const float amt = *parameters.getRawParameterValue(amtId) * 0.01f;
         const bool on = *parameters.getRawParameterValue(onId) > 0.5f;
@@ -51,11 +51,19 @@ void OpenGlitchFXProcessor::syncParametersToCore() {
         core_.setEffectEnabled(id, on);
     };
 
-    syncFx(GlitchFxId::Bitcrush,   kBitcrushAmt,   kBitcrushOn);
-    syncFx(GlitchFxId::Downsample, kDownsampleAmt, kDownsampleOn);
-    syncFx(GlitchFxId::Stutter,    kStutterAmt,    kStutterOn);
-    syncFx(GlitchFxId::TapeStop,   kTapeStopAmt,   kTapeStopOn);
-    syncFx(GlitchFxId::RingMod,    kRingModAmt,    kRingModOn);
+    // Row 1 (Phase 1: 5 FX)
+    syncFx(GlitchFxId::Bitcrush,    kBitcrushAmt,    kBitcrushOn);
+    syncFx(GlitchFxId::Downsample,  kDownsampleAmt,  kDownsampleOn);
+    syncFx(GlitchFxId::Stutter,     kStutterAmt,     kStutterOn);
+    syncFx(GlitchFxId::TapeStop,    kTapeStopAmt,    kTapeStopOn);
+    syncFx(GlitchFxId::RingMod,     kRingModAmt,     kRingModOn);
+
+    // Row 2 (Phase 2: 5 Additional FX -> 10 Total)
+    syncFx(GlitchFxId::Reverse,     kReverseAmt,     kReverseOn);
+    syncFx(GlitchFxId::Chopper,     kChopperAmt,     kChopperOn);
+    syncFx(GlitchFxId::PitchGlitch, kPitchGlitchAmt, kPitchGlitchOn);
+    syncFx(GlitchFxId::CombReso,    kCombResoAmt,    kCombResoOn);
+    syncFx(GlitchFxId::Wavefold,    kWavefoldAmt,    kWavefoldOn);
 
     // 4. Master
     core_.setMasterMix(*parameters.getRawParameterValue(kMasterMix) * 0.01f);

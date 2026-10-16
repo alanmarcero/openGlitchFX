@@ -59,12 +59,19 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout() {
             true));
     };
 
-    // Phase 1: 5 Glitch FX (including Bitrate Crush knob)
-    addFxParam(kBitcrushAmt,   kBitcrushOn,   "Bitrate Crush", 35.0f);
-    addFxParam(kDownsampleAmt, kDownsampleOn, "Downsample",    0.0f);
-    addFxParam(kStutterAmt,    kStutterOn,    "Beat Stutter",  0.0f);
-    addFxParam(kTapeStopAmt,   kTapeStopOn,   "Tape Stop",     0.0f);
-    addFxParam(kRingModAmt,    kRingModOn,    "Ring Mod",      0.0f);
+    // Phase 1: Initial 5 Glitch FX
+    addFxParam(kBitcrushAmt,    kBitcrushOn,    "Bitrate Crush", 35.0f);
+    addFxParam(kDownsampleAmt,  kDownsampleOn,  "Downsample",    0.0f);
+    addFxParam(kStutterAmt,     kStutterOn,     "Beat Stutter",  0.0f);
+    addFxParam(kTapeStopAmt,    kTapeStopOn,    "Tape Stop",     0.0f);
+    addFxParam(kRingModAmt,     kRingModOn,     "Ring Mod",      0.0f);
+
+    // Phase 2: 5 Additional Glitch FX (10 Total)
+    addFxParam(kReverseAmt,     kReverseOn,     "Reverse Grain", 0.0f);
+    addFxParam(kChopperAmt,     kChopperOn,     "Chopper Gate",  0.0f);
+    addFxParam(kPitchGlitchAmt, kPitchGlitchOn, "Pitch Glitch",  0.0f);
+    addFxParam(kCombResoAmt,    kCombResoOn,    "Comb Resonator",0.0f);
+    addFxParam(kWavefoldAmt,    kWavefoldOn,    "Wavefolder",    0.0f);
 
     // Master Controls
     layout.push_back(std::make_unique<juce::AudioParameterFloat>(

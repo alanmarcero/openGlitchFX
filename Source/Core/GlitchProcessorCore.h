@@ -3,17 +3,25 @@
 #include "BeatStepSequencer.h"
 #include "GlitchEffects.h"
 #include <array>
-#include <atomic>
 
 namespace openglitch::core {
 
 enum class GlitchFxId : int {
+    // Phase 1: Initial 5 Glitch FX
     Bitcrush = 0,
     Downsample = 1,
     Stutter = 2,
     TapeStop = 3,
     RingMod = 4,
-    Count = 5
+
+    // Phase 2: 5 Additional Glitch FX
+    Reverse = 5,
+    Chopper = 6,
+    PitchGlitch = 7,
+    CombReso = 8,
+    Wavefold = 9,
+
+    Count = 10
 };
 
 struct MeterTelemetry {
@@ -75,12 +83,19 @@ private:
     bool hasValidHostPpq_ = false;
     double blockStartPpq_ = 0.0;
 
-    // 5 Glitch FX instances (Phase 1)
+    // Phase 1: 5 Glitch FX
     BitrateCrusher bitcrusher_;
     SampleRateDecimator decimator_;
     BufferStutter stutter_;
     TapeStopEffect tapeStop_;
     RingModEffect ringMod_;
+
+    // Phase 2: 5 Additional Glitch FX (10 Total)
+    ReverseGrainEffect reverseGrain_;
+    ChopperGateEffect chopperGate_;
+    PitchGlitchEffect pitchGlitch_;
+    CombResonatorEffect combResonator_;
+    WavefolderEffect wavefolder_;
 
     std::array<bool, kNumEffects> fxEnabled_{};
     std::array<float, kNumEffects> fxAmount_{};

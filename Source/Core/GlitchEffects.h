@@ -82,4 +82,79 @@ private:
     double phase_ = 0.0;
 };
 
+// ============================================================================
+// Phase 2: 5 Additional Glitch FX (FX 6 .. FX 10)
+// ============================================================================
+
+// 6. Reverse Grain (Real-time circular buffer backwards grain player controlled by a knob)
+class ReverseGrainEffect {
+public:
+    void prepare(double sampleRate);
+    void reset();
+    void triggerGrain();
+    void processSample(float amount, float& left, float& right);
+
+private:
+    double sampleRate_ = 44100.0;
+    std::vector<float> bufferL_;
+    std::vector<float> bufferR_;
+    int writePos_ = 0;
+    int grainPos_ = 0;
+};
+
+// 7. Chopper Gate (High-speed rhythmic slicer / tremolo chopper controlled by a knob)
+class ChopperGateEffect {
+public:
+    void prepare(double sampleRate);
+    void reset();
+    void processSample(float amount, double bpm, float& left, float& right);
+
+private:
+    double sampleRate_ = 44100.0;
+    double phase_ = 0.0;
+    float smoothGate_ = 1.0f;
+};
+
+// 8. Pitch Glitch (Dual-head windowed granular pitch & octave jumper controlled by a knob)
+class PitchGlitchEffect {
+public:
+    void prepare(double sampleRate);
+    void reset();
+    void processSample(float amount, float& left, float& right);
+
+private:
+    double sampleRate_ = 44100.0;
+    std::vector<float> bufferL_;
+    std::vector<float> bufferR_;
+    int writePos_ = 0;
+    double grainPhase_ = 0.0;
+    int stepCounter_ = 0;
+    int intervalIndex_ = 0;
+};
+
+// 9. Comb Resonator (Metallic short-delay feedback resonator controlled by a knob)
+class CombResonatorEffect {
+public:
+    void prepare(double sampleRate);
+    void reset();
+    void processSample(float amount, float& left, float& right);
+
+private:
+    double sampleRate_ = 44100.0;
+    std::vector<float> delayL_;
+    std::vector<float> delayR_;
+    int writePos_ = 0;
+};
+
+// 10. Wavefolder (Multi-stage harmonic digital wavefolder controlled by a knob)
+class WavefolderEffect {
+public:
+    void prepare(double sampleRate);
+    void reset();
+    void processSample(float amount, float& left, float& right);
+
+private:
+    double sampleRate_ = 44100.0;
+};
+
 } // namespace openglitch::core

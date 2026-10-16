@@ -47,7 +47,7 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
     setupPresetBtn(presetInvertBtn_,     [this]() { sequencerGrid_.invertPattern(); });
     setupPresetBtn(presetClearBtn_,      [this]() { sequencerGrid_.applyPreset(StepPatternPreset::ClearAll); });
 
-    // 5 Glitch FX Slots (Phase 1)
+    // 10 Glitch FX Slots (2 Rows x 5 Columns)
     using namespace openglitch::params;
     struct FxMeta {
         const char* title;
@@ -57,11 +57,18 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
     };
 
     const std::array<FxMeta, kNumUiFx> metas = {{
-        { "BITCRUSH",   "BITRATE & DEPTH", kBitcrushAmt,   kBitcrushOn   },
-        { "DOWNSAMPLE", "SAMPLE & HOLD",   kDownsampleAmt, kDownsampleOn },
-        { "STUTTER",    "BEAT REPEAT",     kStutterAmt,    kStutterOn    },
-        { "TAPE STOP",  "VINYL BRAKE",     kTapeStopAmt,   kTapeStopOn   },
-        { "RING MOD",   "CYBER CARRIER",   kRingModAmt,    kRingModOn    }
+        // Row 1: Initial 5 Glitch FX
+        { "BITCRUSH",     "BITRATE & DEPTH",  kBitcrushAmt,    kBitcrushOn    },
+        { "DOWNSAMPLE",   "SAMPLE & HOLD",    kDownsampleAmt,  kDownsampleOn  },
+        { "STUTTER",      "BEAT REPEAT",      kStutterAmt,     kStutterOn     },
+        { "TAPE STOP",    "VINYL BRAKE",      kTapeStopAmt,    kTapeStopOn    },
+        { "RING MOD",     "CYBER CARRIER",    kRingModAmt,     kRingModOn     },
+        // Row 2: 5 Additional Glitch FX (10 Total)
+        { "REVERSE",      "BACKWARDS GRAIN",  kReverseAmt,     kReverseOn     },
+        { "CHOPPER",      "RHYTHMIC SLICER",  kChopperAmt,     kChopperOn     },
+        { "PITCH GLITCH", "OCTAVE ARPEGGIO",  kPitchGlitchAmt, kPitchGlitchOn },
+        { "COMB RESO",    "METALLIC FLANGE",  kCombResoAmt,    kCombResoOn    },
+        { "WAVEFOLD",     "HARMONIC FOLD",    kWavefoldAmt,    kWavefoldOn    }
     }};
 
     for (size_t i = 0; i < kNumUiFx; ++i) {
@@ -70,7 +77,7 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
         slot.subtitle = metas[i].sub;
 
         slot.knob.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-        slot.knob.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 68, 18);
+        slot.knob.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 64, 16);
         slot.knob.setTextValueSuffix(" %");
         addAndMakeVisible(slot.knob);
 
@@ -83,7 +90,7 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
     // Master Controls
     auto setupMasterRotary = [this](juce::Slider& s, juce::Label& l, const juce::String& suffix) {
         s.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-        s.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 64, 18);
+        s.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 64, 16);
         s.setTextValueSuffix(suffix);
         addAndMakeVisible(s);
 
@@ -108,7 +115,7 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
     processor_.parameters.addParameterListener(kTheme, this);
     applyTheme(themeBox_.getSelectedItemIndex());
 
-    setSize(1020, 560);
+    setSize(1080, 680);
     startTimerHz(30);
 }
 
@@ -198,7 +205,7 @@ void OpenGlitchFXEditor::paint(juce::Graphics& g) {
 
     g.setColour(pal.accentPrimary);
     g.setFont(juce::FontOptions(10.5f, juce::Font::bold));
-    g.drawText("32-STEP 4/4 BEAT-SYNCED GLITCH PROCESSOR", static_cast<int>(w * 0.5f - 180.0f), 32, 360, 14, juce::Justification::centred);
+    g.drawText("32-STEP 4/4 BEAT-SYNCED 10-FX GLITCH PROCESSOR", static_cast<int>(w * 0.5f - 200.0f), 32, 400, 14, juce::Justification::centred);
 
     // Live Gate Status Pill Indicator in Header
     const auto tel = processor_.getTelemetry();
@@ -219,7 +226,7 @@ void OpenGlitchFXEditor::paint(juce::Graphics& g) {
     g.setColour(pal.cardBorder);
     g.drawLine(28.0f, 58.0f, w - 28.0f, 58.0f, 1.0f);
 
-    // 3. Draw FX Slot Cards
+    // 3. Draw 10 FX Slot Cards (2x5 Matrix)
     for (const auto& slot : fxSlots_) {
         const auto& r = slot.cardBounds;
         const bool active = slot.enableBtn.getToggleState() && slot.knob.getValue() > 0.1;
@@ -230,17 +237,17 @@ void OpenGlitchFXEditor::paint(juce::Graphics& g) {
         g.setColour(active ? pal.cardActiveBorder : pal.cardBorder);
         g.drawRoundedRectangle(r, 6.0f, active ? 1.5f : 1.0f);
 
-        juce::Rectangle<float> hdr(r.getX() + 6.0f, r.getY() + 6.0f, r.getWidth() - 12.0f, 32.0f);
+        juce::Rectangle<float> hdr(r.getX() + 6.0f, r.getY() + 5.0f, r.getWidth() - 12.0f, 28.0f);
         g.setColour(pal.headerPlate);
         g.fillRoundedRectangle(hdr, 4.0f);
 
         g.setColour(active ? pal.accentPrimary : pal.textBright);
-        g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
-        g.drawText(slot.title, hdr.withTrimmedBottom(13.0f).toNearestInt(), juce::Justification::centred);
+        g.setFont(juce::FontOptions(11.5f, juce::Font::bold));
+        g.drawText(slot.title, hdr.withTrimmedBottom(12.0f).toNearestInt(), juce::Justification::centred);
 
         g.setColour(pal.textMuted);
-        g.setFont(juce::FontOptions(9.0f, juce::Font::plain));
-        g.drawText(slot.subtitle, hdr.withTrimmedTop(16.0f).toNearestInt(), juce::Justification::centred);
+        g.setFont(juce::FontOptions(8.5f, juce::Font::plain));
+        g.drawText(slot.subtitle, hdr.withTrimmedTop(14.0f).toNearestInt(), juce::Justification::centred);
     }
 
     // 4. Master Card
@@ -251,12 +258,12 @@ void OpenGlitchFXEditor::paint(juce::Graphics& g) {
         g.drawRoundedRectangle(masterCardBounds_, 6.0f, 1.2f);
 
         juce::Rectangle<float> hdr(masterCardBounds_.getX() + 6.0f, masterCardBounds_.getY() + 6.0f,
-                                   masterCardBounds_.getWidth() - 12.0f, 22.0f);
+                                   masterCardBounds_.getWidth() - 12.0f, 24.0f);
         g.setColour(pal.headerPlate);
         g.fillRoundedRectangle(hdr, 4.0f);
         g.setColour(pal.accentPrimary);
         g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
-        g.drawText("MASTER & GATE ENVELOPE", hdr.toNearestInt(), juce::Justification::centred);
+        g.drawText("MASTER & GATE", hdr.toNearestInt(), juce::Justification::centred);
     }
 }
 
@@ -290,43 +297,55 @@ void OpenGlitchFXEditor::resized() {
                                  static_cast<int>(presetH));
     }
 
-    // Glitch FX Cards + Master Strip
+    // 10 Glitch FX Cards (2 Rows x 5 Columns) + Master Strip on Right
     const float fxTop = 228.0f;
-    const float fxHeight = h - fxTop - 22.0f;
-    const float masterW = 220.0f;
+    const float fxTotalH = h - fxTop - 22.0f;
+    const float masterW = 190.0f;
     const float fxAreaW = w - margin * 2.0f - masterW - 10.0f;
-    const float cardGap = 8.0f;
-    const float cardW = (fxAreaW - cardGap * static_cast<float>(kNumUiFx - 1)) / static_cast<float>(kNumUiFx);
+
+    constexpr int kCols = 5;
+    constexpr int kRows = 2;
+    const float colGap = 8.0f;
+    const float rowGap = 8.0f;
+    const float cardW = (fxAreaW - colGap * static_cast<float>(kCols - 1)) / static_cast<float>(kCols);
+    const float cardH = (fxTotalH - rowGap) / static_cast<float>(kRows);
 
     for (size_t i = 0; i < kNumUiFx; ++i) {
-        const float cx = margin + static_cast<float>(i) * (cardW + cardGap);
-        auto& slot = fxSlots_[i];
-        slot.cardBounds = { cx, fxTop, cardW, fxHeight };
+        const int row = static_cast<int>(i) / kCols;
+        const int col = static_cast<int>(i) % kCols;
+        const float cx = margin + static_cast<float>(col) * (cardW + colGap);
+        const float cy = fxTop + static_cast<float>(row) * (cardH + rowGap);
 
-        auto inner = slot.cardBounds.reduced(10.0f);
-        inner.removeFromTop(36.0f);
-        auto btnArea = inner.removeFromBottom(28.0f);
+        auto& slot = fxSlots_[i];
+        slot.cardBounds = { cx, cy, cardW, cardH };
+
+        auto inner = slot.cardBounds.reduced(8.0f);
+        inner.removeFromTop(30.0f);
+        auto btnArea = inner.removeFromBottom(24.0f);
         slot.knob.setBounds(inner.toNearestInt());
-        slot.enableBtn.setBounds(btnArea.reduced(12.0f, 0.0f).toNearestInt());
+        slot.enableBtn.setBounds(btnArea.reduced(14.0f, 0.0f).toNearestInt());
     }
 
-    // Master Card on the far right
-    masterCardBounds_ = { w - margin - masterW, fxTop, masterW, fxHeight };
+    // Master Card on the far right spanning both rows
+    masterCardBounds_ = { w - margin - masterW, fxTop, masterW, fxTotalH };
     auto mInner = masterCardBounds_.reduced(10.0f);
-    mInner.removeFromTop(26.0f);
+    mInner.removeFromTop(28.0f);
 
-    const float topRowH = (mInner.getHeight() - 38.0f) * 0.5f;
-    auto topRow = mInner.removeFromTop(topRowH);
-    auto leftHalf = topRow.removeFromLeft(topRow.getWidth() * 0.5f);
-    smoothLabel_.setBounds(leftHalf.removeFromTop(14.0f).toNearestInt());
-    smoothSlider_.setBounds(leftHalf.toNearestInt());
+    auto powerArea = mInner.removeFromBottom(30.0f);
+    masterPowerButton_.setBounds(powerArea.reduced(10.0f, 0.0f).toNearestInt());
+    mInner.removeFromBottom(6.0f);
 
-    masterMixLabel_.setBounds(topRow.removeFromTop(14.0f).toNearestInt());
-    masterMixSlider_.setBounds(topRow.toNearestInt());
+    const float knobSectionH = mInner.getHeight() / 3.0f;
 
-    auto botRow = mInner.removeFromTop(topRowH);
-    masterGainLabel_.setBounds(botRow.removeFromTop(14.0f).toNearestInt());
-    masterGainSlider_.setBounds(botRow.reduced(20.0f, 0.0f).toNearestInt());
+    auto s1 = mInner.removeFromTop(knobSectionH);
+    masterMixLabel_.setBounds(s1.removeFromTop(14.0f).toNearestInt());
+    masterMixSlider_.setBounds(s1.toNearestInt());
 
-    masterPowerButton_.setBounds(mInner.removeFromBottom(28.0f).reduced(16.0f, 0.0f).toNearestInt());
+    auto s2 = mInner.removeFromTop(knobSectionH);
+    masterGainLabel_.setBounds(s2.removeFromTop(14.0f).toNearestInt());
+    masterGainSlider_.setBounds(s2.toNearestInt());
+
+    auto s3 = mInner;
+    smoothLabel_.setBounds(s3.removeFromTop(14.0f).toNearestInt());
+    smoothSlider_.setBounds(s3.toNearestInt());
 }

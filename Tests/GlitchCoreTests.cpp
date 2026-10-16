@@ -56,19 +56,24 @@ TEST_CASE("GlitchProcessorCore passes dry audio when current beat step is disabl
     }
 }
 
-TEST_CASE("Phase 1 Glitch FX modify signal when beat step is enabled", "[core][fx]") {
+TEST_CASE("All 10 Glitch FX (Phase 1 + Phase 2) modify signal when beat step is enabled", "[core][fx]") {
     constexpr double kSr = 48000.0;
-    constexpr int kN = 2048;
+    constexpr int kN = 4096;
 
-    const std::array<GlitchFxId, 5> phase1Fx = {
+    const std::array<GlitchFxId, 10> allFx = {
         GlitchFxId::Bitcrush,
         GlitchFxId::Downsample,
         GlitchFxId::Stutter,
         GlitchFxId::TapeStop,
-        GlitchFxId::RingMod
+        GlitchFxId::RingMod,
+        GlitchFxId::Reverse,
+        GlitchFxId::Chopper,
+        GlitchFxId::PitchGlitch,
+        GlitchFxId::CombReso,
+        GlitchFxId::Wavefold
     };
 
-    for (auto fx : phase1Fx) {
+    for (auto fx : allFx) {
         GlitchProcessorCore core;
         core.prepare(kSr);
         core.applyPatternPreset(StepPatternPreset::AllOn);
@@ -91,4 +96,36 @@ TEST_CASE("Phase 1 Glitch FX modify signal when beat step is enabled", "[core][f
         INFO("Testing FX ID: " << static_cast<int>(fx));
         REQUIRE(diff > 0.01f);
     }
+}
+
+TEST_CASE("Bitrate Crush knob scales distortion monotonically with knob amount", "[core][bitcrush]") {
+    constexpr double kSr = 48000.0;
+    constexpr int kN = 2048;
+
+    auto measureDiffForAmount = [&](float amt) {
+        GlitchProcessorCore core;
+        core.prepare(kSr);
+        core.applyPatternPreset(StepPatternPreset::AllOn);
+        for (int i = 0; i < GlitchProcessorCore::kNumEffects; ++i) {
+            core.setEffectAmount(static_cast<GlitchFxId>(i), 0.0f);
+        }
+        core.setEffectEnabled(GlitchFxId::Bitcrush, true);
+        core.setEffectAmount(GlitchFxId::Bitcrush, amt);
+        core.setTransport(120.0, true, true, 0.0);
+
+        std::vector<float> dryL(kN), dryR(kN);
+        fillSineStereo(dryL, dryR, kSr, 220.0);
+        auto wetL = dryL;
+        auto wetR = dryR;
+        core.processBlock(wetL.data(), wetR.data(), kN);
+        return computeRmsDifference(dryL, wetL);
+    };
+
+    const float diffZero = measureDiffForAmount(0.0f);
+    const float diffLow  = measureDiffForAmount(0.25f);
+    const float diffHigh = measureDiffForAmount(0.90f);
+
+    REQUIRE(diffZero < 1e-5f);
+    REQUIRE(diffLow > 0.01f);
+    REQUIRE(diffHigh > diffLow);
 }

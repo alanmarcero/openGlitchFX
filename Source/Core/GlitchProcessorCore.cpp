@@ -12,11 +12,21 @@ GlitchProcessorCore::GlitchProcessorCore() {
 void GlitchProcessorCore::prepare(double sampleRate) {
     sampleRate_ = std::max(1000.0, sampleRate);
     sequencer_.prepare(sampleRate_);
+
+    // Phase 1 FX
     bitcrusher_.prepare(sampleRate_);
     decimator_.prepare(sampleRate_);
     stutter_.prepare(sampleRate_);
     tapeStop_.prepare(sampleRate_);
     ringMod_.prepare(sampleRate_);
+
+    // Phase 2 FX
+    reverseGrain_.prepare(sampleRate_);
+    chopperGate_.prepare(sampleRate_);
+    pitchGlitch_.prepare(sampleRate_);
+    combResonator_.prepare(sampleRate_);
+    wavefolder_.prepare(sampleRate_);
+
     reset();
 }
 
@@ -27,6 +37,11 @@ void GlitchProcessorCore::reset() {
     stutter_.reset();
     tapeStop_.reset();
     ringMod_.reset();
+    reverseGrain_.reset();
+    chopperGate_.reset();
+    pitchGlitch_.reset();
+    combResonator_.reset();
+    wavefolder_.reset();
 }
 
 void GlitchProcessorCore::setStep(int stepIndex, bool enabled) {
@@ -133,9 +148,9 @@ void GlitchProcessorCore::processBlock(float* leftChannel, float* rightChannel, 
         if (enteredActive) {
             stutter_.triggerCapture();
             tapeStop_.triggerBrake();
+            reverseGrain_.triggerGrain();
         }
 
-        // Only run the glitch FX chain when the beat-synced step gate is open (> 0)
         float outL = dryL;
         float outR = dryR;
 
@@ -144,37 +159,50 @@ void GlitchProcessorCore::processBlock(float* leftChannel, float* rightChannel, 
             float wetL = dryL;
             float wetR = dryR;
 
-            // 1. Stutter (Beat Repeat)
-            if (fxEnabled_[static_cast<size_t>(GlitchFxId::Stutter)] &&
-                fxAmount_[static_cast<size_t>(GlitchFxId::Stutter)] > 1e-4f) {
-                stutter_.processSample(fxAmount_[static_cast<size_t>(GlitchFxId::Stutter)], bpm_, wetL, wetR);
+            auto isFxActive = [&](GlitchFxId id) {
+                const auto idx = static_cast<size_t>(id);
+                return fxEnabled_[idx] && fxAmount_[idx] > 1e-4f;
+            };
+            auto amtOf = [&](GlitchFxId id) {
+                return fxAmount_[static_cast<size_t>(id)];
+            };
+
+            // Time/Buffer FX first
+            if (isFxActive(GlitchFxId::Stutter)) {
+                stutter_.processSample(amtOf(GlitchFxId::Stutter), bpm_, wetL, wetR);
+            }
+            if (isFxActive(GlitchFxId::Reverse)) {
+                reverseGrain_.processSample(amtOf(GlitchFxId::Reverse), wetL, wetR);
+            }
+            if (isFxActive(GlitchFxId::TapeStop)) {
+                tapeStop_.processSample(amtOf(GlitchFxId::TapeStop), wetL, wetR);
+            }
+            if (isFxActive(GlitchFxId::PitchGlitch)) {
+                pitchGlitch_.processSample(amtOf(GlitchFxId::PitchGlitch), wetL, wetR);
             }
 
-            // 2. Tape Stop
-            if (fxEnabled_[static_cast<size_t>(GlitchFxId::TapeStop)] &&
-                fxAmount_[static_cast<size_t>(GlitchFxId::TapeStop)] > 1e-4f) {
-                tapeStop_.processSample(fxAmount_[static_cast<size_t>(GlitchFxId::TapeStop)], wetL, wetR);
+            // Harmonic / Spectral / Bitrate FX
+            if (isFxActive(GlitchFxId::Bitcrush)) {
+                bitcrusher_.processSample(amtOf(GlitchFxId::Bitcrush), wetL, wetR);
+            }
+            if (isFxActive(GlitchFxId::Downsample)) {
+                decimator_.processSample(amtOf(GlitchFxId::Downsample), wetL, wetR);
+            }
+            if (isFxActive(GlitchFxId::Wavefold)) {
+                wavefolder_.processSample(amtOf(GlitchFxId::Wavefold), wetL, wetR);
+            }
+            if (isFxActive(GlitchFxId::RingMod)) {
+                ringMod_.processSample(amtOf(GlitchFxId::RingMod), wetL, wetR);
+            }
+            if (isFxActive(GlitchFxId::CombReso)) {
+                combResonator_.processSample(amtOf(GlitchFxId::CombReso), wetL, wetR);
             }
 
-            // 3. Bitrate Crush
-            if (fxEnabled_[static_cast<size_t>(GlitchFxId::Bitcrush)] &&
-                fxAmount_[static_cast<size_t>(GlitchFxId::Bitcrush)] > 1e-4f) {
-                bitcrusher_.processSample(fxAmount_[static_cast<size_t>(GlitchFxId::Bitcrush)], wetL, wetR);
+            // Rhythmic Chopper Slicer at end of glitch chain
+            if (isFxActive(GlitchFxId::Chopper)) {
+                chopperGate_.processSample(amtOf(GlitchFxId::Chopper), bpm_, wetL, wetR);
             }
 
-            // 4. Sample Rate Decimator
-            if (fxEnabled_[static_cast<size_t>(GlitchFxId::Downsample)] &&
-                fxAmount_[static_cast<size_t>(GlitchFxId::Downsample)] > 1e-4f) {
-                decimator_.processSample(fxAmount_[static_cast<size_t>(GlitchFxId::Downsample)], wetL, wetR);
-            }
-
-            // 5. Ring Modulator
-            if (fxEnabled_[static_cast<size_t>(GlitchFxId::RingMod)] &&
-                fxAmount_[static_cast<size_t>(GlitchFxId::RingMod)] > 1e-4f) {
-                ringMod_.processSample(fxAmount_[static_cast<size_t>(GlitchFxId::RingMod)], wetL, wetR);
-            }
-
-            // Crossfade dry & wet according to the 32-step beat gate envelope * master mix
             outL = (dryL * (1.0f - effectiveWet) + wetL * effectiveWet) * masterGainLinear_;
             outR = (dryR * (1.0f - effectiveWet) + wetR * effectiveWet) * masterGainLinear_;
         } else {
@@ -182,7 +210,6 @@ void GlitchProcessorCore::processBlock(float* leftChannel, float* rightChannel, 
             outR = dryR * masterGainLinear_;
         }
 
-        // Safety hard-clip protection at +-4.0 (+12 dBFS)
         outL = std::clamp(outL, -4.0f, 4.0f);
         outR = std::clamp(outR, -4.0f, 4.0f);
 
