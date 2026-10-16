@@ -87,7 +87,7 @@ void SampleRateDecimator::processSample(float amount, float& left, float& right)
 // ============================================================================
 void BufferStutter::prepare(double sampleRate) {
     sampleRate_ = std::max(1000.0, sampleRate);
-    const size_t maxSamples = static_cast<size_t>(sampleRate_ * 1.0) + 64;
+    const size_t maxSamples = static_cast<size_t>(sampleRate_ * 2.0) + 64;
     bufferL_.assign(maxSamples, 0.0f);
     bufferR_.assign(maxSamples, 0.0f);
     reset();
@@ -162,11 +162,11 @@ void BufferStutter::processSample(float amount, double bpm, float& left, float& 
 }
 
 // ============================================================================
-// 4. TapeStopEffect
+// 4. TapeStopEffect (Span-duration aware: decelerates continuously across merged pads)
 // ============================================================================
 void TapeStopEffect::prepare(double sampleRate) {
     sampleRate_ = std::max(1000.0, sampleRate);
-    const size_t maxSamples = static_cast<size_t>(sampleRate_ * 2.0) + 64;
+    const size_t maxSamples = static_cast<size_t>(sampleRate_ * 4.5) + 64;
     bufferL_.assign(maxSamples, 0.0f);
     bufferR_.assign(maxSamples, 0.0f);
     reset();
@@ -178,17 +178,15 @@ void TapeStopEffect::reset() {
     writePos_ = 0;
     readPos_ = 0.0;
     speed_ = 1.0;
-    activeSamples_ = 0;
 }
 
 void TapeStopEffect::triggerBrake() {
     writePos_ = 0;
     readPos_ = 0.0;
     speed_ = 1.0;
-    activeSamples_ = 0;
 }
 
-void TapeStopEffect::processSample(float amount, float& left, float& right) {
+void TapeStopEffect::processSample(float amount, double spanDurationSec, float& left, float& right) {
     const float amt = std::clamp(amount, 0.0f, 1.0f);
     if (amt <= 1e-4f || bufferL_.empty()) {
         return;
@@ -201,7 +199,10 @@ void TapeStopEffect::processSample(float amount, float& left, float& right) {
         ++writePos_;
     }
 
-    const double stopSeconds = 0.60 - static_cast<double>(amt) * 0.53;
+    // Scale deceleration across the combined contiguous pad span!
+    // At low knob values it slows down gently across the full span; at higher knob values it brakes steeper across the span.
+    const double clampedSpanSec = std::clamp(spanDurationSec, 0.04, 4.0);
+    const double stopSeconds = clampedSpanSec * (1.15 - static_cast<double>(amt) * 0.75);
     const double decelPerSample = 1.0 / std::max(64.0, stopSeconds * sampleRate_);
     speed_ = std::max(0.0, speed_ - decelPerSample);
 
@@ -214,11 +215,6 @@ void TapeStopEffect::processSample(float amount, float& left, float& right) {
     const float tapeR = (bufferR_[static_cast<size_t>(idx0)] * (1.0f - frac) + bufferR_[static_cast<size_t>(idx1)] * frac) * gainEnv;
 
     readPos_ += speed_;
-    ++activeSamples_;
-
-    if (activeSamples_ > static_cast<int>(sampleRate_ * 0.75)) {
-        triggerBrake();
-    }
 
     const float wet = std::min(1.0f, amt * 1.25f);
     left = left * (1.0f - wet) + tapeL * wet;
@@ -259,11 +255,11 @@ void RingModEffect::processSample(float amount, float& left, float& right) {
 }
 
 // ============================================================================
-// 6. ReverseGrainEffect (Phase 2)
+// 6. ReverseGrainEffect (Span-duration aware: reverses continuously across merged pads)
 // ============================================================================
 void ReverseGrainEffect::prepare(double sampleRate) {
     sampleRate_ = std::max(1000.0, sampleRate);
-    const size_t maxBuf = static_cast<size_t>(sampleRate_ * 0.5) + 64;
+    const size_t maxBuf = static_cast<size_t>(sampleRate_ * 4.5) + 64;
     bufferL_.assign(maxBuf, 0.0f);
     bufferR_.assign(maxBuf, 0.0f);
     reset();
@@ -280,7 +276,7 @@ void ReverseGrainEffect::triggerGrain() {
     grainPos_ = 0;
 }
 
-void ReverseGrainEffect::processSample(float amount, float& left, float& right) {
+void ReverseGrainEffect::processSample(float amount, double spanDurationSec, float& left, float& right) {
     const float amt = std::clamp(amount, 0.0f, 1.0f);
     if (amt <= 1e-4f || bufferL_.empty()) {
         return;
@@ -290,24 +286,31 @@ void ReverseGrainEffect::processSample(float amount, float& left, float& right) 
     bufferL_[static_cast<size_t>(writePos_)] = left;
     bufferR_[static_cast<size_t>(writePos_)] = right;
 
-    // Grain size from 220ms down to 35ms as knob increases
-    const double grainSec = 0.22 - static_cast<double>(amt) * 0.185;
-    const int grainLen = std::clamp(static_cast<int>(grainSec * sampleRate_), 128, bufSize / 2);
+    // Reverse grain spans the full combined multi-pad region without resetting every 1/32!
+    const double clampedSpanSec = std::clamp(spanDurationSec, 0.06, 2.0);
+    const int grainLen = std::clamp(static_cast<int>(clampedSpanSec * sampleRate_), 256, bufSize / 2 - 1);
 
     if (grainPos_ >= grainLen) {
         grainPos_ = 0;
     }
 
-    // Read backwards from writePos_ by 2 * grainPos_
     int readIdx = writePos_ - (grainPos_ * 2);
     while (readIdx < 0) {
         readIdx += bufSize;
     }
     readIdx %= bufSize;
 
-    // Hanning window across the reversed grain
-    const float normPos = static_cast<float>(grainPos_) / static_cast<float>(grainLen);
-    const float win = 0.5f * (1.0f - std::cos(2.0f * std::numbers::pi_v<float> * normPos));
+    // Smooth edge fade (first & last 128 samples) so the reversed span stays loud and continuous in the middle
+    float win = 1.0f;
+    const int fadeLen = std::min(128, grainLen / 4);
+    if (fadeLen > 1) {
+        if (grainPos_ < fadeLen) {
+            win = 0.5f * (1.0f - std::cos(std::numbers::pi_v<float> * static_cast<float>(grainPos_) / static_cast<float>(fadeLen)));
+        } else if (grainPos_ >= grainLen - fadeLen) {
+            const int rem = grainLen - 1 - grainPos_;
+            win = 0.5f * (1.0f - std::cos(std::numbers::pi_v<float> * static_cast<float>(rem) / static_cast<float>(fadeLen)));
+        }
+    }
 
     const float revL = bufferL_[static_cast<size_t>(readIdx)] * win;
     const float revR = bufferR_[static_cast<size_t>(readIdx)] * win;
@@ -340,14 +343,12 @@ void ChopperGateEffect::processSample(float amount, double bpm, float& left, flo
     }
 
     const double safeBpm = std::clamp(bpm, 40.0, 240.0);
-    // Chop rate scales from 4 Hz up to 48 Hz
     const double baseHz = (safeBpm / 60.0) * (2.0 + static_cast<double>(amt) * 18.0);
     phase_ += baseHz / sampleRate_;
     if (phase_ >= 1.0) {
         phase_ -= 1.0;
     }
 
-    // Duty cycle narrows as knob increases for sharper staccato chops
     const double duty = 0.55 - static_cast<double>(amt) * 0.25;
     const float targetGate = (phase_ < duty) ? 1.0f : (1.0f - amt);
 
@@ -386,7 +387,6 @@ void PitchGlitchEffect::processSample(float amount, float& left, float& right) {
     bufferL_[static_cast<size_t>(writePos_)] = left;
     bufferR_[static_cast<size_t>(writePos_)] = right;
 
-    // Stepped arpeggiating glitch intervals (+7, +12, -12, +19 semitones)
     const int hopPeriod = std::max(512, static_cast<int>(sampleRate_ * (0.09 - 0.05 * static_cast<double>(amt))));
     if (++stepCounter_ >= hopPeriod) {
         stepCounter_ = 0;
@@ -417,7 +417,7 @@ void PitchGlitchEffect::processSample(float amount, float& left, float& right) {
         return buf[static_cast<size_t>(i0)] * (1.0f - f) + buf[static_cast<size_t>(i1)] * f;
     };
 
-    const float pitchedL = readInterp(bufferL_, delayA) * winA + readInterp(bufferL_, delayB) * winB;
+    const float pitchedL = readInterp(bufferL_, delayA) * winA + readInterp(bufferR_, delayB) * winB;
     const float pitchedR = readInterp(bufferR_, delayA) * winA + readInterp(bufferR_, delayB) * winB;
 
     writePos_ = (writePos_ + 1) % bufSize;
@@ -451,7 +451,6 @@ void CombResonatorEffect::processSample(float amount, float& left, float& right)
     }
 
     const int bufSize = static_cast<int>(delayL_.size());
-    // Delay time sweeps from 14ms down to 1.4ms (metallic resonant pitch)
     const double delaySec = 0.014 * std::pow(0.0014 / 0.014, static_cast<double>(amt));
     const int delaySamples = std::clamp(static_cast<int>(delaySec * sampleRate_), 8, bufSize - 2);
 

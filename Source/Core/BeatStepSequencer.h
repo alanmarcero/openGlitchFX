@@ -17,6 +17,13 @@ enum class StepPatternPreset {
     ClearAll
 };
 
+struct StepSpanInfo {
+    int startStep = 0;      // First step index (0..31) of the contiguous combined pad block
+    int endStep = 0;        // Last step index (0..31) of the contiguous combined pad block
+    int lengthSteps = 1;    // Number of contiguous 1/32 pads combined (1..32)
+    float spanPhase = 0.0f; // Continuous normalized progress [0.0 .. 1.0) across the combined block
+};
+
 class BeatStepSequencer {
 public:
     static constexpr int kNumSteps = 32;
@@ -48,8 +55,15 @@ public:
     void setSmoothingTimeMs(float ms);
     float getSmoothingTimeMs() const { return smoothingTimeMs_; }
 
+    // Contiguous Pad Merging & Span queries:
+    // 1. Visual pad merging: adjacent enabled pads with identical non-zero FX masks combine into one block.
+    StepSpanInfo getMergedPadSpan(int stepIndex) const;
+
+    // 2. Per-FX continuous span: adjacent enabled pads where fxIndex is active combine into one continuous FX span.
+    StepSpanInfo getActiveFxSpan(int stepIndex, int fxIndex) const;
+
     // Advance by one audio sample and return the overall smoothed gate envelope [0.0f .. 1.0f].
-    // Also updates per-FX smoothed envelopes and sets stepTransitionedToActive / fxTransitionedMask.
+    // Transitions ONLY fire when entering a new contiguous span (never between adjacent enabled pads!).
     float advanceSample(double bpm,
                         bool useHostSync,
                         bool hasValidHostPpq,
@@ -74,6 +88,7 @@ public:
 
 private:
     void updateSmoothingCoeff();
+    uint16_t getEffectiveStepFxMask(int stepIndex) const;
 
     double sampleRate_ = 44100.0;
     double internalPpq_ = 0.0;

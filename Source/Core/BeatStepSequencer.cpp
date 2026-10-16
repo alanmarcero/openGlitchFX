@@ -21,7 +21,7 @@ void BeatStepSequencer::reset() {
     internalPpq_ = 0.0;
     currentStep_ = 0;
     currentBarPhase_ = 0.0;
-    const uint16_t activeMask0 = steps_[0] ? (stepFxMasks_[0] & kAllFxMask) : 0u;
+    const uint16_t activeMask0 = getEffectiveStepFxMask(0);
     wasActiveStep_ = (activeMask0 != 0u);
     wasActiveFxMask_ = activeMask0;
     envelope_ = wasActiveStep_ ? 1.0f : 0.0f;
@@ -29,6 +29,13 @@ void BeatStepSequencer::reset() {
         const bool fxOn = ((activeMask0 >> fx) & 1u) != 0u;
         fxEnvelopes_[static_cast<size_t>(fx)] = fxOn ? 1.0f : 0.0f;
     }
+}
+
+uint16_t BeatStepSequencer::getEffectiveStepFxMask(int stepIndex) const {
+    if (stepIndex >= 0 && stepIndex < kNumSteps && steps_[static_cast<size_t>(stepIndex)]) {
+        return stepFxMasks_[static_cast<size_t>(stepIndex)] & kAllFxMask;
+    }
+    return 0u;
 }
 
 void BeatStepSequencer::setStep(int stepIndex, bool enabled) {
@@ -138,6 +145,66 @@ void BeatStepSequencer::applyPreset(StepPatternPreset preset) {
     }
 }
 
+StepSpanInfo BeatStepSequencer::getMergedPadSpan(int stepIndex) const {
+    stepIndex = std::clamp(stepIndex, 0, kNumSteps - 1);
+    const uint16_t mask = getEffectiveStepFxMask(stepIndex);
+    if (mask == 0u) {
+        return { stepIndex, stepIndex, 1, 0.0f };
+    }
+
+    int start = stepIndex;
+    while (start > 0 && getEffectiveStepFxMask(start - 1) == mask) {
+        --start;
+    }
+
+    int end = stepIndex;
+    while (end + 1 < kNumSteps && getEffectiveStepFxMask(end + 1) == mask) {
+        ++end;
+    }
+
+    const int len = end - start + 1;
+    float spanPhase = 0.0f;
+    if (currentStep_ >= start && currentStep_ <= end) {
+        const double stepStartPhase = static_cast<double>(start) / static_cast<double>(kNumSteps);
+        const double spanTotalPhase = static_cast<double>(len) / static_cast<double>(kNumSteps);
+        spanPhase = static_cast<float>(std::clamp((currentBarPhase_ - stepStartPhase) / spanTotalPhase, 0.0, 1.0));
+    }
+
+    return { start, end, len, spanPhase };
+}
+
+StepSpanInfo BeatStepSequencer::getActiveFxSpan(int stepIndex, int fxIndex) const {
+    stepIndex = std::clamp(stepIndex, 0, kNumSteps - 1);
+    if (fxIndex < 0 || fxIndex >= kNumFxSlots) {
+        return { stepIndex, stepIndex, 1, 0.0f };
+    }
+
+    const uint16_t bit = static_cast<uint16_t>(1u << fxIndex);
+    if ((getEffectiveStepFxMask(stepIndex) & bit) == 0u) {
+        return { stepIndex, stepIndex, 1, 0.0f };
+    }
+
+    int start = stepIndex;
+    while (start > 0 && (getEffectiveStepFxMask(start - 1) & bit) != 0u) {
+        --start;
+    }
+
+    int end = stepIndex;
+    while (end + 1 < kNumSteps && (getEffectiveStepFxMask(end + 1) & bit) != 0u) {
+        ++end;
+    }
+
+    const int len = end - start + 1;
+    float spanPhase = 0.0f;
+    if (currentStep_ >= start && currentStep_ <= end) {
+        const double stepStartPhase = static_cast<double>(start) / static_cast<double>(kNumSteps);
+        const double spanTotalPhase = static_cast<double>(len) / static_cast<double>(kNumSteps);
+        spanPhase = static_cast<float>(std::clamp((currentBarPhase_ - stepStartPhase) / spanTotalPhase, 0.0, 1.0));
+    }
+
+    return { start, end, len, spanPhase };
+}
+
 void BeatStepSequencer::setSmoothingTimeMs(float ms) {
     smoothingTimeMs_ = std::clamp(ms, 0.0f, 50.0f);
     updateSmoothingCoeff();
@@ -170,10 +237,7 @@ bool BeatStepSequencer::isCurrentStepEnabled() const {
 }
 
 uint16_t BeatStepSequencer::getCurrentStepActiveFxMask() const {
-    if (currentStep_ >= 0 && currentStep_ < kNumSteps && steps_[static_cast<size_t>(currentStep_)]) {
-        return stepFxMasks_[static_cast<size_t>(currentStep_)] & kAllFxMask;
-    }
-    return 0u;
+    return getEffectiveStepFxMask(currentStep_);
 }
 
 float BeatStepSequencer::getFxEnvelope(int fxIndex) const {
@@ -218,6 +282,9 @@ float BeatStepSequencer::advanceSampleWithFxMask(double bpm,
     const uint16_t activeFxMaskNow = getCurrentStepActiveFxMask();
     const bool activeNow = (activeFxMaskNow != 0u);
 
+    // CRITICAL: When moving between two adjacent enabled pads that share an effect,
+    // `wasActiveFxMask_` already has that effect's bit set, so `activeFxMaskNow & ~wasActiveFxMask_`
+    // is 0 for that effect — meaning the effect CONTINUES seamlessly without resetting!
     stepTransitionedToActive = (!wasActiveStep_ && activeNow);
     fxTransitionedToActiveMask = static_cast<uint16_t>(activeFxMaskNow & ~wasActiveFxMask_);
 

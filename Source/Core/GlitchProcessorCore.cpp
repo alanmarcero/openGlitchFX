@@ -206,15 +206,22 @@ void GlitchProcessorCore::processBlock(float* leftChannel, float* rightChannel, 
                 }
             };
 
-            // 1. Time/Buffer FX
+            const int curStep = sequencer_.getCurrentStep();
+            const double secPer32nd = (60.0 / bpm_) * (4.0 / 32.0); // 7.5 / bpm_
+
+            // 1. Time/Buffer FX (continuous across combined adjacent pads!)
             applyGatedFx(GlitchFxId::Stutter, [&](float amt, float& l, float& r) {
                 stutter_.processSample(amt, bpm_, l, r);
             });
             applyGatedFx(GlitchFxId::Reverse, [&](float amt, float& l, float& r) {
-                reverseGrain_.processSample(amt, l, r);
+                const auto span = sequencer_.getActiveFxSpan(curStep, static_cast<int>(GlitchFxId::Reverse));
+                const double spanSec = static_cast<double>(span.lengthSteps) * secPer32nd;
+                reverseGrain_.processSample(amt, spanSec, l, r);
             });
             applyGatedFx(GlitchFxId::TapeStop, [&](float amt, float& l, float& r) {
-                tapeStop_.processSample(amt, l, r);
+                const auto span = sequencer_.getActiveFxSpan(curStep, static_cast<int>(GlitchFxId::TapeStop));
+                const double spanSec = static_cast<double>(span.lengthSteps) * secPer32nd;
+                tapeStop_.processSample(amt, spanSec, l, r);
             });
             applyGatedFx(GlitchFxId::PitchGlitch, [&](float amt, float& l, float& r) {
                 pitchGlitch_.processSample(amt, l, r);

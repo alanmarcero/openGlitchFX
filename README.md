@@ -27,20 +27,22 @@ Unlike traditional glitch plugins that run continuously or require complex MIDI 
 
 ## Core Differentiator: 32-Step 4/4 Beat-Synced Sequencer & Per-Pad Effect Routing
 
-- **32 Selectable Spots per 4/4 Bar:**
+- **32 Selectable Spots per 4/4 Bar & Automatic Contiguous Pad Merging:**
   - Every 4/4 bar (4 quarter-note beats) is subdivided into **32 steps** (`8 steps per beat × 4 beats = 32 steps`, each representing `1/32` of a bar).
-  - Click or drag across any of the 32 pads in the sequencer to toggle glitch processing **ON** or **OFF** for that exact `1/32` slice of the bar.
-- **Per-Pad (1/32 Step) Effect Assignment (Single FX, Multi-FX, or All FX per Pad):**
-  - Each of the 32 pads stores its own **10-bit FX Routing Mask** (`step_fx_01` .. `step_fx_32`), backed by **10 independent smoothed DSP gate envelopes** so different pads can trigger completely different effects (e.g., *Bitcrush* on Pad 25, *Stutter* on Pads 29–31, and *Tape Stop* only on Pad 32).
-  - **Right-Click Any Pad (Context Menu):**
-    - **Enable ALL 10 FX on Pad (`ALL`)** or **Disable Pad (Dry Pass-Through)**.
-    - **Solo Single Effect on Pad:** One-click soloing of any of the 10 FX (`Only BITCRUSH (BC)`, `Only TAPE STOP (TS)`, etc.) on that single `1/32` pad (automatically waking up the effect's dial to `50%` if currently at `0%`).
-    - **Toggle Multi-FX Combination on Pad:** Check/uncheck any combination of the 10 effects on that pad.
-    - **Copy Pad FX Routing:** Copy a pad's FX assignment to the current 8-step beat or across all 32 pads.
+  - **Continuous Multi-Pad Spanning (Zero `1/32` Resets):** When two or more adjacent pads are enabled with the same FX routing, **openGlitchFX** automatically combines them both **visually** (into a single unified glowing capsule block showing the combined duration such as `ALL FX (8/32 • 1 BEAT)` or `TAPE STOP (4/32 • 1/8 BAR)`) and **in the DSP engine**—the effect continues seamlessly across the entire combined block without resetting on every `1/32` subdivision!
+  - Time-based processors (`TAPE STOP`, `REVERSE`, `STUTTER`) automatically scale their deceleration and buffer windows across the full combined multi-pad span and only trigger once at the start of the combined block.
+- **Per-Pad (1/32 Step) Effect Assignment (Option 3: Hybrid Right-Click Menu + Pad Brush + 2×5 Mini LED Matrix):**
+  - Each of the 32 pads stores its own **10-bit FX Routing Mask** (`step_fx_01` .. `step_fx_32`), backed by **10 independent smoothed DSP gate envelopes** so different pads or combined blocks can trigger completely different effects (e.g., *Bitcrush* on Pads 25–28, *Stutter* on Pads 29–31, and *Tape Stop* only on Pad 32).
+  - **Right-Click Any Pad or Combined Block (Context Menu):**
+    - **Enable ALL 10 FX (`ALL`)** or **Disable (Dry Pass-Through)** on the clicked pad or entire combined block.
+    - **Solo Single Effect:** One-click soloing of any of the 10 FX (`Only BITCRUSH (BC)`, `Only TAPE STOP (TS)`, etc.) on that pad or combined block (automatically waking up the effect's dial to `50%` if currently at `0%`).
+    - **Toggle Multi-FX Combination:** Check/uncheck any combination of the 10 effects.
+    - **Split / Edit Single Pad Only:** Submenu to split an individual `1/32` pad out of a combined multi-pad block.
+    - **Copy FX Routing:** Copy routing to the current 8-step beat or across all 32 pads.
   - **Left-Click `PAD BRUSH` Mode:**
-    - Use the **`PAD BRUSH:`** dropdown (`ALL ACTIVE FX` or `ONLY: BITCRUSH [BC]` .. `ONLY: WAVEFOLD [WF]`) to left-click and drag-paint a specific effect across any pads in the bar.
+    - Use the **`PAD BRUSH:`** dropdown (`ALL ACTIVE FX` or `ONLY: BITCRUSH [BC]` .. `ONLY: WAVEFOLD [WF]`) to left-click and drag-paint a specific effect across any pads in the bar—adjacent painted pads merge automatically!
   - **On-Pad Visual Feedback:**
-    - Each pad displays a live routing badge (`ALL`, `BC`, `TS`, `3FX`, etc.) plus a **2×5 mini LED dot matrix** indicating which of the 10 effects are assigned to that pad.
+    - Each pad or combined block displays a live routing & duration badge (`ALL FX (8/32 • 1 BEAT)`, `BC 2/32`, `TS`, `3FX`, etc.), a continuous playhead sweep across the merged block, and a **2×5 mini LED dot matrix** indicating which of the 10 effects are assigned.
 - **One-Click Musical Pattern Presets:**
   - **ALL 32:** Continuous glitch processing across the entire bar.
   - **LAST BEAT (25-32):** Engages only on Beat 4 of every bar for automatic end-of-bar turnarounds and fills.

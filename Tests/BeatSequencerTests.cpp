@@ -76,21 +76,54 @@ TEST_CASE("BeatStepSequencer tracks independent per-pad 10-FX routing masks and 
     seq.setStepFxMask(1, static_cast<uint16_t>(1u << 3));
 
     seq.prepare(48000.0);
-    seq.setSmoothingTimeMs(0.0f); // Instant switching for exact verification
+    seq.setSmoothingTimeMs(0.0f);
 
     bool stepEntered = false;
     uint16_t fxTransitionMask = 0u;
 
-    // Advance at PPQ = 0.01 (Step 0)
     seq.advanceSampleWithFxMask(120.0, true, true, 0.01, stepEntered, fxTransitionMask);
     REQUIRE(seq.getCurrentStep() == 0);
     REQUIRE(seq.getFxEnvelope(0) > 0.99f);
     REQUIRE(seq.getFxEnvelope(3) < 0.01f);
 
-    // Advance into PPQ = 0.15 (Step 1) -> FX 3 transitions to active, FX 0 turns off
     seq.advanceSampleWithFxMask(120.0, true, true, 0.15, stepEntered, fxTransitionMask);
     REQUIRE(seq.getCurrentStep() == 1);
     REQUIRE((fxTransitionMask & (1u << 3)) != 0u);
     REQUIRE(seq.getFxEnvelope(0) < 0.01f);
     REQUIRE(seq.getFxEnvelope(3) > 0.99f);
+}
+
+TEST_CASE("Adjacent enabled pads combine into a contiguous span and do NOT reset between 1/32 steps", "[sequencer][span]") {
+    BeatStepSequencer seq;
+    seq.applyPreset(StepPatternPreset::LastBeat); // Steps 24..31 enabled (8 adjacent pads)
+    seq.prepare(48000.0);
+    seq.setSmoothingTimeMs(0.0f);
+
+    const auto mergedSpan = seq.getMergedPadSpan(27);
+    REQUIRE(mergedSpan.startStep == 24);
+    REQUIRE(mergedSpan.endStep == 31);
+    REQUIRE(mergedSpan.lengthSteps == 8);
+
+    bool stepEntered = false;
+    uint16_t fxTransitionMask = 0u;
+
+    // 1. Before Beat 4 (Step 23, PPQ = 2.90) -> inactive
+    seq.advanceSampleWithFxMask(120.0, true, true, 2.90, stepEntered, fxTransitionMask);
+    REQUIRE_FALSE(stepEntered);
+    REQUIRE(fxTransitionMask == 0u);
+
+    // 2. Enter Pad 24 (First pad of Beat 4, PPQ = 3.01) -> triggers ONCE at start of combined block
+    seq.advanceSampleWithFxMask(120.0, true, true, 3.01, stepEntered, fxTransitionMask);
+    REQUIRE(stepEntered);
+    REQUIRE(fxTransitionMask == BeatStepSequencer::kAllFxMask);
+
+    // 3. Advance across adjacent pads 25, 26, 27, 28, 29, 30, 31 -> MUST NOT reset/retrigger!
+    for (int s = 25; s <= 31; ++s) {
+        const double ppq = (static_cast<double>(s) + 0.25) * (4.0 / 32.0);
+        seq.advanceSampleWithFxMask(120.0, true, true, ppq, stepEntered, fxTransitionMask);
+        REQUIRE(seq.getCurrentStep() == s);
+        REQUIRE_FALSE(stepEntered);
+        REQUIRE(fxTransitionMask == 0u);
+        REQUIRE(seq.getCurrentEnvelope() > 0.99f);
+    }
 }

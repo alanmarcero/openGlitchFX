@@ -27,6 +27,13 @@ public:
     void mouseDrag(const juce::MouseEvent& event) override;
 
 private:
+    struct ContiguousRun {
+        int startStep = 0;
+        int endStep = 0;
+        uint16_t fxMask = 0u;
+        int length() const { return endStep - startStep + 1; }
+    };
+
     int getStepAtPosition(juce::Point<float> pos) const;
     juce::Rectangle<float> getStepBounds(int stepIndex) const;
 
@@ -35,11 +42,13 @@ private:
 
     void setStepFxMaskParam(int stepIndex, uint16_t mask);
     uint16_t getStepFxMaskParam(int stepIndex) const;
+    uint16_t getEffectiveStepFxMask(int stepIndex) const;
+    ContiguousRun findContiguousRun(int stepIndex) const;
 
     void ensureFxAudible(int fxIndex);
     void applyPaintBrushToStep(int stepIndex, bool isInitialClick);
     void showStepContextMenu(int stepIndex);
-    static juce::String formatStepFxBadge(uint16_t mask);
+    static juce::String formatStepFxBadge(uint16_t mask, int spanLen);
 
     juce::AudioProcessorValueTreeState& apvts_;
     const GlitchLookAndFeel& lnf_;

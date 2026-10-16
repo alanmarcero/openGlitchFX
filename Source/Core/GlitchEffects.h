@@ -52,13 +52,13 @@ private:
     bool capturing_ = true;
 };
 
-// 4. Tape Stop / Vinyl Brake (Pitch deceleration effect controlled by a knob)
+// 4. Tape Stop / Vinyl Brake (Pitch deceleration effect across the combined contiguous pad span)
 class TapeStopEffect {
 public:
     void prepare(double sampleRate);
     void reset();
     void triggerBrake();
-    void processSample(float amount, float& left, float& right);
+    void processSample(float amount, double spanDurationSec, float& left, float& right);
 
 private:
     double sampleRate_ = 44100.0;
@@ -67,7 +67,6 @@ private:
     int writePos_ = 0;
     double readPos_ = 0.0;
     double speed_ = 1.0;
-    int activeSamples_ = 0;
 };
 
 // 5. Ring Modulator (Cybernetic harmonic ring mod controlled by a knob)
@@ -86,13 +85,13 @@ private:
 // Phase 2: 5 Additional Glitch FX (FX 6 .. FX 10)
 // ============================================================================
 
-// 6. Reverse Grain (Real-time circular buffer backwards grain player controlled by a knob)
+// 6. Reverse Grain (Continuous backwards buffer player across combined contiguous pads)
 class ReverseGrainEffect {
 public:
     void prepare(double sampleRate);
     void reset();
     void triggerGrain();
-    void processSample(float amount, float& left, float& right);
+    void processSample(float amount, double spanDurationSec, float& left, float& right);
 
 private:
     double sampleRate_ = 44100.0;
