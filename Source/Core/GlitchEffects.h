@@ -91,22 +91,23 @@ public:
     void prepare(double sampleRate);
     void reset();
     void triggerGrain();
-    void processSample(float amount, double spanDurationSec, float& left, float& right);
+    void processSample(float amount, float spanPhase01, double spanDurationSec, float& left, float& right);
 
 private:
     double sampleRate_ = 44100.0;
     std::vector<float> bufferL_;
     std::vector<float> bufferR_;
     int writePos_ = 0;
+    int grainStartWritePos_ = 0;
     int grainPos_ = 0;
 };
 
-// 7. Chopper Gate (High-speed rhythmic slicer / tremolo chopper controlled by a knob)
+// 7. Chopper Gate (Rhythmic slicer / gate envelope that sustains across combined contiguous pads)
 class ChopperGateEffect {
 public:
     void prepare(double sampleRate);
     void reset();
-    void processSample(float amount, double bpm, float& left, float& right);
+    void processSample(float amount, double bpm, int spanLengthSteps, float& left, float& right);
 
 private:
     double sampleRate_ = 44100.0;

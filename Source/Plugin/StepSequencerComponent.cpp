@@ -70,16 +70,21 @@ StepSequencerComponent::ContiguousRun StepSequencerComponent::findContiguousRun(
     }
 
     int start = stepIndex;
-    while (start > 0 && getEffectiveStepFxMask(start - 1) == mask) {
+    while (start > 0 && (getEffectiveStepFxMask(start - 1) & mask) != 0u) {
         --start;
     }
 
     int end = stepIndex;
-    while (end + 1 < 32 && getEffectiveStepFxMask(end + 1) == mask) {
+    while (end + 1 < 32 && (getEffectiveStepFxMask(end + 1) & mask) != 0u) {
         ++end;
     }
 
-    return { start, end, mask };
+    uint16_t combinedMask = 0u;
+    for (int s = start; s <= end; ++s) {
+        combinedMask |= getEffectiveStepFxMask(s);
+    }
+
+    return { start, end, combinedMask };
 }
 
 void StepSequencerComponent::setStepFxMaskParam(int stepIndex, uint16_t mask) {
@@ -183,13 +188,22 @@ void StepSequencerComponent::applyPaintBrushToStep(int step, bool isInitialClick
         }
         setStepParam(step, dragTargetState_);
         if (dragTargetState_) {
-            // If adjacent neighbor is enabled, inherit its FX mask so adjacent pads combine seamlessly!
+            // Unify FX mask across the entire connected run of adjacent enabled pads so they link and sustain seamlessly!
+            uint16_t targetMask = getStepFxMaskParam(step);
             if (step > 0 && getStepParam(step - 1) && getStepFxMaskParam(step - 1) != 0u) {
-                setStepFxMaskParam(step, getStepFxMaskParam(step - 1));
+                targetMask = getStepFxMaskParam(step - 1);
             } else if (step + 1 < 32 && getStepParam(step + 1) && getStepFxMaskParam(step + 1) != 0u) {
-                setStepFxMaskParam(step, getStepFxMaskParam(step + 1));
-            } else if (getStepFxMaskParam(step) == 0u) {
-                setStepFxMaskParam(step, kAllFx);
+                targetMask = getStepFxMaskParam(step + 1);
+            }
+            if (targetMask == 0u) {
+                targetMask = kAllFx;
+            }
+            int s0 = step;
+            while (s0 > 0 && getStepParam(s0 - 1)) --s0;
+            int s1 = step;
+            while (s1 + 1 < 32 && getStepParam(s1 + 1)) ++s1;
+            for (int s = s0; s <= s1; ++s) {
+                setStepFxMaskParam(s, targetMask);
             }
         }
     } else {
@@ -239,7 +253,7 @@ void StepSequencerComponent::showStepContextMenu(int step) {
         menu.addSectionHeader(juce::String::formatted("COMBINED BLOCK: PADS %02d-%02d (%d/32)  |  PAD %02d",
                                                       run.startStep + 1, run.endStep + 1, run.length(), step + 1));
     } else {
-        menu.addSectionHeader(juce::String::formatted("PAD %02d/32 — EFFECT ROUTING", step + 1));
+        menu.addSectionHeader(juce::String::formatted("PAD %02d/32 - EFFECT ROUTING", step + 1));
     }
 
     const juce::String targetLabel = isMergedGroup
@@ -415,16 +429,16 @@ juce::String StepSequencerComponent::formatStepFxBadge(uint16_t mask, int spanLe
         return fxText + " 2/32";
     }
     if (spanLen == 4) {
-        return fxText + " (4/32 • 1/8 BAR)";
+        return fxText + " (4/32 | 1/8 BAR)";
     }
     if (spanLen == 8) {
-        return fxText + " (8/32 • 1 BEAT)";
+        return fxText + " (8/32 | 1 BEAT)";
     }
     if (spanLen == 16) {
-        return fxText + " (16/32 • 2 BEATS)";
+        return fxText + " (16/32 | 2 BEATS)";
     }
     if (spanLen == 32) {
-        return fxText + " (32/32 • FULL BAR)";
+        return fxText + " (32/32 | FULL BAR)";
     }
     return fxText + juce::String::formatted(" (%d/32)", spanLen);
 }
@@ -441,7 +455,7 @@ void StepSequencerComponent::paint(juce::Graphics& g) {
 
     // Beat Group Headers (BEAT 1..4)
     const char* beatTitles[4] = {
-        "BEAT 1 (1-8)  [ADJACENT PADS MERGE • R-CLICK FOR FX]",
+        "BEAT 1 (1-8)  [ADJACENT PADS MERGE | R-CLICK FOR FX]",
         "BEAT 2 (9-16)",
         "BEAT 3 (17-24)",
         "BEAT 4 (25-32)"
@@ -499,6 +513,7 @@ void StepSequencerComponent::paint(juce::Graphics& g) {
         const int runStart = run.startStep;
         const int runEnd   = run.endStep;
         const int runLen   = run.length();
+        const uint16_t runMask = run.fxMask;
 
         const auto firstRect = getStepBounds(runStart);
         const auto lastRect  = getStepBounds(runEnd);
@@ -506,7 +521,7 @@ void StepSequencerComponent::paint(juce::Graphics& g) {
                                                 lastRect.getRight() - firstRect.getX(),
                                                 firstRect.getHeight());
 
-        const bool isCustomMask = (fxMask != kAllFx);
+        const bool isCustomMask = (runMask != kAllFx);
         const bool playheadInSpan = (currentStep_ >= runStart && currentStep_ <= runEnd);
 
         juce::Colour baseCol = isCustomMask
@@ -565,7 +580,7 @@ void StepSequencerComponent::paint(juce::Graphics& g) {
 
         g.setColour(isCustomMask ? pal.stepPlayheadOutline : pal.textBright);
         g.setFont(juce::FontOptions(runLen >= 2 ? 9.5f : 8.5f, juce::Font::bold));
-        g.drawText(formatStepFxBadge(fxMask, runLen), badgeRect.toNearestInt(), juce::Justification::centred);
+        g.drawText(formatStepFxBadge(runMask, runLen), badgeRect.toNearestInt(), juce::Justification::centred);
 
         // Unified 2x5 Mini LED Dot Matrix centered at the bottom of the combined block
         const float maxMatrixW = std::min(mergedRect.getWidth() - 6.0f, 80.0f);
@@ -580,7 +595,7 @@ void StepSequencerComponent::paint(juce::Graphics& g) {
             const int mCol = fx % 5;
             const float dx = matrixArea.getX() + static_cast<float>(mCol) * cellW + cellW * 0.5f;
             const float dy = matrixArea.getY() + static_cast<float>(mRow) * cellH + cellH * 0.5f;
-            const bool fxBitOn = ((fxMask & (1u << fx)) != 0u);
+            const bool fxBitOn = ((runMask & (1u << fx)) != 0u);
 
             if (fxBitOn) {
                 g.setColour(pal.textBright.withAlpha(0.95f));

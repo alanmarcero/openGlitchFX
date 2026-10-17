@@ -166,3 +166,46 @@ TEST_CASE("Per-pad FX routing enables an effect on only a single 1/32 pad while 
     core.processBlock(pad31L.data(), pad31R.data(), kN);
     REQUIRE(computeRmsDifference(dryL, pad31L) > 0.05f);
 }
+
+TEST_CASE("Linked adjacent 1/32 pads sustain effects continuously across step boundaries without resetting", "[core][sustain]") {
+    constexpr double kSr = 48000.0;
+    constexpr double kBpm = 120.0;
+    // At 120 BPM, 1 quarter = 0.5s, 1/32 step = 0.0625s = 3000 samples at 48 kHz.
+    // Two linked 1/32 steps (Steps 24 & 25) = 6000 samples (PPQ 3.0 to 3.25).
+    constexpr int kTwoStepsSamples = 6000;
+
+    GlitchProcessorCore core;
+    core.applyPatternPreset(StepPatternPreset::ClearAll);
+    core.setStep(24, true);
+    core.setStep(25, true);
+    core.prepare(kSr);
+    core.setGateSmoothingMs(0.0f);
+
+    for (int i = 0; i < GlitchProcessorCore::kNumEffects; ++i) {
+        core.setEffectAmount(static_cast<GlitchFxId>(i), 0.0f);
+    }
+    // Enable TapeStop across the 2 linked steps
+    core.setEffectEnabled(GlitchFxId::TapeStop, true);
+    core.setEffectAmount(GlitchFxId::TapeStop, 0.80f);
+
+    std::vector<float> left(kTwoStepsSamples), right(kTwoStepsSamples);
+    fillSineStereo(left, right, kSr, 440.0, 0.8f);
+
+    // Start right at Step 24 (PPQ = 3.0) and process across the Step 24 -> Step 25 boundary (sample 3000)
+    core.setTransport(kBpm, true, true, 3.0);
+    core.processBlock(left.data(), right.data(), kTwoStepsSamples);
+
+    // Measure RMS in the second half of Step 24 (samples 1500..2900) vs first half of Step 25 (samples 3100..4500)
+    // Because TapeStop decelerates continuously across the 2-step span without resetting at sample 3000,
+    // the amplitude in Step 25 must be lower than in Step 24 (continuing the brake rather than restarting at 1.0x!).
+    double sumSqStep24 = 0.0;
+    double sumSqStep25 = 0.0;
+    for (int i = 1500; i < 2900; ++i) {
+        sumSqStep24 += static_cast<double>(left[static_cast<size_t>(i)] * left[static_cast<size_t>(i)]);
+    }
+    for (int i = 3100; i < 4500; ++i) {
+        sumSqStep25 += static_cast<double>(left[static_cast<size_t>(i)] * left[static_cast<size_t>(i)]);
+    }
+    REQUIRE(sumSqStep25 < sumSqStep24);
+}
+

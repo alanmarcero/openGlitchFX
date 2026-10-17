@@ -119,10 +119,10 @@ void BufferStutter::processSample(float amount, double bpm, float& left, float& 
     const double safeBpm = std::clamp(bpm, 40.0, 240.0);
     const double quarterSec = 60.0 / safeBpm;
 
-    const double maxSliceSec = std::min(0.25, quarterSec * 0.5);
-    const double minSliceSec = 0.008;
+    const double maxSliceSec = std::min(0.50, quarterSec * 1.0);
+    const double minSliceSec = 0.025;
     const double sliceSec = maxSliceSec * std::pow(minSliceSec / maxSliceSec, static_cast<double>(amt));
-    const int sliceLen = std::clamp(static_cast<int>(sliceSec * sampleRate_), 64, maxBuf - 1);
+    const int sliceLen = std::clamp(static_cast<int>(sliceSec * sampleRate_), 256, maxBuf - 1);
 
     if (capturing_) {
         bufferL_[static_cast<size_t>(writePos_)] = left;
@@ -136,24 +136,21 @@ void BufferStutter::processSample(float amount, double bpm, float& left, float& 
         return;
     }
 
-    const int loopLen = std::clamp(sliceLen, 64, std::max(64, capturedSamples_));
+    const int loopLen = std::clamp(sliceLen, 256, std::max(256, capturedSamples_));
     if (readPos_ >= loopLen) {
         readPos_ = 0;
     }
 
-    float win = 1.0f;
-    const int fadeLen = std::min(64, loopLen / 4);
-    if (fadeLen > 1) {
-        if (readPos_ < fadeLen) {
-            win = 0.5f * (1.0f - std::cos(std::numbers::pi_v<float> * static_cast<float>(readPos_) / static_cast<float>(fadeLen)));
-        } else if (readPos_ >= loopLen - fadeLen) {
-            const int rem = loopLen - 1 - readPos_;
-            win = 0.5f * (1.0f - std::cos(std::numbers::pi_v<float> * static_cast<float>(rem) / static_cast<float>(fadeLen)));
-        }
+    // Equal-power boundary crossfade between loop tail and loop start so the repeat sustains seamlessly
+    const int xfadeLen = std::min(128, loopLen / 4);
+    float stutL = bufferL_[static_cast<size_t>(readPos_)];
+    float stutR = bufferR_[static_cast<size_t>(readPos_)];
+    if (xfadeLen > 1 && readPos_ >= loopLen - xfadeLen) {
+        const float t = static_cast<float>(readPos_ - (loopLen - xfadeLen)) / static_cast<float>(xfadeLen);
+        const int wrapIdx = readPos_ - (loopLen - xfadeLen);
+        stutL = stutL * (1.0f - t) + bufferL_[static_cast<size_t>(wrapIdx)] * t;
+        stutR = stutR * (1.0f - t) + bufferR_[static_cast<size_t>(wrapIdx)] * t;
     }
-
-    const float stutL = bufferL_[static_cast<size_t>(readPos_)] * win;
-    const float stutR = bufferR_[static_cast<size_t>(readPos_)] * win;
     ++readPos_;
 
     const float wet = std::min(1.0f, amt * 1.3f);
@@ -166,7 +163,7 @@ void BufferStutter::processSample(float amount, double bpm, float& left, float& 
 // ============================================================================
 void TapeStopEffect::prepare(double sampleRate) {
     sampleRate_ = std::max(1000.0, sampleRate);
-    const size_t maxSamples = static_cast<size_t>(sampleRate_ * 4.5) + 64;
+    const size_t maxSamples = static_cast<size_t>(sampleRate_ * 8.5) + 64;
     bufferL_.assign(maxSamples, 0.0f);
     bufferR_.assign(maxSamples, 0.0f);
     reset();
@@ -200,17 +197,18 @@ void TapeStopEffect::processSample(float amount, double spanDurationSec, float& 
     }
 
     // Scale deceleration across the combined contiguous pad span!
-    // At low knob values it slows down gently across the full span; at higher knob values it brakes steeper across the span.
-    const double clampedSpanSec = std::clamp(spanDurationSec, 0.04, 4.0);
-    const double stopSeconds = clampedSpanSec * (1.15 - static_cast<double>(amt) * 0.75);
-    const double decelPerSample = 1.0 / std::max(64.0, stopSeconds * sampleRate_);
-    speed_ = std::max(0.0, speed_ - decelPerSample);
+    // Keeps a low-speed sustain floor so long linked spans glide down smoothly instead of cutting out early.
+    const double clampedSpanSec = std::clamp(spanDurationSec, 0.04, 8.0);
+    const double minFloorSpeed = 0.18 * (1.0 - static_cast<double>(amt) * 0.85);
+    const double stopSeconds = clampedSpanSec * (1.25 - static_cast<double>(amt) * 0.55);
+    const double decelPerSample = (1.0 - minFloorSpeed) / std::max(64.0, stopSeconds * sampleRate_);
+    speed_ = std::max(minFloorSpeed, speed_ - decelPerSample);
 
     const int idx0 = std::clamp(static_cast<int>(readPos_), 0, std::max(0, writePos_ - 1));
     const int idx1 = std::clamp(idx0 + 1, 0, std::max(0, writePos_ - 1));
     const float frac = static_cast<float>(readPos_ - static_cast<double>(idx0));
 
-    const float gainEnv = static_cast<float>(std::sqrt(speed_));
+    const float gainEnv = static_cast<float>(std::pow(std::max(0.05, speed_), 0.35));
     const float tapeL = (bufferL_[static_cast<size_t>(idx0)] * (1.0f - frac) + bufferL_[static_cast<size_t>(idx1)] * frac) * gainEnv;
     const float tapeR = (bufferR_[static_cast<size_t>(idx0)] * (1.0f - frac) + bufferR_[static_cast<size_t>(idx1)] * frac) * gainEnv;
 
@@ -259,7 +257,7 @@ void RingModEffect::processSample(float amount, float& left, float& right) {
 // ============================================================================
 void ReverseGrainEffect::prepare(double sampleRate) {
     sampleRate_ = std::max(1000.0, sampleRate);
-    const size_t maxBuf = static_cast<size_t>(sampleRate_ * 4.5) + 64;
+    const size_t maxBuf = static_cast<size_t>(sampleRate_ * 8.5) + 64;
     bufferL_.assign(maxBuf, 0.0f);
     bufferR_.assign(maxBuf, 0.0f);
     reset();
@@ -269,6 +267,7 @@ void ReverseGrainEffect::reset() {
     std::fill(bufferL_.begin(), bufferL_.end(), 0.0f);
     std::fill(bufferR_.begin(), bufferR_.end(), 0.0f);
     writePos_ = 0;
+    grainStartWritePos_ = 0;
     grainPos_ = 0;
 }
 
@@ -276,45 +275,41 @@ void ReverseGrainEffect::triggerGrain() {
     grainPos_ = 0;
 }
 
-void ReverseGrainEffect::processSample(float amount, double spanDurationSec, float& left, float& right) {
+void ReverseGrainEffect::processSample(float amount, float /*spanPhase01*/, double spanDurationSec, float& left, float& right) {
     const float amt = std::clamp(amount, 0.0f, 1.0f);
-    if (amt <= 1e-4f || bufferL_.empty()) {
+    const int bufSize = static_cast<int>(bufferL_.size());
+    if (amt <= 1e-4f || bufSize == 0) {
         return;
     }
 
-    const int bufSize = static_cast<int>(bufferL_.size());
     bufferL_[static_cast<size_t>(writePos_)] = left;
     bufferR_[static_cast<size_t>(writePos_)] = right;
 
     // Reverse grain spans the full combined multi-pad region without resetting every 1/32!
-    const double clampedSpanSec = std::clamp(spanDurationSec, 0.06, 2.0);
-    const int grainLen = std::clamp(static_cast<int>(clampedSpanSec * sampleRate_), 256, bufSize / 2 - 1);
+    const double clampedSpanSec = std::clamp(spanDurationSec, 0.06, 8.0);
+    const int spanSamples = std::clamp(static_cast<int>(clampedSpanSec * sampleRate_), 256, bufSize / 2 - 1);
 
-    if (grainPos_ >= grainLen) {
-        grainPos_ = 0;
-    }
-
-    int readIdx = writePos_ - (grainPos_ * 2);
+    const int posInSpan = grainPos_ % spanSamples;
+    int readIdx = writePos_ - (posInSpan * 2);
     while (readIdx < 0) {
         readIdx += bufSize;
     }
     readIdx %= bufSize;
 
-    // Smooth edge fade (first & last 128 samples) so the reversed span stays loud and continuous in the middle
+    // Only apply a tiny 128-sample de-click ramp at the outer boundaries of the combined multi-pad span
     float win = 1.0f;
-    const int fadeLen = std::min(128, grainLen / 4);
+    const int fadeLen = std::min(128, spanSamples / 8);
     if (fadeLen > 1) {
-        if (grainPos_ < fadeLen) {
-            win = 0.5f * (1.0f - std::cos(std::numbers::pi_v<float> * static_cast<float>(grainPos_) / static_cast<float>(fadeLen)));
-        } else if (grainPos_ >= grainLen - fadeLen) {
-            const int rem = grainLen - 1 - grainPos_;
+        if (posInSpan < fadeLen) {
+            win = 0.5f * (1.0f - std::cos(std::numbers::pi_v<float> * static_cast<float>(posInSpan) / static_cast<float>(fadeLen)));
+        } else if (posInSpan >= spanSamples - fadeLen) {
+            const int rem = spanSamples - 1 - posInSpan;
             win = 0.5f * (1.0f - std::cos(std::numbers::pi_v<float> * static_cast<float>(rem) / static_cast<float>(fadeLen)));
         }
     }
 
     const float revL = bufferL_[static_cast<size_t>(readIdx)] * win;
     const float revR = bufferR_[static_cast<size_t>(readIdx)] * win;
-
     writePos_ = (writePos_ + 1) % bufSize;
     ++grainPos_;
 
@@ -336,23 +331,28 @@ void ChopperGateEffect::reset() {
     smoothGate_ = 1.0f;
 }
 
-void ChopperGateEffect::processSample(float amount, double bpm, float& left, float& right) {
+void ChopperGateEffect::processSample(float amount, double bpm, int spanLengthSteps, float& left, float& right) {
     const float amt = std::clamp(amount, 0.0f, 1.0f);
     if (amt <= 1e-4f) {
         return;
     }
 
     const double safeBpm = std::clamp(bpm, 40.0, 240.0);
-    const double baseHz = (safeBpm / 60.0) * (2.0 + static_cast<double>(amt) * 18.0);
+    // Scale chopper cycle across the linked span length so linked pads produce a wider, sustained swell/chop
+    // rather than chopping at 1/32 rate regardless of how many pads are linked!
+    const double spanScale = 1.0 / std::sqrt(static_cast<double>(std::clamp(spanLengthSteps, 1, 32)));
+    const double baseHz = (safeBpm / 60.0) * (1.5 + static_cast<double>(amt) * 10.5) * spanScale;
     phase_ += baseHz / sampleRate_;
     if (phase_ >= 1.0) {
         phase_ -= 1.0;
     }
 
-    const double duty = 0.55 - static_cast<double>(amt) * 0.25;
-    const float targetGate = (phase_ < duty) ? 1.0f : (1.0f - amt);
+    // Smooth raised-cosine tremolo/chop wave instead of hard square wave
+    const float lfo = 0.5f * (1.0f + std::cos(static_cast<float>(phase_ * 2.0 * std::numbers::pi)));
+    const float shaped = std::pow(lfo, 0.7f + amt * 1.5f);
+    const float targetGate = (1.0f - amt) + amt * shaped;
 
-    smoothGate_ = targetGate + 0.94f * (smoothGate_ - targetGate);
+    smoothGate_ = targetGate + 0.96f * (smoothGate_ - targetGate);
     left *= smoothGate_;
     right *= smoothGate_;
 }
@@ -362,7 +362,7 @@ void ChopperGateEffect::processSample(float amount, double bpm, float& left, flo
 // ============================================================================
 void PitchGlitchEffect::prepare(double sampleRate) {
     sampleRate_ = std::max(1000.0, sampleRate);
-    const size_t bufSize = 4096;
+    const size_t bufSize = 8192;
     bufferL_.assign(bufSize, 0.0f);
     bufferR_.assign(bufSize, 0.0f);
     reset();
@@ -387,16 +387,17 @@ void PitchGlitchEffect::processSample(float amount, float& left, float& right) {
     bufferL_[static_cast<size_t>(writePos_)] = left;
     bufferR_[static_cast<size_t>(writePos_)] = right;
 
-    const int hopPeriod = std::max(512, static_cast<int>(sampleRate_ * (0.09 - 0.05 * static_cast<double>(amt))));
+    // Sustain each pitch shift interval across linked pads (~250ms..500ms) instead of rapid 1/32 hopping
+    const int hopPeriod = std::max(4096, static_cast<int>(sampleRate_ * (0.50 - 0.25 * static_cast<double>(amt))));
     if (++stepCounter_ >= hopPeriod) {
         stepCounter_ = 0;
         intervalIndex_ = (intervalIndex_ + 1) & 3;
     }
 
-    static constexpr std::array<double, 4> kRatios = { 1.498307, 2.0, 0.5, 2.996614 };
+    static constexpr std::array<double, 4> kRatios = { 1.498307, 2.0, 0.5, 1.259921 };
     const double targetRatio = 1.0 + (kRatios[static_cast<size_t>(intervalIndex_)] - 1.0) * static_cast<double>(amt);
 
-    constexpr double kGrainSamples = 1024.0;
+    constexpr double kGrainSamples = 2048.0;
     const double rate = (1.0 - targetRatio) / kGrainSamples;
     grainPhase_ += rate;
     grainPhase_ -= std::floor(grainPhase_);
@@ -417,7 +418,7 @@ void PitchGlitchEffect::processSample(float amount, float& left, float& right) {
         return buf[static_cast<size_t>(i0)] * (1.0f - f) + buf[static_cast<size_t>(i1)] * f;
     };
 
-    const float pitchedL = readInterp(bufferL_, delayA) * winA + readInterp(bufferR_, delayB) * winB;
+    const float pitchedL = readInterp(bufferL_, delayA) * winA + readInterp(bufferL_, delayB) * winB;
     const float pitchedR = readInterp(bufferR_, delayA) * winA + readInterp(bufferR_, delayB) * winB;
 
     writePos_ = (writePos_ + 1) % bufSize;

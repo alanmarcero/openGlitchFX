@@ -243,7 +243,7 @@ void OpenGlitchFXEditor::paint(juce::Graphics& g) {
     g.setColour(pal.cardBorder);
     g.drawLine(28.0f, 58.0f, w - 28.0f, 58.0f, 1.0f);
 
-    // 3. Draw 10 FX Slot Cards (2x5 Matrix) — highlight when active on the current 1/32 pad!
+    // 3. Draw 10 FX Slot Cards (2x5 Matrix) -- highlight when active on the current 1/32 pad!
     for (size_t i = 0; i < kNumUiFx; ++i) {
         const auto& slot = fxSlots_[i];
         const auto& r = slot.cardBounds;

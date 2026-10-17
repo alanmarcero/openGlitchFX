@@ -194,11 +194,29 @@ StepSpanInfo BeatStepSequencer::getActiveFxSpan(int stepIndex, int fxIndex) cons
         ++end;
     }
 
-    const int len = end - start + 1;
+    int len = end - start + 1;
+    // If all 32 steps are enabled, or the span touches the bar boundary and wraps around into the next bar,
+    // extend the logical span duration so effects sustain across bar boundaries too!
+    if (len < kNumSteps) {
+        if (start == 0) {
+            int tail = kNumSteps - 1;
+            while (tail > end && (getEffectiveStepFxMask(tail) & bit) != 0u) {
+                --tail;
+                ++len;
+            }
+        } else if (end == kNumSteps - 1) {
+            int head = 0;
+            while (head < start && (getEffectiveStepFxMask(head) & bit) != 0u) {
+                ++head;
+                ++len;
+            }
+        }
+    }
+
     float spanPhase = 0.0f;
     if (currentStep_ >= start && currentStep_ <= end) {
         const double stepStartPhase = static_cast<double>(start) / static_cast<double>(kNumSteps);
-        const double spanTotalPhase = static_cast<double>(len) / static_cast<double>(kNumSteps);
+        const double spanTotalPhase = static_cast<double>(end - start + 1) / static_cast<double>(kNumSteps);
         spanPhase = static_cast<float>(std::clamp((currentBarPhase_ - stepStartPhase) / spanTotalPhase, 0.0, 1.0));
     }
 
@@ -284,7 +302,7 @@ float BeatStepSequencer::advanceSampleWithFxMask(double bpm,
 
     // CRITICAL: When moving between two adjacent enabled pads that share an effect,
     // `wasActiveFxMask_` already has that effect's bit set, so `activeFxMaskNow & ~wasActiveFxMask_`
-    // is 0 for that effect — meaning the effect CONTINUES seamlessly without resetting!
+    // is 0 for that effect -- meaning the effect CONTINUES seamlessly without resetting!
     stepTransitionedToActive = (!wasActiveStep_ && activeNow);
     fxTransitionedToActiveMask = static_cast<uint16_t>(activeFxMaskNow & ~wasActiveFxMask_);
 

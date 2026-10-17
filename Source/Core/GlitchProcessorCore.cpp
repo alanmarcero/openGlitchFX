@@ -216,7 +216,7 @@ void GlitchProcessorCore::processBlock(float* leftChannel, float* rightChannel, 
             applyGatedFx(GlitchFxId::Reverse, [&](float amt, float& l, float& r) {
                 const auto span = sequencer_.getActiveFxSpan(curStep, static_cast<int>(GlitchFxId::Reverse));
                 const double spanSec = static_cast<double>(span.lengthSteps) * secPer32nd;
-                reverseGrain_.processSample(amt, spanSec, l, r);
+                reverseGrain_.processSample(amt, span.spanPhase, spanSec, l, r);
             });
             applyGatedFx(GlitchFxId::TapeStop, [&](float amt, float& l, float& r) {
                 const auto span = sequencer_.getActiveFxSpan(curStep, static_cast<int>(GlitchFxId::TapeStop));
@@ -244,9 +244,10 @@ void GlitchProcessorCore::processBlock(float* leftChannel, float* rightChannel, 
                 combResonator_.processSample(amt, l, r);
             });
 
-            // 3. Rhythmic Chopper Slicer
+            // 3. Rhythmic Chopper Slicer (sustains across combined pad spans)
             applyGatedFx(GlitchFxId::Chopper, [&](float amt, float& l, float& r) {
-                chopperGate_.processSample(amt, bpm_, l, r);
+                const auto span = sequencer_.getActiveFxSpan(curStep, static_cast<int>(GlitchFxId::Chopper));
+                chopperGate_.processSample(amt, bpm_, span.lengthSteps, l, r);
             });
 
             outL = (dryL * (1.0f - effectiveWet) + wetL * effectiveWet) * masterGainLinear_;

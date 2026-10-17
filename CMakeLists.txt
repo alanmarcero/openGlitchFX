@@ -5,6 +5,10 @@ project(openGlitchFX VERSION 1.0.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+if(MSVC)
+    add_compile_options(/utf-8)
+endif()
+
 option(OGFX_BUILD_PLUGIN "Build the openGlitchFX VST3 plugin" ON)
 option(OGFX_BUILD_TESTS "Build the unit tests" ON)
 
