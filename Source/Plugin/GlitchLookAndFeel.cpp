@@ -124,8 +124,27 @@ void GlitchLookAndFeel::drawRotarySlider(juce::Graphics& g,
     const float cy = bounds.getCentreY();
     const float angle = rotaryStartAngle + sliderPosProportional * (rotaryEndAngle - rotaryStartAngle);
 
+    // 0. Outer Cyber Scale Ticks
+    constexpr int kNumTicks = 17;
+    for (int i = 0; i < kNumTicks; ++i) {
+        const float norm = static_cast<float>(i) / static_cast<float>(kNumTicks - 1);
+        const float ta = rotaryStartAngle + norm * (rotaryEndAngle - rotaryStartAngle);
+        const bool isMajor = (i % 4 == 0);
+        const bool isLit = (norm <= sliderPosProportional + 0.005f) && (sliderPosProportional > 0.005f);
+        const float rIn = radius - 0.5f;
+        const float rOut = radius + (isMajor ? 3.5f : 2.0f);
+
+        juce::Colour tickCol = isLit
+            ? palette_.accentPrimary.interpolatedWith(palette_.accentSecondary, norm)
+            : palette_.textMuted.withAlpha(isMajor ? 0.50f : 0.25f);
+        g.setColour(tickCol);
+        g.drawLine(cx + std::sin(ta) * rIn, cy - std::cos(ta) * rIn,
+                   cx + std::sin(ta) * rOut, cy - std::cos(ta) * rOut,
+                   isMajor ? 1.4f : 0.9f);
+    }
+
     // 1. Outer LED Value Arc Track
-    const float arcRadius = radius - 2.0f;
+    const float arcRadius = radius - 3.0f;
     juce::Path bgArc;
     bgArc.addCentredArc(cx, cy, arcRadius, arcRadius, 0.0f, rotaryStartAngle, rotaryEndAngle, true);
     g.setColour(palette_.stepInactiveFill.brighter(0.15f));
@@ -141,12 +160,12 @@ void GlitchLookAndFeel::drawRotarySlider(juce::Graphics& g,
         g.strokePath(valArc, juce::PathStrokeType(3.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
         // Subtle outer glow
-        g.setColour(palette_.accentPrimary.withAlpha(0.22f));
+        g.setColour(palette_.accentPrimary.withAlpha(0.24f));
         g.strokePath(valArc, juce::PathStrokeType(7.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
     }
 
     // 2. Knurled Anodized Knob Body
-    const float bodyRadius = radius * 0.74f;
+    const float bodyRadius = radius * 0.72f;
     g.setColour(juce::Colours::black.withAlpha(0.55f));
     g.fillEllipse(cx - bodyRadius + 1.0f, cy - bodyRadius + 2.5f, bodyRadius * 2.0f, bodyRadius * 2.0f);
 
@@ -169,12 +188,15 @@ void GlitchLookAndFeel::drawRotarySlider(juce::Graphics& g,
                    cx + std::sin(ka) * r1, cy - std::cos(ka) * r1, 1.0f);
     }
 
-    // Inner cap
+    // Inner cap with subtle neon rim
     const float capRadius = bodyRadius * 0.72f;
     juce::ColourGradient capGrad(palette_.knobBodyBottom.brighter(0.12f), cx, cy - capRadius,
                                  palette_.knobBodyBottom.darker(0.2f), cx, cy + capRadius, false);
     g.setGradientFill(capGrad);
     g.fillEllipse(cx - capRadius, cy - capRadius, capRadius * 2.0f, capRadius * 2.0f);
+
+    g.setColour(palette_.accentPrimary.withAlpha(0.32f));
+    g.drawEllipse(cx - capRadius + 0.5f, cy - capRadius + 0.5f, capRadius * 2.0f - 1.0f, capRadius * 2.0f - 1.0f, 0.9f);
 
     // 3. Illuminated Pointer Line & Tip Dot
     const float p0 = capRadius * 0.25f;
@@ -184,7 +206,7 @@ void GlitchLookAndFeel::drawRotarySlider(juce::Graphics& g,
     const float sx1 = cx + std::sin(angle) * p1;
     const float sy1 = cy - std::cos(angle) * p1;
 
-    g.setColour(palette_.accentPrimary.withAlpha(0.4f));
+    g.setColour(palette_.accentPrimary.withAlpha(0.45f));
     g.drawLine(sx0, sy0, sx1, sy1, 4.0f);
     g.setColour(palette_.textBright);
     g.drawLine(sx0, sy0, sx1, sy1, 2.0f);

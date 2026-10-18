@@ -21,8 +21,11 @@ public:
     // Paint target mode: -1 = All FX (default), 0..9 = specific Glitch FX index
     void setPaintTargetFx(int fxIndex);
     int getPaintTargetFx() const { return paintTargetFx_; }
+    int countStepsRoutingToFx(int fxIndex) const;
 
     void paint(juce::Graphics& g) override;
+    void mouseMove(const juce::MouseEvent& event) override;
+    void mouseExit(const juce::MouseEvent& event) override;
     void mouseDown(const juce::MouseEvent& event) override;
     void mouseDrag(const juce::MouseEvent& event) override;
 
@@ -54,6 +57,7 @@ private:
     const GlitchLookAndFeel& lnf_;
 
     int currentStep_ = 0;
+    int hoveredStep_ = -1;
     float barPhase_ = 0.0f;
     bool isStepActive_ = false;
     float gateEnvelope_ = 0.0f;

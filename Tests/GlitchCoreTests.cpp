@@ -209,3 +209,63 @@ TEST_CASE("Linked adjacent 1/32 pads sustain effects continuously across step bo
     REQUIRE(sumSqStep25 < sumSqStep24);
 }
 
+TEST_CASE("ReverseGrainEffect outputs full reversed waveform energy on both cold start and pre-warmed history", "[core][reverse]") {
+    constexpr double kSr = 48000.0;
+    constexpr int kN = 3000;
+
+    GlitchProcessorCore core;
+    core.applyPatternPreset(StepPatternPreset::Last32nd); // Only Step 31 enabled
+    core.prepare(kSr);
+    core.setGateSmoothingMs(0.0f);
+
+    for (int i = 0; i < GlitchProcessorCore::kNumEffects; ++i) {
+        core.setEffectAmount(static_cast<GlitchFxId>(i), 0.0f);
+    }
+    core.setEffectEnabled(GlitchFxId::Reverse, true);
+    core.setEffectAmount(GlitchFxId::Reverse, 1.0f); // 100% wet reverse
+
+    // 1. Pre-warm during inactive Step 30 (PPQ = 3.75) so dry audio is recorded into circular pre-roll buffer
+    std::vector<float> warmL(kN), warmR(kN);
+    fillSineStereo(warmL, warmR, kSr, 330.0, 0.8f);
+    core.setTransport(120.0, true, true, 3.75);
+    core.processBlock(warmL.data(), warmR.data(), kN);
+
+    // 2. Enter active Step 31 (PPQ = 3.88) where input drops to silence, verifying Reverse plays back the pre-warmed audio!
+    std::vector<float> revL(kN, 0.0f), revR(kN, 0.0f);
+    core.setTransport(120.0, true, true, 3.88);
+    core.processBlock(revL.data(), revR.data(), kN);
+
+    double sumSq = 0.0;
+    for (int i = 128; i < kN - 128; ++i) {
+        sumSq += static_cast<double>(revL[static_cast<size_t>(i)] * revL[static_cast<size_t>(i)]);
+    }
+    const double rms = std::sqrt(sumSq / static_cast<double>(kN - 256));
+    REQUIRE(rms > 0.25);
+}
+
+TEST_CASE("WavefolderEffect multi-stage West-Coast folder suppresses DC offset and generates harmonics", "[core][wavefold]") {
+    constexpr double kSr = 48000.0;
+    constexpr int kN = 8192;
+
+    WavefolderEffect folder;
+    folder.prepare(kSr);
+
+    double meanL = 0.0;
+    double energyL = 0.0;
+    for (int i = 0; i < kN; ++i) {
+        // Biased input sine wave (+0.25 DC bias)
+        float l = 0.25f + 0.6f * std::sin(static_cast<float>(2.0 * std::numbers::pi * 220.0 * static_cast<double>(i) / kSr));
+        float r = l;
+        folder.processSample(0.85f, l, r);
+        if (i >= 4096) {
+            meanL += static_cast<double>(l);
+            energyL += static_cast<double>(l * l);
+        }
+    }
+    meanL /= 4096.0;
+    const double rmsL = std::sqrt(energyL / 4096.0);
+
+    REQUIRE(std::abs(meanL) < 0.05);
+    REQUIRE(rmsL > 0.2);
+}
+

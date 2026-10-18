@@ -26,13 +26,17 @@ enum class GlitchFxId : int {
 };
 
 struct MeterTelemetry {
+    float inputPeakL = 0.0f;
+    float inputPeakR = 0.0f;
     float peakL = 0.0f;
     float peakR = 0.0f;
     float activeGate = 0.0f;
     int currentStep = 0;
     float barPhase = 0.0f;
     bool stepEnabled = true;
+    bool clipOut = false;
     uint16_t currentStepFxMask = BeatStepSequencer::kAllFxMask;
+    std::array<float, BeatStepSequencer::kNumFxSlots> fxEnvelopes{};
 };
 
 class GlitchProcessorCore {
@@ -109,9 +113,12 @@ private:
     std::array<float, kNumEffects> fxAmount_{};
 
     float masterMix_ = 1.0f;
+    float currentMasterMix_ = 1.0f;
     float masterGainDb_ = 0.0f;
     float masterGainLinear_ = 1.0f;
+    float currentMasterGainLinear_ = 1.0f;
     bool masterBypassed_ = false;
+    bool hasProcessedAudio_ = false;
 
     MeterTelemetry telemetry_{};
 };

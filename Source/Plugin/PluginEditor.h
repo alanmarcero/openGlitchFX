@@ -15,6 +15,7 @@ public:
 
     void paint(juce::Graphics& g) override;
     void resized() override;
+    void mouseDown(const juce::MouseEvent& event) override;
 
 private:
     void timerCallback() override;
@@ -45,6 +46,7 @@ private:
     juce::TextButton presetLast32ndBtn_{ "LAST 1/32" };
     juce::TextButton presetBackbeatBtn_{ "BEATS 2&4" };
     juce::TextButton preset16thBtn_{ "1/16 ALT" };
+    juce::TextButton presetInvertBtn_{ "INVERT" };
     juce::TextButton presetResetFxBtn_{ "ALL FX" };
     juce::TextButton presetClearBtn_{ "CLEAR" };
 
@@ -62,7 +64,7 @@ private:
     static constexpr int kNumUiFx = 10;
     std::array<FxSlotUi, kNumUiFx> fxSlots_;
 
-    // Master Output Strip Controls
+    // Master Output Strip Controls & Live Telemetry Meter
     juce::Slider smoothSlider_;
     juce::Label smoothLabel_{ {}, "DE-CLICK" };
     juce::Slider masterMixSlider_;
@@ -71,6 +73,8 @@ private:
     juce::Label masterGainLabel_{ {}, "OUT GAIN" };
     juce::ToggleButton masterPowerButton_{ "MASTER ON" };
     juce::Rectangle<float> masterCardBounds_;
+    juce::Rectangle<float> masterMeterBounds_;
+    float clipHold_ = 0.0f;
 
     // Attachments
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;

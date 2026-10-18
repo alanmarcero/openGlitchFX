@@ -60,6 +60,7 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
     setupPresetBtn(presetLast32ndBtn_,   [this]() { sequencerGrid_.applyPreset(StepPatternPreset::Last32nd); });
     setupPresetBtn(presetBackbeatBtn_,   [this]() { sequencerGrid_.applyPreset(StepPatternPreset::Backbeat2And4); });
     setupPresetBtn(preset16thBtn_,       [this]() { sequencerGrid_.applyPreset(StepPatternPreset::Stutter16ths); });
+    setupPresetBtn(presetInvertBtn_,     [this]() { sequencerGrid_.invertPattern(); });
     setupPresetBtn(presetResetFxBtn_,    [this]() { sequencerGrid_.resetAllStepFxMasksToAll(); });
     setupPresetBtn(presetClearBtn_,      [this]() { sequencerGrid_.applyPreset(StepPatternPreset::ClearAll); });
 
@@ -70,21 +71,22 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
         const char* sub;
         const char* amtId;
         const char* onId;
+        double defaultPct;
     };
 
     const std::array<FxMeta, kNumUiFx> metas = {{
         // Row 1: Initial 5 Glitch FX
-        { "BITCRUSH [BC]",     "BITRATE & DEPTH",  kBitcrushAmt,    kBitcrushOn    },
-        { "DOWNSAMPLE [DS]",   "SAMPLE & HOLD",    kDownsampleAmt,  kDownsampleOn  },
-        { "STUTTER [ST]",      "BEAT REPEAT",      kStutterAmt,     kStutterOn     },
-        { "TAPE STOP [TS]",    "VINYL BRAKE",      kTapeStopAmt,    kTapeStopOn    },
-        { "RING MOD [RM]",     "CYBER CARRIER",    kRingModAmt,     kRingModOn     },
+        { "BITCRUSH [BC]",     "BITRATE & DEPTH",  kBitcrushAmt,    kBitcrushOn,    35.0 },
+        { "DOWNSAMPLE [DS]",   "SAMPLE & HOLD",    kDownsampleAmt,  kDownsampleOn,  0.0  },
+        { "STUTTER [ST]",      "BEAT REPEAT",      kStutterAmt,     kStutterOn,     0.0  },
+        { "TAPE STOP [TS]",    "VINYL BRAKE",      kTapeStopAmt,    kTapeStopOn,    0.0  },
+        { "RING MOD [RM]",     "CYBER CARRIER",    kRingModAmt,     kRingModOn,     0.0  },
         // Row 2: 5 Additional Glitch FX (10 Total)
-        { "REVERSE [RV]",      "BACKWARDS GRAIN",  kReverseAmt,     kReverseOn     },
-        { "CHOPPER [CH]",      "RHYTHMIC SLICER",  kChopperAmt,     kChopperOn     },
-        { "PITCH GLITCH [PG]", "OCTAVE ARPEGGIO",  kPitchGlitchAmt, kPitchGlitchOn },
-        { "COMB RESO [CR]",    "METALLIC FLANGE",  kCombResoAmt,    kCombResoOn    },
-        { "WAVEFOLD [WF]",     "HARMONIC FOLD",    kWavefoldAmt,    kWavefoldOn    }
+        { "REVERSE [RV]",      "BACKWARDS GRAIN",  kReverseAmt,     kReverseOn,     0.0  },
+        { "CHOPPER [CH]",      "RHYTHMIC SLICER",  kChopperAmt,     kChopperOn,     0.0  },
+        { "PITCH GLITCH [PG]", "OCTAVE ARPEGGIO",  kPitchGlitchAmt, kPitchGlitchOn, 0.0  },
+        { "COMB RESO [CR]",    "METALLIC FLANGE",  kCombResoAmt,    kCombResoOn,    0.0  },
+        { "WAVEFOLD [WF]",     "HARMONIC FOLD",    kWavefoldAmt,    kWavefoldOn,    0.0  }
     }};
 
     for (size_t i = 0; i < kNumUiFx; ++i) {
@@ -101,17 +103,18 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
 
         slot.knobAttach = std::make_unique<SliderAttachment>(processor_.parameters, metas[i].amtId, slot.knob);
         slot.enableAttach = std::make_unique<ButtonAttachment>(processor_.parameters, metas[i].onId, slot.enableBtn);
+        slot.knob.setDoubleClickReturnValue(true, metas[i].defaultPct);
     }
 
     // Master Controls
     auto setupMasterRotary = [this](juce::Slider& s, juce::Label& l, const juce::String& suffix) {
         s.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-        s.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 64, 16);
+        s.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 64, 15);
         s.setTextValueSuffix(suffix);
         addAndMakeVisible(s);
 
         l.setJustificationType(juce::Justification::centred);
-        l.setFont(juce::FontOptions(10.0f, juce::Font::bold));
+        l.setFont(juce::FontOptions(9.5f, juce::Font::bold));
         addAndMakeVisible(l);
     };
 
@@ -127,6 +130,11 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
     masterMixAttach_   = std::make_unique<SliderAttachment>(processor_.parameters, kMasterMix, masterMixSlider_);
     masterGainAttach_  = std::make_unique<SliderAttachment>(processor_.parameters, kMasterGain, masterGainSlider_);
     masterPowerAttach_ = std::make_unique<ButtonAttachment>(processor_.parameters, kMasterPower, masterPowerButton_);
+
+    internalBpmSlider_.setDoubleClickReturnValue(true, 120.0);
+    smoothSlider_.setDoubleClickReturnValue(true, 2.5);
+    masterMixSlider_.setDoubleClickReturnValue(true, 100.0);
+    masterGainSlider_.setDoubleClickReturnValue(true, 0.0);
 
     processor_.parameters.addParameterListener(kTheme, this);
     applyTheme(themeBox_.getSelectedItemIndex());
@@ -164,8 +172,27 @@ void OpenGlitchFXEditor::applyTheme(int themeIndex) {
     repaint();
 }
 
+void OpenGlitchFXEditor::mouseDown(const juce::MouseEvent& event) {
+    // Clicking an FX card's top header plate toggles/selects that FX as the active Pad Brush!
+    for (size_t i = 0; i < kNumUiFx; ++i) {
+        const auto& r = fxSlots_[i].cardBounds;
+        const juce::Rectangle<float> hdr(r.getX(), r.getY(), r.getWidth(), 34.0f);
+        if (hdr.contains(event.position)) {
+            const int currentBrush = sequencerGrid_.getPaintTargetFx();
+            const int targetBrush = (currentBrush == static_cast<int>(i)) ? -1 : static_cast<int>(i);
+            paintBrushBox_.setSelectedId(targetBrush + 2, juce::sendNotificationSync);
+            return;
+        }
+    }
+}
+
 void OpenGlitchFXEditor::timerCallback() {
     const auto tel = processor_.getTelemetry();
+    if (tel.clipOut) {
+        clipHold_ = 1.0f;
+    } else {
+        clipHold_ = std::max(0.0f, clipHold_ - 0.05f);
+    }
     sequencerGrid_.setPlayheadState(tel.currentStep, tel.barPhase, tel.stepEnabled, tel.activeGate);
     repaint();
 }
@@ -244,33 +271,60 @@ void OpenGlitchFXEditor::paint(juce::Graphics& g) {
     g.drawLine(28.0f, 58.0f, w - 28.0f, 58.0f, 1.0f);
 
     // 3. Draw 10 FX Slot Cards (2x5 Matrix) -- highlight when active on the current 1/32 pad!
+    const int activeBrushFx = sequencerGrid_.getPaintTargetFx();
     for (size_t i = 0; i < kNumUiFx; ++i) {
         const auto& slot = fxSlots_[i];
         const auto& r = slot.cardBounds;
         const bool moduleArmed = slot.enableBtn.getToggleState() && slot.knob.getValue() > 0.1;
         const bool routedOnCurrentPad = ((tel.currentStepFxMask >> i) & 1u) != 0u;
         const bool firingNow = moduleArmed && routedOnCurrentPad && gateOpen;
+        const bool isBrushTarget = (activeBrushFx == static_cast<int>(i));
+        const int padCount = sequencerGrid_.countStepsRoutingToFx(static_cast<int>(i));
+        const float fxEnv = tel.fxEnvelopes[i];
 
         g.setColour(pal.cardBg);
         g.fillRoundedRectangle(r, 6.0f);
 
-        g.setColour(firingNow ? pal.accentSecondary : (moduleArmed ? pal.cardActiveBorder : pal.cardBorder));
-        g.drawRoundedRectangle(r, 6.0f, firingNow ? 2.0f : (moduleArmed ? 1.4f : 1.0f));
+        if (firingNow || isBrushTarget) {
+            g.setColour((firingNow ? pal.accentSecondary : pal.accentPrimary).withAlpha(0.18f));
+            g.drawRoundedRectangle(r.expanded(1.5f), 7.0f, 2.2f);
+        }
+
+        g.setColour(firingNow ? pal.accentSecondary : (isBrushTarget ? pal.stepPlayheadOutline : (moduleArmed ? pal.cardActiveBorder : pal.cardBorder)));
+        g.drawRoundedRectangle(r, 6.0f, (firingNow || isBrushTarget) ? 1.8f : (moduleArmed ? 1.4f : 1.0f));
 
         juce::Rectangle<float> hdr(r.getX() + 6.0f, r.getY() + 5.0f, r.getWidth() - 12.0f, 28.0f);
-        g.setColour(firingNow ? pal.accentSecondary.withAlpha(0.25f) : pal.headerPlate);
+        g.setColour(firingNow ? pal.accentSecondary.withAlpha(0.28f)
+                              : (isBrushTarget ? pal.accentPrimary.withAlpha(0.22f) : pal.headerPlate));
         g.fillRoundedRectangle(hdr, 4.0f);
 
-        g.setColour(firingNow ? pal.textBright : (moduleArmed ? pal.accentPrimary : pal.textBright));
-        g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
-        g.drawText(slot.title, hdr.withTrimmedBottom(12.0f).toNearestInt(), juce::Justification::centred);
+        // Per-FX Pad Routing Count Badge in top-right corner of header
+        juce::Rectangle<float> padBadge(hdr.getRight() - 28.0f, hdr.getY() + 3.0f, 25.0f, 11.0f);
+        g.setColour(padCount > 0 ? pal.accentPrimary.withAlpha(0.22f) : juce::Colours::black.withAlpha(0.35f));
+        g.fillRoundedRectangle(padBadge, 2.5f);
+        g.setColour(padCount > 0 ? pal.accentPrimary : pal.textMuted.withAlpha(0.6f));
+        g.setFont(juce::FontOptions(7.5f, juce::Font::bold));
+        g.drawText(juce::String(padCount) + "P", padBadge.toNearestInt(), juce::Justification::centred);
 
-        g.setColour(pal.textMuted);
-        g.setFont(juce::FontOptions(8.5f, juce::Font::plain));
-        g.drawText(slot.subtitle, hdr.withTrimmedTop(14.0f).toNearestInt(), juce::Justification::centred);
+        g.setColour(firingNow ? pal.textBright : (moduleArmed ? pal.accentPrimary : pal.textBright));
+        g.setFont(juce::FontOptions(10.5f, juce::Font::bold));
+        g.drawText(slot.title, hdr.withTrimmedBottom(12.0f).withTrimmedRight(26.0f).withTrimmedLeft(6.0f).toNearestInt(), juce::Justification::centred);
+
+        g.setColour(isBrushTarget ? pal.stepPlayheadOutline : pal.textMuted);
+        g.setFont(juce::FontOptions(8.2f, juce::Font::plain));
+        g.drawText(isBrushTarget ? "PAD BRUSH ACTIVE" : slot.subtitle, hdr.withTrimmedTop(13.0f).toNearestInt(), juce::Justification::centred);
+
+        // Live Per-FX Envelope Activity Bar along bottom of card header
+        juce::Rectangle<float> envTrack(hdr.getX() + 2.0f, hdr.getBottom() - 2.2f, hdr.getWidth() - 4.0f, 2.0f);
+        g.setColour(pal.stepInactiveFill);
+        g.fillRoundedRectangle(envTrack, 1.0f);
+        if (fxEnv > 0.01f) {
+            g.setColour(firingNow ? pal.accentSecondary : pal.accentPrimary);
+            g.fillRoundedRectangle(envTrack.withWidth(envTrack.getWidth() * std::clamp(fxEnv, 0.0f, 1.0f)), 1.0f);
+        }
     }
 
-    // 4. Master Card
+    // 4. Master Card + Live Stereo IN/OUT & Gate Telemetry Bar Meter
     if (!masterCardBounds_.isEmpty()) {
         g.setColour(pal.cardBg);
         g.fillRoundedRectangle(masterCardBounds_, 6.0f);
@@ -278,12 +332,69 @@ void OpenGlitchFXEditor::paint(juce::Graphics& g) {
         g.drawRoundedRectangle(masterCardBounds_, 6.0f, 1.2f);
 
         juce::Rectangle<float> hdr(masterCardBounds_.getX() + 6.0f, masterCardBounds_.getY() + 6.0f,
-                                   masterCardBounds_.getWidth() - 12.0f, 24.0f);
+                                   masterCardBounds_.getWidth() - 12.0f, 22.0f);
         g.setColour(pal.headerPlate);
         g.fillRoundedRectangle(hdr, 4.0f);
         g.setColour(pal.accentPrimary);
-        g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
-        g.drawText("MASTER & GATE", hdr.toNearestInt(), juce::Justification::centred);
+        g.setFont(juce::FontOptions(10.5f, juce::Font::bold));
+        g.drawText("MASTER & TELEMETRY", hdr.toNearestInt(), juce::Justification::centred);
+
+        if (!masterMeterBounds_.isEmpty()) {
+            const auto mb = masterMeterBounds_;
+            g.setColour(pal.bgBottom.withAlpha(0.9f));
+            g.fillRoundedRectangle(mb, 4.0f);
+            g.setColour(pal.cardBorder);
+            g.drawRoundedRectangle(mb, 4.0f, 1.0f);
+
+            auto toNormDb = [](float peak) noexcept -> float {
+                if (peak <= 1e-5f) return 0.0f;
+                const float db = 20.0f * std::log10(peak);
+                return std::clamp((db + 36.0f) / 39.0f, 0.0f, 1.0f);
+            };
+
+            auto drawBar = [&](float y, const char* label, float val01, juce::Colour col) {
+                g.setColour(pal.textMuted);
+                g.setFont(juce::FontOptions(7.5f, juce::Font::bold));
+                g.drawText(label, static_cast<int>(mb.getX() + 5.0f), static_cast<int>(y - 1.0f), 26, 9, juce::Justification::centredLeft);
+
+                juce::Rectangle<float> track(mb.getX() + 32.0f, y + 1.0f, mb.getWidth() - 38.0f, 5.5f);
+                g.setColour(pal.stepInactiveFill);
+                g.fillRoundedRectangle(track, 2.0f);
+
+                constexpr int kSegs = 16;
+                const float segGap = 1.2f;
+                const float segW = (track.getWidth() - segGap * static_cast<float>(kSegs - 1)) / static_cast<float>(kSegs);
+                for (int s = 0; s < kSegs; ++s) {
+                    const float sn = static_cast<float>(s + 1) / static_cast<float>(kSegs);
+                    if (sn <= val01 + 0.03f && val01 > 0.005f) {
+                        juce::Colour sc = (s >= 14) ? pal.accentSecondary : col;
+                        g.setColour(sc);
+                        g.fillRect(track.getX() + static_cast<float>(s) * (segW + segGap), track.getY(), segW, track.getHeight());
+                    }
+                }
+            };
+
+            const float inPeak = std::max(tel.inputPeakL, tel.inputPeakR);
+            drawBar(mb.getY() + 5.0f,  "IN",   toNormDb(inPeak),       pal.accentPrimary.withAlpha(0.85f));
+            drawBar(mb.getY() + 15.0f, "OUT L", toNormDb(tel.peakL),   pal.accentPrimary);
+            drawBar(mb.getY() + 25.0f, "OUT R", toNormDb(tel.peakR),   pal.accentPrimary);
+            drawBar(mb.getY() + 35.0f, "GATE",  std::clamp(tel.activeGate, 0.0f, 1.0f), pal.accentSecondary);
+
+            // Digital dB & CLIP Indicator along bottom of telemetry box
+            const float maxOut = std::max(tel.peakL, tel.peakR);
+            const juce::String dbStr = (maxOut <= 1e-4f) ? "OUT: -INF dB"
+                                                         : juce::String::formatted("OUT: %+.1f dB", 20.0f * std::log10(maxOut));
+            g.setColour(clipHold_ > 0.1f ? pal.accentSecondary : pal.textBright.withAlpha(0.85f));
+            g.setFont(juce::FontOptions(8.0f, juce::Font::bold));
+            g.drawText(dbStr, static_cast<int>(mb.getX() + 6.0f), static_cast<int>(mb.getBottom() - 12.0f), 90, 10, juce::Justification::centredLeft);
+
+            juce::Rectangle<float> clipBadge(mb.getRight() - 38.0f, mb.getBottom() - 12.0f, 32.0f, 9.5f);
+            g.setColour(clipHold_ > 0.1f ? pal.accentSecondary : pal.stepInactiveFill);
+            g.fillRoundedRectangle(clipBadge, 2.5f);
+            g.setColour(clipHold_ > 0.1f ? pal.textBright : pal.textMuted.withAlpha(0.55f));
+            g.setFont(juce::FontOptions(7.0f, juce::Font::bold));
+            g.drawText("CLIP", clipBadge.toNearestInt(), juce::Justification::centred);
+        }
     }
 }
 
@@ -301,20 +412,20 @@ void OpenGlitchFXEditor::resized() {
     // 32-Step Beat Sequencer Section
     sequencerGrid_.setBounds(static_cast<int>(margin), 68, static_cast<int>(w - margin * 2.0f), 120);
 
-    // Paint Brush Selector + Quick Pattern Preset Row below Sequencer
+    // Paint Brush Selector + 9 Quick Pattern Preset Buttons below Sequencer
     const float presetY = 194.0f;
     const float presetH = 24.0f;
-    paintBrushLabel_.setBounds(static_cast<int>(margin), static_cast<int>(presetY), 74, static_cast<int>(presetH));
-    paintBrushBox_.setBounds(static_cast<int>(margin + 78.0f), static_cast<int>(presetY), 196, static_cast<int>(presetH));
+    paintBrushLabel_.setBounds(static_cast<int>(margin), static_cast<int>(presetY), 72, static_cast<int>(presetH));
+    paintBrushBox_.setBounds(static_cast<int>(margin + 75.0f), static_cast<int>(presetY), 188, static_cast<int>(presetH));
 
-    juce::Button* presetBtns[8] = {
+    juce::Button* presetBtns[9] = {
         &presetAllBtn_, &presetLastBeatBtn_, &presetLast4StepsBtn_, &presetLast32ndBtn_,
-        &presetBackbeatBtn_, &preset16thBtn_, &presetResetFxBtn_, &presetClearBtn_
+        &presetBackbeatBtn_, &preset16thBtn_, &presetInvertBtn_, &presetResetFxBtn_, &presetClearBtn_
     };
-    const float btnsStartX = margin + 282.0f;
-    const float gap = 5.0f;
-    const float btnW = (w - margin - btnsStartX - gap * 7.0f) / 8.0f;
-    for (int i = 0; i < 8; ++i) {
+    const float btnsStartX = margin + 270.0f;
+    const float gap = 4.5f;
+    const float btnW = (w - margin - btnsStartX - gap * 8.0f) / 9.0f;
+    for (int i = 0; i < 9; ++i) {
         presetBtns[i]->setBounds(static_cast<int>(btnsStartX + static_cast<float>(i) * (btnW + gap)),
                                  static_cast<int>(presetY),
                                  static_cast<int>(btnW),
@@ -353,23 +464,26 @@ void OpenGlitchFXEditor::resized() {
     // Master Card on the far right spanning both rows
     masterCardBounds_ = { w - margin - masterW, fxTop, masterW, fxTotalH };
     auto mInner = masterCardBounds_.reduced(10.0f);
-    mInner.removeFromTop(28.0f);
+    mInner.removeFromTop(24.0f);
 
-    auto powerArea = mInner.removeFromBottom(30.0f);
+    masterMeterBounds_ = mInner.removeFromTop(56.0f);
+    mInner.removeFromTop(4.0f);
+
+    auto powerArea = mInner.removeFromBottom(28.0f);
     masterPowerButton_.setBounds(powerArea.reduced(10.0f, 0.0f).toNearestInt());
-    mInner.removeFromBottom(6.0f);
+    mInner.removeFromBottom(4.0f);
 
     const float knobSectionH = mInner.getHeight() / 3.0f;
 
     auto s1 = mInner.removeFromTop(knobSectionH);
-    masterMixLabel_.setBounds(s1.removeFromTop(14.0f).toNearestInt());
+    masterMixLabel_.setBounds(s1.removeFromTop(13.0f).toNearestInt());
     masterMixSlider_.setBounds(s1.toNearestInt());
 
     auto s2 = mInner.removeFromTop(knobSectionH);
-    masterGainLabel_.setBounds(s2.removeFromTop(14.0f).toNearestInt());
+    masterGainLabel_.setBounds(s2.removeFromTop(13.0f).toNearestInt());
     masterGainSlider_.setBounds(s2.toNearestInt());
 
     auto s3 = mInner;
-    smoothLabel_.setBounds(s3.removeFromTop(14.0f).toNearestInt());
+    smoothLabel_.setBounds(s3.removeFromTop(13.0f).toNearestInt());
     smoothSlider_.setBounds(s3.toNearestInt());
 }

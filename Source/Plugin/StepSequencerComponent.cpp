@@ -31,6 +31,20 @@ void StepSequencerComponent::setPaintTargetFx(int fxIndex) {
     repaint();
 }
 
+int StepSequencerComponent::countStepsRoutingToFx(int fxIndex) const {
+    if (fxIndex < 0 || fxIndex >= 10) {
+        return 0;
+    }
+    const uint16_t bit = static_cast<uint16_t>(1u << fxIndex);
+    int count = 0;
+    for (int i = 0; i < 32; ++i) {
+        if ((getEffectiveStepFxMask(i) & bit) != 0u) {
+            ++count;
+        }
+    }
+    return count;
+}
+
 bool StepSequencerComponent::getStepParam(int stepIndex) const {
     if (stepIndex < 0 || stepIndex >= 32) return false;
     if (auto* raw = apvts_.getRawParameterValue(openglitch::params::stepParamId(stepIndex))) {
@@ -371,6 +385,21 @@ void StepSequencerComponent::showStepContextMenu(int step) {
     });
 }
 
+void StepSequencerComponent::mouseMove(const juce::MouseEvent& event) {
+    const int step = getStepAtPosition(event.position);
+    if (step != hoveredStep_) {
+        hoveredStep_ = step;
+        repaint();
+    }
+}
+
+void StepSequencerComponent::mouseExit(const juce::MouseEvent& /*event*/) {
+    if (hoveredStep_ != -1) {
+        hoveredStep_ = -1;
+        repaint();
+    }
+}
+
 void StepSequencerComponent::mouseDown(const juce::MouseEvent& event) {
     const int step = getStepAtPosition(event.position);
     if (step < 0) return;
@@ -387,6 +416,9 @@ void StepSequencerComponent::mouseDrag(const juce::MouseEvent& event) {
     if (event.mods.isPopupMenu()) return;
 
     const int step = getStepAtPosition(event.position);
+    if (step != hoveredStep_) {
+        hoveredStep_ = step;
+    }
     if (step >= 0) {
         applyPaintBrushToStep(step, false);
     }
@@ -453,9 +485,25 @@ void StepSequencerComponent::paint(juce::Graphics& g) {
     g.setColour(pal.cardBorder);
     g.drawRoundedRectangle(fullBounds, 6.0f, 1.2f);
 
-    // Beat Group Headers (BEAT 1..4)
-    const char* beatTitles[4] = {
-        "BEAT 1 (1-8)  [ADJACENT PADS MERGE | R-CLICK FOR FX]",
+    // Beat Group Headers (BEAT 1..4) with live hover inspection readout
+    juce::String beat1Header = "BEAT 1 (1-8)  [ADJACENT PADS MERGE | R-CLICK FOR FX]";
+    if (hoveredStep_ >= 0 && hoveredStep_ < 32) {
+        const uint16_t hMask = getEffectiveStepFxMask(hoveredStep_);
+        if (hMask == 0u) {
+            beat1Header = juce::String::formatted("INSPECT PAD %02d/32: DRY PASS-THROUGH (CLICK TO ENABLE)", hoveredStep_ + 1);
+        } else {
+            const auto hRun = findContiguousRun(hoveredStep_);
+            beat1Header = juce::String::formatted("INSPECT PAD %02d/32  |  SPAN %02d-%02d (%d/32)  |  %s",
+                                                  hoveredStep_ + 1,
+                                                  hRun.startStep + 1,
+                                                  hRun.endStep + 1,
+                                                  hRun.length(),
+                                                  formatStepFxBadge(hRun.fxMask, 1).toRawUTF8());
+        }
+    }
+
+    const juce::String beatTitles[4] = {
+        beat1Header,
         "BEAT 2 (9-16)",
         "BEAT 3 (17-24)",
         "BEAT 4 (25-32)"
@@ -468,10 +516,12 @@ void StepSequencerComponent::paint(juce::Graphics& g) {
                                           lastStepRect.getRight() - firstStepRect.getX(), 18.0f);
 
         const bool playheadInBeat = (currentStep_ / 8) == b;
-        g.setColour(playheadInBeat ? pal.accentPrimary.withAlpha(0.18f) : pal.headerPlate.withAlpha(0.7f));
+        const bool hoverInfoActive = (b == 0 && hoveredStep_ >= 0);
+        g.setColour(hoverInfoActive ? pal.accentSecondary.withAlpha(0.20f)
+                                    : (playheadInBeat ? pal.accentPrimary.withAlpha(0.18f) : pal.headerPlate.withAlpha(0.7f)));
         g.fillRoundedRectangle(beatHeader, 3.0f);
 
-        g.setColour(playheadInBeat ? pal.accentPrimary : pal.textMuted);
+        g.setColour(hoverInfoActive ? pal.textBright : (playheadInBeat ? pal.accentPrimary : pal.textMuted));
         g.setFont(juce::FontOptions(9.5f, juce::Font::bold));
         g.drawText(beatTitles[b], beatHeader.toNearestInt(), juce::Justification::centred);
     }
@@ -483,16 +533,20 @@ void StepSequencerComponent::paint(juce::Graphics& g) {
         }
         const auto r = getStepBounds(i);
         const bool isPlayhead = (i == currentStep_);
+        const bool isHovered = (i == hoveredStep_);
         const bool isQuarterStart = (i % 8 == 0);
         const bool isSixteenthStart = (i % 2 == 0);
 
         juce::Colour offCol = isQuarterStart ? pal.stepInactiveFill.brighter(0.15f)
                                              : pal.stepInactiveFill;
+        if (isHovered) {
+            offCol = offCol.brighter(0.25f);
+        }
         g.setColour(offCol);
         g.fillRoundedRectangle(r, 3.5f);
 
-        g.setColour(isPlayhead ? pal.stepPlayheadOutline : pal.cardBorder);
-        g.drawRoundedRectangle(r, 3.5f, isPlayhead ? 2.0f : 1.0f);
+        g.setColour(isPlayhead ? pal.stepPlayheadOutline : (isHovered ? pal.accentPrimary : pal.cardBorder));
+        g.drawRoundedRectangle(r, 3.5f, (isPlayhead || isHovered) ? 1.8f : 1.0f);
 
         auto topLabelRect = r.withHeight(16.0f).withY(r.getY() + 2.0f);
         g.setColour(isSixteenthStart ? pal.textBright.withAlpha(0.7f) : pal.textMuted.withAlpha(0.5f));
@@ -523,13 +577,14 @@ void StepSequencerComponent::paint(juce::Graphics& g) {
 
         const bool isCustomMask = (runMask != kAllFx);
         const bool playheadInSpan = (currentStep_ >= runStart && currentStep_ <= runEnd);
+        const bool hoveredInSpan = (hoveredStep_ >= runStart && hoveredStep_ <= runEnd);
 
         juce::Colour baseCol = isCustomMask
             ? pal.accentSecondary
             : ((runEnd >= 24) ? pal.accentSecondary.interpolatedWith(pal.stepActiveFill, 0.45f) : pal.stepActiveFill);
 
-        if (playheadInSpan) {
-            baseCol = baseCol.brighter(0.28f);
+        if (playheadInSpan || hoveredInSpan) {
+            baseCol = baseCol.brighter(playheadInSpan ? 0.28f : 0.16f);
         }
 
         // Unified merged capsule gradient
@@ -570,8 +625,8 @@ void StepSequencerComponent::paint(juce::Graphics& g) {
         }
 
         // Unified Border around the combined block
-        g.setColour(playheadInSpan ? pal.stepPlayheadOutline : pal.textBright.withAlpha(0.75f));
-        g.drawRoundedRectangle(mergedRect, 5.0f, playheadInSpan ? 2.2f : 1.3f);
+        g.setColour(playheadInSpan ? pal.stepPlayheadOutline : (hoveredInSpan ? pal.accentPrimary : pal.textBright.withAlpha(0.75f)));
+        g.drawRoundedRectangle(mergedRect, 5.0f, playheadInSpan ? 2.2f : (hoveredInSpan ? 1.8f : 1.3f));
 
         // Unified Center FX & Duration Badge across the combined block
         auto badgeRect = mergedRect.withY(mergedRect.getY() + 18.0f).withHeight(18.0f).reduced(3.0f, 0.0f);

@@ -42,6 +42,9 @@ void GlitchProcessorCore::reset() {
     pitchGlitch_.reset();
     combResonator_.reset();
     wavefolder_.reset();
+    currentMasterMix_ = masterMix_;
+    currentMasterGainLinear_ = masterGainLinear_;
+    hasProcessedAudio_ = false;
 }
 
 void GlitchProcessorCore::setStep(int stepIndex, bool enabled) {
@@ -131,11 +134,17 @@ float GlitchProcessorCore::getEffectAmount(GlitchFxId id) const {
 
 void GlitchProcessorCore::setMasterMix(float mix01) {
     masterMix_ = std::clamp(mix01, 0.0f, 1.0f);
+    if (!hasProcessedAudio_) {
+        currentMasterMix_ = masterMix_;
+    }
 }
 
 void GlitchProcessorCore::setMasterGainDb(float db) {
     masterGainDb_ = std::clamp(db, -24.0f, 24.0f);
     masterGainLinear_ = std::pow(10.0f, masterGainDb_ / 20.0f);
+    if (!hasProcessedAudio_) {
+        currentMasterGainLinear_ = masterGainLinear_;
+    }
 }
 
 void GlitchProcessorCore::processBlock(float* leftChannel, float* rightChannel, int numSamples) {
@@ -145,14 +154,36 @@ void GlitchProcessorCore::processBlock(float* leftChannel, float* rightChannel, 
 
     const bool isMono = (rightChannel == nullptr);
     const double ppqPerSample = (bpm_ / 60.0) / sampleRate_;
+    const float mixStep = (masterMix_ - currentMasterMix_) / static_cast<float>(numSamples);
+    const float gainStep = (masterGainLinear_ - currentMasterGainLinear_) / static_cast<float>(numSamples);
 
+    float maxInPeakL = 0.0f;
+    float maxInPeakR = 0.0f;
     float maxPeakL = 0.0f;
     float maxPeakR = 0.0f;
     float lastGate = 0.0f;
 
+    auto softCeiling = [](float x) noexcept -> float {
+        const float absX = std::abs(x);
+        if (absX <= 1.25f) {
+            return x;
+        }
+        const float sign = (x >= 0.0f) ? 1.0f : -1.0f;
+        return sign * (1.25f + 0.75f * std::tanh((absX - 1.25f) / 0.75f));
+    };
+
     for (int i = 0; i < numSamples; ++i) {
+        currentMasterMix_ += mixStep;
+        currentMasterGainLinear_ += gainStep;
+
         const float dryL = leftChannel[i];
         const float dryR = isMono ? dryL : rightChannel[i];
+        maxInPeakL = std::max(maxInPeakL, std::abs(dryL));
+        maxInPeakR = std::max(maxInPeakR, std::abs(dryR));
+
+        // Keep circular lookback buffers warm with incoming audio on every sample
+        reverseGrain_.recordDrySample(dryL, dryR);
+        pitchGlitch_.recordDrySample(dryL, dryR);
 
         const double sampleHostPpq = blockStartPpq_ + static_cast<double>(i) * ppqPerSample;
         bool enteredActive = false;
@@ -181,7 +212,7 @@ void GlitchProcessorCore::processBlock(float* leftChannel, float* rightChannel, 
         float outL = dryL;
         float outR = dryR;
 
-        const float effectiveWet = stepGate * masterMix_;
+        const float effectiveWet = stepGate * currentMasterMix_;
         if (effectiveWet > 1e-5f) {
             float wetL = dryL;
             float wetR = dryR;
@@ -250,15 +281,15 @@ void GlitchProcessorCore::processBlock(float* leftChannel, float* rightChannel, 
                 chopperGate_.processSample(amt, bpm_, span.lengthSteps, l, r);
             });
 
-            outL = (dryL * (1.0f - effectiveWet) + wetL * effectiveWet) * masterGainLinear_;
-            outR = (dryR * (1.0f - effectiveWet) + wetR * effectiveWet) * masterGainLinear_;
+            outL = (dryL * (1.0f - effectiveWet) + wetL * effectiveWet) * currentMasterGainLinear_;
+            outR = (dryR * (1.0f - effectiveWet) + wetR * effectiveWet) * currentMasterGainLinear_;
         } else {
-            outL = dryL * masterGainLinear_;
-            outR = dryR * masterGainLinear_;
+            outL = dryL * currentMasterGainLinear_;
+            outR = dryR * currentMasterGainLinear_;
         }
 
-        outL = std::clamp(outL, -4.0f, 4.0f);
-        outR = std::clamp(outR, -4.0f, 4.0f);
+        outL = softCeiling(outL);
+        outR = softCeiling(outR);
 
         leftChannel[i] = outL;
         if (!isMono) {
@@ -269,17 +300,30 @@ void GlitchProcessorCore::processBlock(float* leftChannel, float* rightChannel, 
         maxPeakR = std::max(maxPeakR, std::abs(outR));
     }
 
+    currentMasterMix_ = masterMix_;
+    currentMasterGainLinear_ = masterGainLinear_;
+    hasProcessedAudio_ = true;
+
     if (!useHostSync_ || !hasValidHostPpq_) {
         blockStartPpq_ += static_cast<double>(numSamples) * ppqPerSample;
     }
 
-    telemetry_.peakL = maxPeakL;
-    telemetry_.peakR = maxPeakR;
+    const float decay = std::exp(-static_cast<float>(numSamples) / (0.22f * static_cast<float>(sampleRate_)));
+    telemetry_.inputPeakL = std::max(maxInPeakL, telemetry_.inputPeakL * decay);
+    telemetry_.inputPeakR = std::max(maxInPeakR, telemetry_.inputPeakR * decay);
+    telemetry_.peakL = std::max(maxPeakL, telemetry_.peakL * decay);
+    telemetry_.peakR = std::max(maxPeakR, telemetry_.peakR * decay);
+    telemetry_.clipOut = (maxPeakL >= 0.999f || maxPeakR >= 0.999f);
     telemetry_.activeGate = lastGate;
     telemetry_.currentStep = sequencer_.getCurrentStep();
     telemetry_.barPhase = static_cast<float>(sequencer_.getCurrentBarPhase());
     telemetry_.stepEnabled = sequencer_.isCurrentStepEnabled();
     telemetry_.currentStepFxMask = sequencer_.getCurrentStepActiveFxMask();
+    for (int fx = 0; fx < BeatStepSequencer::kNumFxSlots; ++fx) {
+        const auto idx = static_cast<size_t>(fx);
+        const bool armed = fxEnabled_[idx] && (fxAmount_[idx] > 1e-4f);
+        telemetry_.fxEnvelopes[idx] = armed ? (sequencer_.getFxEnvelope(fx) * fxAmount_[idx]) : 0.0f;
+    }
 }
 
 } // namespace openglitch::core

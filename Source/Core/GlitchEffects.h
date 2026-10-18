@@ -18,6 +18,8 @@ private:
     int frameCounter_ = 0;
     float heldL_ = 0.0f;
     float heldR_ = 0.0f;
+    float smoothL_ = 0.0f;
+    float smoothR_ = 0.0f;
 };
 
 // 2. Sample Rate Decimator (Sample-and-hold clock divider controlled by a knob)
@@ -32,6 +34,8 @@ private:
     double phase_ = 0.0;
     float heldL_ = 0.0f;
     float heldR_ = 0.0f;
+    float prevHeldL_ = 0.0f;
+    float prevHeldR_ = 0.0f;
 };
 
 // 3. Buffer Stutter / Beat Repeat (Micro-slice loop repeater controlled by a knob)
@@ -49,6 +53,7 @@ private:
     int writePos_ = 0;
     int readPos_ = 0;
     int capturedSamples_ = 0;
+    int repeatCycle_ = 0;
     bool capturing_ = true;
 };
 
@@ -67,6 +72,8 @@ private:
     int writePos_ = 0;
     double readPos_ = 0.0;
     double speed_ = 1.0;
+    float tapeLpL_ = 0.0f;
+    float tapeLpR_ = 0.0f;
 };
 
 // 5. Ring Modulator (Cybernetic harmonic ring mod controlled by a knob)
@@ -90,6 +97,7 @@ class ReverseGrainEffect {
 public:
     void prepare(double sampleRate);
     void reset();
+    void recordDrySample(float left, float right);
     void triggerGrain();
     void processSample(float amount, float spanPhase01, double spanDurationSec, float& left, float& right);
 
@@ -98,6 +106,8 @@ private:
     std::vector<float> bufferL_;
     std::vector<float> bufferR_;
     int writePos_ = 0;
+    int recordedSamples_ = 0;
+    int preRollSamples_ = 0;
     int grainStartWritePos_ = 0;
     int grainPos_ = 0;
 };
@@ -112,7 +122,8 @@ public:
 private:
     double sampleRate_ = 44100.0;
     double phase_ = 0.0;
-    float smoothGate_ = 1.0f;
+    float smoothGateL_ = 1.0f;
+    float smoothGateR_ = 1.0f;
 };
 
 // 8. Pitch Glitch (Dual-head windowed granular pitch & octave jumper controlled by a knob)
@@ -120,6 +131,7 @@ class PitchGlitchEffect {
 public:
     void prepare(double sampleRate);
     void reset();
+    void recordDrySample(float left, float right);
     void processSample(float amount, float& left, float& right);
 
 private:
@@ -127,7 +139,9 @@ private:
     std::vector<float> bufferL_;
     std::vector<float> bufferR_;
     int writePos_ = 0;
+    int recordedSamples_ = 0;
     double grainPhase_ = 0.0;
+    double currentRatio_ = 1.0;
     int stepCounter_ = 0;
     int intervalIndex_ = 0;
 };
@@ -144,6 +158,9 @@ private:
     std::vector<float> delayL_;
     std::vector<float> delayR_;
     int writePos_ = 0;
+    double smoothDelaySamples_ = 64.0;
+    float dampL_ = 0.0f;
+    float dampR_ = 0.0f;
 };
 
 // 10. Wavefolder (Multi-stage harmonic digital wavefolder controlled by a knob)
@@ -155,6 +172,12 @@ public:
 
 private:
     double sampleRate_ = 44100.0;
+    float dcInL_ = 0.0f;
+    float dcOutL_ = 0.0f;
+    float dcInR_ = 0.0f;
+    float dcOutR_ = 0.0f;
+    float toneLpL_ = 0.0f;
+    float toneLpR_ = 0.0f;
 };
 
 } // namespace openglitch::core
