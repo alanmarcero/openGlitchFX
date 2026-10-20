@@ -181,7 +181,8 @@ void OpenGlitchFXProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
                     bpm = *hostBpm;
                 }
             }
-            if (const auto ppq = pos->getPpqPosition()) {
+            // Hosts keep reporting a frozen PPQ while stopped. Use it only while playing, so the internal clock runs otherwise.
+            if (const auto ppq = pos->getPpqPosition(); ppq && pos->getIsPlaying()) {
                 hostPpq = *ppq;
                 hasValidHostPpq = true;
             }
