@@ -29,7 +29,7 @@ Unlike traditional glitch plugins that run continuously or require complex MIDI 
 
 - **32 Selectable Spots per 4/4 Bar & Automatic Contiguous Pad Merging:**
   - Every 4/4 bar (4 quarter-note beats) is subdivided into **32 steps** (`8 steps per beat × 4 beats = 32 steps`, each representing `1/32` of a bar).
-  - **Continuous Multi-Pad Spanning (Zero `1/32` Resets):** When two or more adjacent pads are enabled with the same FX routing, **openGlitchFX** automatically combines them both **visually** (into a single unified glowing capsule block showing the combined duration such as `ALL FX (8/32 • 1 BEAT)` or `TAPE STOP (4/32 • 1/8 BAR)`) and **in the DSP engine**—the effect continues seamlessly across the entire combined block without resetting on every `1/32` subdivision!
+  - **Continuous Multi-Pad Spanning (Zero `1/32` Resets):** When two or more adjacent pads are enabled with the same FX routing, **openGlitchFX** automatically combines them both **visually** (into a single unified glowing capsule block showing the combined duration such as `ALL FX (8/32 | 1 BEAT)` or `TAPE STOP (4/32 | 1/8 BAR)`) and **in the DSP engine**—the effect continues seamlessly across the entire combined block without resetting on every `1/32` subdivision!
   - Time-based processors (`TAPE STOP`, `REVERSE`, `STUTTER`) automatically scale their deceleration and buffer windows across the full combined multi-pad span and only trigger once at the start of the combined block.
 - **Per-Pad (1/32 Step) Effect Assignment (Option 3: Hybrid Right-Click Menu + Pad Brush + 2×5 Mini LED Matrix):**
   - Each of the 32 pads stores its own **10-bit FX Routing Mask** (`step_fx_01` .. `step_fx_32`), backed by **10 independent smoothed DSP gate envelopes** so different pads or combined blocks can trigger completely different effects (e.g., *Bitcrush* on Pads 25–28, *Stutter* on Pads 29–31, and *Tape Stop* only on Pad 32).
@@ -42,14 +42,14 @@ Unlike traditional glitch plugins that run continuously or require complex MIDI 
   - **Left-Click `PAD BRUSH` Mode:**
     - Use the **`PAD BRUSH:`** dropdown (`ALL ACTIVE FX` or `ONLY: BITCRUSH [BC]` .. `ONLY: WAVEFOLD [WF]`) to left-click and drag-paint a specific effect across any pads in the bar—adjacent painted pads merge automatically!
   - **On-Pad Visual Feedback:**
-    - Each pad or combined block displays a live routing & duration badge (`ALL FX (8/32 • 1 BEAT)`, `BC 2/32`, `TS`, `3FX`, etc.), a continuous playhead sweep across the merged block, and a **2×5 mini LED dot matrix** indicating which of the 10 effects are assigned.
+    - Each pad or combined block displays a live routing & duration badge (`ALL FX (8/32 | 1 BEAT)`, `BC 2/32`, `TS`, `3FX`, etc.), a continuous playhead sweep across the merged block, and a **2×5 mini LED dot matrix** indicating which of the 10 effects are assigned.
 - **One-Click Musical Pattern Presets:**
   - **ALL 32:** Continuous glitch processing across the entire bar.
   - **LAST BEAT (25-32):** Engages only on Beat 4 of every bar for automatic end-of-bar turnarounds and fills.
-  - **LAST 4 (29-32):** Engages for the final half-beat (`4/32`) of the bar.
+  - **LAST 1/8 (29-32):** Engages for the final 1/8 note (`4/32`) of the bar.
   - **LAST 1/32 (Step 32):** Micro-glitch burst on only the very last `1/32` note of the bar.
   - **BEATS 2&4:** Backbeat-synced glitching on snare beats.
-  - **1/16 ALT:** Alternating 16th-note rhythmic gating.
+  - **OFF 1/16:** The second 1/16 note of every 1/8 note.
   - **ALL FX / CLEAR:** Instant FX routing reset or pattern clear.
 - **Sample-Accurate DAW Sync & Anti-Click Gate Envelope:**
   - Locks directly to the DAW host playhead (`PPQ` bar position and `BPM`) or runs on an internal BPM clock when host transport is stopped.
@@ -88,6 +88,36 @@ Each of the **10 Glitch FX** features a dedicated **Amount Knob (`0% – 100%`)*
 
 ---
 
+## Buffer, Tape, Envelopes & MIDI (Phase 3)
+
+The panel below the FX cards adds four groups of controls.
+
+- **BUFFER (STUTTER options):**
+  - **SIZE:** `KNOB` lets the STUTTER amount set the slice. `1/4` to `1/64` locks the slice to the tempo.
+  - **REVERSE:** `OFF`, `ALL` repeats, or `ALTERNATE` repeats.
+  - **GATE:** The audible part of each repeat (`5%` to `100%`).
+  - **PITCH / REPEAT:** Pitch change per repeat (`-12` to `+12` semitones).
+  - **ADVANCE:** Each repeat starts half a slice later, so the stutter moves forward through the audio.
+- **TAPE (TAPE STOP options):**
+  - **DIRECTION:** `STOP` slows the tape to a halt. `START` spins it up from a standstill.
+  - **CURVE:** `SMOOTH` ramp or `STEPPED` (8 speed steps).
+  - **LENGTH:** `PAD SPAN` or a fixed note length (`1/32` to `1 BAR`).
+  - **SLIP:** Wow and flutter. **LPF:** Highs roll off as the tape slows. **FADE:** Volume drops as the tape slows.
+- **ENVELOPES:** Four drawn envelopes (`VOLUME`, `PAN`, `FILTER`, `PITCH`) shape the wet signal.
+  - Click to add a point, drag to move it, double-click or right-click to delete it. `RESET` restores the default shape.
+  - **LENGTH:** `PAD SPAN` runs the envelope once across each block of joined pads. A note value loops it in time with the song.
+  - `PITCH` changes the STUTTER playback pitch by up to one octave. `FILTER` moves the cutoff down by up to 8 octaves.
+  - The session saves the drawn points.
+- **FILTER & TRIGGER:**
+  - **FILTER:** Low-pass or high-pass state-variable filter on the wet signal, with `CUTOFF` and `RESONANCE`.
+  - **TRIGGER:** `SEQUENCER` uses the 32 pads. `MIDI` ignores the pads: notes `60`-`69` trigger one FX each (BITCRUSH to WAVEFOLD), and any other note triggers all FX.
+  - **MIDI START:** `FREE` starts on the note. `SYNCED` waits for the next `1/32` step.
+  - **DRY/WET:** `INSERT` replaces the dry signal on active pads. `PARALLEL` keeps the dry signal and adds the glitch on top.
+
+Hover over any control for a tooltip.
+
+---
+
 ## Project Structure
 
 ```
@@ -105,12 +135,15 @@ openGlitchFX/
 ├── Source/
 │   ├── Core/                          # Pure C++20 DSP engine (zero GUI dependencies)
 │   │   ├── BeatStepSequencer.h/.cpp   # 32-step 4/4 bar PPQ sync & anti-click gate envelope
-│   │   ├── GlitchEffects.h/.cpp       # All 10 DSP glitch effect processors
+│   │   ├── GlitchEffects.h/.cpp       # All 10 DSP glitch effect processors + wet filter
+│   │   ├── ModEnvelope.h/.cpp         # Drawn n-point modulation envelopes
 │   │   └── GlitchProcessorCore.h/.cpp # Master glitch chain & telemetry
 │   └── Plugin/                        # JUCE 8 VST3 Plugin & GUI
 │       ├── Parameters.h/.cpp          # APVTS layout (32 steps + 10 FX + master controls)
 │       ├── GlitchLookAndFeel.h/.cpp   # 4 selectable themes & custom rotary/button rendering
 │       ├── StepSequencerComponent.h/.cpp # Interactive 32-step 4/4 beat grid UI
+│       ├── DetailPanelComponent.h/.cpp   # Buffer, tape, envelope, filter & trigger controls
+│       ├── EnvelopeEditorComponent.h/.cpp # Breakpoint envelope editor
 │       ├── PluginProcessor.h/.cpp     # JUCE AudioProcessor & playhead integration
 │       └── PluginEditor.h/.cpp        # 10-FX 2x5 matrix + 32-step sequencer editor
 ├── Tests/                             # Catch2 unit test suite

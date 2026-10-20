@@ -269,3 +269,165 @@ TEST_CASE("WavefolderEffect multi-stage West-Coast folder suppresses DC offset a
     REQUIRE(rmsL > 0.2);
 }
 
+
+namespace {
+
+float computeRms(const std::vector<float>& x, size_t begin, size_t end) {
+    double sumSq = 0.0;
+    for (size_t i = begin; i < end; ++i) {
+        sumSq += static_cast<double>(x[i]) * static_cast<double>(x[i]);
+    }
+    return static_cast<float>(std::sqrt(sumSq / static_cast<double>(end - begin)));
+}
+
+void prepareAllOnCore(GlitchProcessorCore& core, double sampleRate) {
+    core.prepare(sampleRate);
+    core.setGateSmoothingMs(0.1f);
+    core.applyPatternPreset(StepPatternPreset::AllOn);
+    core.setTransport(120.0, true, true, 0.0);
+}
+
+} // namespace
+
+TEST_CASE("Stutter gate time silences the tail of every synced repeat", "[core][stutter]") {
+    constexpr double kSr = 48000.0;
+    constexpr int kSlice = 6000; // 1/16 note at 120 BPM
+    constexpr int kN = kSlice * 4;
+
+    GlitchProcessorCore core;
+    prepareAllOnCore(core, kSr);
+    core.setEffectAmount(GlitchFxId::Stutter, 0.9f);
+    StutterSettings settings;
+    settings.syncedSliceBeats = 0.25;
+    settings.gate = 0.5f;
+    core.setStutterSettings(settings);
+
+    std::vector<float> l(kN), r(kN);
+    fillSineStereo(l, r, kSr, 440.0);
+    core.processBlock(l.data(), r.data(), kN);
+
+    const auto repeatStart = static_cast<size_t>(kSlice);
+    REQUIRE(computeRms(l, repeatStart + 500, repeatStart + 2500) > 0.2f);
+    REQUIRE(computeRms(l, repeatStart + 3500, repeatStart + 5900) < 1e-3f);
+}
+
+TEST_CASE("Stutter reverse plays the captured slice backwards", "[core][stutter]") {
+    constexpr double kSr = 48000.0;
+    constexpr int kSlice = 6000;
+    constexpr int kN = kSlice * 2;
+
+    GlitchProcessorCore core;
+    prepareAllOnCore(core, kSr);
+    core.setEffectAmount(GlitchFxId::Stutter, 0.9f);
+    StutterSettings settings;
+    settings.syncedSliceBeats = 0.25;
+    settings.reverse = StutterReverse::All;
+    core.setStutterSettings(settings);
+
+    // A rising ramp shows the playback direction.
+    std::vector<float> l(kN), r(kN);
+    for (int i = 0; i < kN; ++i) {
+        l[static_cast<size_t>(i)] = 0.8f * static_cast<float>(i % kSlice) / static_cast<float>(kSlice);
+        r[static_cast<size_t>(i)] = l[static_cast<size_t>(i)];
+    }
+    core.processBlock(l.data(), r.data(), kN);
+
+    REQUIRE(l[static_cast<size_t>(kSlice + 1000)] > l[static_cast<size_t>(kSlice + 4000)]);
+}
+
+TEST_CASE("Tape stop STOP fades out while START spins up", "[core][tapestop]") {
+    constexpr double kSr = 48000.0;
+    constexpr int kN = 24000; // one beat at 120 BPM
+
+    auto runDirection = [&](TapeDirection direction) {
+        GlitchProcessorCore core;
+        prepareAllOnCore(core, kSr);
+        core.setEffectAmount(GlitchFxId::TapeStop, 1.0f);
+        TapeStopSettings settings;
+        settings.direction = direction;
+        core.setTapeStopSettings(settings, 1.0);
+
+        std::vector<float> l(kN), r(kN);
+        fillSineStereo(l, r, kSr, 220.0);
+        core.processBlock(l.data(), r.data(), kN);
+        return std::pair{ computeRms(l, 0, kN / 4), computeRms(l, 3 * kN / 4, kN) };
+    };
+
+    const auto [stopHead, stopTail] = runDirection(TapeDirection::Stop);
+    const auto [startHead, startTail] = runDirection(TapeDirection::Start);
+    REQUIRE(stopTail < stopHead);
+    REQUIRE(startTail > startHead);
+}
+
+TEST_CASE("Wet low-pass filter attenuates highs on active pads", "[core][filter]") {
+    constexpr double kSr = 48000.0;
+    constexpr int kN = 8192;
+
+    GlitchProcessorCore core;
+    prepareAllOnCore(core, kSr);
+    core.setFilter(FilterMode::LowPass, 300.0f, 0.0f);
+
+    std::vector<float> l(kN), r(kN);
+    fillSineStereo(l, r, kSr, 8000.0);
+    const float inRms = computeRms(l, kN / 2, kN);
+    core.processBlock(l.data(), r.data(), kN);
+
+    REQUIRE(computeRms(l, kN / 2, kN) < inRms * 0.05f);
+}
+
+TEST_CASE("Volume and pan envelopes shape the wet signal", "[core][envelope]") {
+    constexpr double kSr = 48000.0;
+    constexpr int kN = 4096;
+
+    GlitchProcessorCore core;
+    prepareAllOnCore(core, kSr);
+    core.setEnvelopeSettings(EnvTarget::Pan, { true, 1.0f, 0.0 });
+    core.setEnvelopePoints(EnvTarget::Pan, { { 0.0f, 0.0f }, { 1.0f, 0.0f } }); // hard left
+
+    std::vector<float> l(kN), r(kN);
+    fillSineStereo(l, r, kSr, 440.0);
+    const float inLeft = computeRms(l, 512, kN);
+    core.processBlock(l.data(), r.data(), kN);
+    REQUIRE_THAT(computeRms(l, 512, kN), Catch::Matchers::WithinRel(inLeft, 0.01f));
+    REQUIRE(computeRms(r, 512, kN) < 1e-4f);
+
+    core.setEnvelopeSettings(EnvTarget::Volume, { true, 1.0f, 0.0 });
+    core.setEnvelopePoints(EnvTarget::Volume, { { 0.0f, 0.0f }, { 1.0f, 0.0f } });
+    fillSineStereo(l, r, kSr, 440.0);
+    core.processBlock(l.data(), r.data(), kN);
+    REQUIRE(computeRms(l, 512, kN) < 1e-4f);
+}
+
+TEST_CASE("ModEnvelope interpolates linearly between drawn points", "[core][envelope]") {
+    ModEnvelope env;
+    env.setPoints({ { 1.0f, 1.0f }, { 0.0f, 0.0f } });
+    REQUIRE_THAT(env.valueAt(0.5f), Catch::Matchers::WithinAbs(0.5f, 0.01f));
+    REQUIRE_THAT(env.valueAt(0.0f), Catch::Matchers::WithinAbs(0.0f, 1e-4f));
+    REQUIRE_THAT(env.valueAt(1.0f), Catch::Matchers::WithinAbs(1.0f, 1e-4f));
+}
+
+TEST_CASE("MIDI trigger mode ignores the pattern and glitches only while a note is held", "[core][midi]") {
+    constexpr double kSr = 48000.0;
+    constexpr int kN = 2048;
+
+    GlitchProcessorCore core;
+    prepareAllOnCore(core, kSr);
+    core.setEffectAmount(GlitchFxId::Bitcrush, 0.9f);
+    core.setTriggerMode(TriggerMode::Midi, false);
+
+    std::vector<float> dryL(kN), dryR(kN);
+    fillSineStereo(dryL, dryR, kSr, 220.0);
+    auto l = dryL;
+    auto r = dryR;
+    core.processBlock(l.data(), r.data(), kN); // settles the gate envelope from prepare()
+    l = dryL;
+    r = dryR;
+    core.processBlock(l.data(), r.data(), kN);
+    REQUIRE(computeRmsDifference(dryL, l) < 1e-5f);
+
+    core.queueMidiNote(0, kMidiSoloBaseNote, true); // solo note for Bitcrush
+    l = dryL;
+    r = dryR;
+    core.processBlock(l.data(), r.data(), kN);
+    REQUIRE(computeRmsDifference(dryL, l) > 0.01f);
+}

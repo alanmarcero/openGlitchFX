@@ -4,7 +4,8 @@
 OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
     : AudioProcessorEditor(&owner),
       processor_(owner),
-      sequencerGrid_(owner.parameters, lookAndFeel_) {
+      sequencerGrid_(owner.parameters, lookAndFeel_),
+      detailPanel_(owner, lookAndFeel_) {
     setLookAndFeel(&lookAndFeel_);
 
     // Load Gemini-generated custom Alan Marcero logo & backdrop texture from BinaryData
@@ -23,10 +24,12 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
     themeLabel_.setJustificationType(juce::Justification::centredRight);
     addAndMakeVisible(themeLabel_);
 
+    hostSyncButton_.setTooltip("Follow the host's tempo and bar position. Turn off to run on the internal BPM.");
     addAndMakeVisible(hostSyncButton_);
 
     internalBpmSlider_.setSliderStyle(juce::Slider::LinearBar);
     internalBpmSlider_.setTextValueSuffix(" BPM");
+    internalBpmSlider_.setTooltip("Internal tempo. Used when HOST SYNC is off, or when the host reports no tempo.");
     addAndMakeVisible(internalBpmSlider_);
 
     // 32-Step Beat Sequencer Grid, Paint-Brush FX Selector & Quick Pattern Buttons
@@ -42,27 +45,38 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
         paintBrushBox_.addItem(juce::String::formatted("ONLY: %s [%s]", desc.name, desc.shortCode), fx + 2);
     }
     paintBrushBox_.setSelectedId(1, juce::dontSendNotification);
+    paintBrushBox_.setTooltip("What a left-click on a pad paints. You can also click an FX card's title to pick it.");
     paintBrushBox_.onChange = [this]() {
         const int idx = paintBrushBox_.getSelectedItemIndex(); // 0 = All (-1), 1..10 = FX 0..9
         sequencerGrid_.setPaintTargetFx(idx - 1);
     };
     addAndMakeVisible(paintBrushBox_);
 
-    auto setupPresetBtn = [this](juce::TextButton& btn, std::function<void()> fn) {
+    auto setupPresetBtn = [this](juce::TextButton& btn, const juce::String& tooltip, std::function<void()> fn) {
         btn.onClick = std::move(fn);
+        btn.setTooltip(tooltip);
         addAndMakeVisible(btn);
     };
 
     using openglitch::core::StepPatternPreset;
-    setupPresetBtn(presetAllBtn_,        [this]() { sequencerGrid_.applyPreset(StepPatternPreset::AllOn); });
-    setupPresetBtn(presetLastBeatBtn_,   [this]() { sequencerGrid_.applyPreset(StepPatternPreset::LastBeat); });
-    setupPresetBtn(presetLast4StepsBtn_, [this]() { sequencerGrid_.applyPreset(StepPatternPreset::LastFourSteps); });
-    setupPresetBtn(presetLast32ndBtn_,   [this]() { sequencerGrid_.applyPreset(StepPatternPreset::Last32nd); });
-    setupPresetBtn(presetBackbeatBtn_,   [this]() { sequencerGrid_.applyPreset(StepPatternPreset::Backbeat2And4); });
-    setupPresetBtn(preset16thBtn_,       [this]() { sequencerGrid_.applyPreset(StepPatternPreset::Stutter16ths); });
-    setupPresetBtn(presetInvertBtn_,     [this]() { sequencerGrid_.invertPattern(); });
-    setupPresetBtn(presetResetFxBtn_,    [this]() { sequencerGrid_.resetAllStepFxMasksToAll(); });
-    setupPresetBtn(presetClearBtn_,      [this]() { sequencerGrid_.applyPreset(StepPatternPreset::ClearAll); });
+    setupPresetBtn(presetAllBtn_,        "Turn on all 32 pads. Uses the pad brush FX if one is selected.",
+                   [this]() { sequencerGrid_.applyPreset(StepPatternPreset::AllOn); });
+    setupPresetBtn(presetLastBeatBtn_,   "Pads 25-32: beat 4 of every bar. Uses the pad brush FX if one is selected.",
+                   [this]() { sequencerGrid_.applyPreset(StepPatternPreset::LastBeat); });
+    setupPresetBtn(presetLast4StepsBtn_, "Pads 29-32: the last 1/8 note of the bar. Uses the pad brush FX if one is selected.",
+                   [this]() { sequencerGrid_.applyPreset(StepPatternPreset::LastFourSteps); });
+    setupPresetBtn(presetLast32ndBtn_,   "Pad 32 only: the last 1/32 note of the bar. Uses the pad brush FX if one is selected.",
+                   [this]() { sequencerGrid_.applyPreset(StepPatternPreset::Last32nd); });
+    setupPresetBtn(presetBackbeatBtn_,   "Pads 9-16 and 25-32: beats 2 and 4. Uses the pad brush FX if one is selected.",
+                   [this]() { sequencerGrid_.applyPreset(StepPatternPreset::Backbeat2And4); });
+    setupPresetBtn(preset16thBtn_,       "The second 1/16 note of every 1/8 note. Uses the pad brush FX if one is selected.",
+                   [this]() { sequencerGrid_.applyPreset(StepPatternPreset::Stutter16ths); });
+    setupPresetBtn(presetInvertBtn_,     "Swap on and off for every pad.",
+                   [this]() { sequencerGrid_.invertPattern(); });
+    setupPresetBtn(presetResetFxBtn_,    "Route all 10 FX to every pad. Pad on/off stays the same.",
+                   [this]() { sequencerGrid_.resetAllStepFxMasksToAll(); });
+    setupPresetBtn(presetClearBtn_,      "Turn off all 32 pads.",
+                   [this]() { sequencerGrid_.applyPreset(StepPatternPreset::ClearAll); });
 
     // 10 Glitch FX Slots (2 Rows x 5 Columns)
     using namespace openglitch::params;
@@ -100,6 +114,9 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
         addAndMakeVisible(slot.knob);
 
         addAndMakeVisible(slot.enableBtn);
+        slot.knob.setTooltip(juce::String(metas[i].title).upToFirstOccurrenceOf(" [", false, false)
+                             + " amount. At 0% this FX does nothing, even on pads routed to it.");
+        slot.enableBtn.setTooltip("Turn this FX module on or off for every pad.");
 
         slot.knobAttach = std::make_unique<SliderAttachment>(processor_.parameters, metas[i].amtId, slot.knob);
         slot.enableAttach = std::make_unique<ButtonAttachment>(processor_.parameters, metas[i].onId, slot.enableBtn);
@@ -122,6 +139,12 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
     setupMasterRotary(masterMixSlider_,  masterMixLabel_,  " %");
     setupMasterRotary(masterGainSlider_, masterGainLabel_, " dB");
     addAndMakeVisible(masterPowerButton_);
+    smoothSlider_.setTooltip("Fade time when a pad turns on or off. Raise it if pad edges click.");
+    masterMixSlider_.setTooltip("Dry/wet balance on active pads. See DRY/WET mode below.");
+    masterGainSlider_.setTooltip("Output gain.");
+    masterPowerButton_.setTooltip("Turn off to bypass every effect.");
+
+    addAndMakeVisible(detailPanel_);
 
     themeAttach_       = std::make_unique<ComboBoxAttachment>(processor_.parameters, kTheme, themeBox_);
     hostSyncAttach_    = std::make_unique<ButtonAttachment>(processor_.parameters, kHostSync, hostSyncButton_);
@@ -139,7 +162,7 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
     processor_.parameters.addParameterListener(kTheme, this);
     applyTheme(themeBox_.getSelectedItemIndex());
 
-    setSize(1080, 680);
+    setSize(1080, 900);
     startTimerHz(30);
 }
 
@@ -172,18 +195,32 @@ void OpenGlitchFXEditor::applyTheme(int themeIndex) {
     repaint();
 }
 
+int OpenGlitchFXEditor::fxCardHeaderAt(juce::Point<float> position) const {
+    const auto hit = std::ranges::find_if(fxSlots_, [&](const FxSlotUi& slot) {
+        const auto& r = slot.cardBounds;
+        return juce::Rectangle<float>(r.getX(), r.getY(), r.getWidth(), 34.0f).contains(position);
+    });
+    return hit == fxSlots_.end() ? -1 : static_cast<int>(std::distance(fxSlots_.begin(), hit));
+}
+
 void OpenGlitchFXEditor::mouseDown(const juce::MouseEvent& event) {
     // Clicking an FX card's top header plate toggles/selects that FX as the active Pad Brush!
-    for (size_t i = 0; i < kNumUiFx; ++i) {
-        const auto& r = fxSlots_[i].cardBounds;
-        const juce::Rectangle<float> hdr(r.getX(), r.getY(), r.getWidth(), 34.0f);
-        if (hdr.contains(event.position)) {
-            const int currentBrush = sequencerGrid_.getPaintTargetFx();
-            const int targetBrush = (currentBrush == static_cast<int>(i)) ? -1 : static_cast<int>(i);
-            paintBrushBox_.setSelectedId(targetBrush + 2, juce::sendNotificationSync);
-            return;
-        }
+    const int fx = fxCardHeaderAt(event.position);
+    if (fx < 0) {
+        return;
     }
+    const int targetBrush = (sequencerGrid_.getPaintTargetFx() == fx) ? -1 : fx;
+    paintBrushBox_.setSelectedId(targetBrush + 2, juce::sendNotificationSync);
+}
+
+juce::String OpenGlitchFXEditor::getTooltip() {
+    const int fx = fxCardHeaderAt(getMouseXYRelative().toFloat());
+    if (fx < 0) {
+        return {};
+    }
+    const int pads = sequencerGrid_.countStepsRoutingToFx(fx);
+    return juce::String::formatted("Click to %s this FX as the pad brush. Active on %d of 32 pads.",
+                                   sequencerGrid_.getPaintTargetFx() == fx ? "clear" : "select", pads);
 }
 
 void OpenGlitchFXEditor::timerCallback() {
@@ -194,6 +231,16 @@ void OpenGlitchFXEditor::timerCallback() {
         clipHold_ = std::max(0.0f, clipHold_ - 0.05f);
     }
     sequencerGrid_.setPlayheadState(tel.currentStep, tel.barPhase, tel.stepEnabled, tel.activeGate);
+
+    using namespace openglitch::params;
+    sequencerGrid_.setMidiTriggerMode(processor_.parameters.getRawParameterValue(kTriggerMode)->load() > 0.5f);
+    internalBpmSlider_.setAlpha(hostSyncButton_.getToggleState() ? 0.45f : 1.0f);
+
+    if (const int version = processor_.getStateVersion(); version != lastStateVersion_) {
+        lastStateVersion_ = version;
+        detailPanel_.refreshFromState();
+    }
+    detailPanel_.setTelemetry(tel);
     repaint();
 }
 
@@ -248,12 +295,13 @@ void OpenGlitchFXEditor::paint(juce::Graphics& g) {
     g.drawText("openGlitchFX", static_cast<int>(w * 0.5f - 160.0f), 8, 320, 24, juce::Justification::centred);
 
     g.setColour(pal.accentPrimary);
-    g.setFont(juce::FontOptions(10.5f, juce::Font::bold));
-    g.drawText("32-STEP 4/4 BEAT-SYNCED PER-PAD 10-FX GLITCH PROCESSOR", static_cast<int>(w * 0.5f - 220.0f), 32, 440, 14, juce::Justification::centred);
+    g.setFont(juce::FontOptions(10.0f, juce::Font::bold));
+    g.drawFittedText("32-STEP BEAT-SYNCED GLITCH PROCESSOR", static_cast<int>(w * 0.5f - 150.0f), 32, 300, 14, juce::Justification::centred, 1);
 
     // Live Gate Status Pill Indicator in Header
     const auto tel = processor_.getTelemetry();
     const bool gateOpen = tel.activeGate > 0.25f;
+    const bool midiMode = sequencerGrid_.isMidiTriggerMode();
     juce::Rectangle<float> statusPill(245.0f, 16.0f, 128.0f, 26.0f);
     g.setColour(gateOpen ? pal.accentPrimary.withAlpha(0.25f) : pal.stepInactiveFill);
     g.fillRoundedRectangle(statusPill, 13.0f);
@@ -261,9 +309,8 @@ void OpenGlitchFXEditor::paint(juce::Graphics& g) {
     g.drawRoundedRectangle(statusPill, 13.0f, 1.3f);
     g.setColour(gateOpen ? pal.textBright : pal.textMuted);
     g.setFont(juce::FontOptions(10.5f, juce::Font::bold));
-    const juce::String stepStr = juce::String::formatted("STEP %02d/32 %s",
-                                                         tel.currentStep + 1,
-                                                         gateOpen ? "ACTIVE" : "DRY");
+    const juce::String stepStr = midiMode ? juce::String(gateOpen ? "MIDI ACTIVE" : "MIDI DRY")
+                                          : juce::String::formatted("STEP %02d/32 %s", tel.currentStep + 1, gateOpen ? "ACTIVE" : "DRY");
     g.drawText(stepStr, statusPill.toNearestInt(), juce::Justification::centred);
 
     // Divider line
@@ -299,20 +346,24 @@ void OpenGlitchFXEditor::paint(juce::Graphics& g) {
         g.fillRoundedRectangle(hdr, 4.0f);
 
         // Per-FX Pad Routing Count Badge in top-right corner of header
-        juce::Rectangle<float> padBadge(hdr.getRight() - 28.0f, hdr.getY() + 3.0f, 25.0f, 11.0f);
+        juce::Rectangle<float> padBadge(hdr.getRight() - 40.0f, hdr.getY() + 3.0f, 37.0f, 11.0f);
         g.setColour(padCount > 0 ? pal.accentPrimary.withAlpha(0.22f) : juce::Colours::black.withAlpha(0.35f));
         g.fillRoundedRectangle(padBadge, 2.5f);
         g.setColour(padCount > 0 ? pal.accentPrimary : pal.textMuted.withAlpha(0.6f));
         g.setFont(juce::FontOptions(7.5f, juce::Font::bold));
-        g.drawText(juce::String(padCount) + "P", padBadge.toNearestInt(), juce::Justification::centred);
+        g.drawText(juce::String(padCount) + (padCount == 1 ? " PAD" : " PADS"), padBadge.toNearestInt(), juce::Justification::centred);
 
         g.setColour(firingNow ? pal.textBright : (moduleArmed ? pal.accentPrimary : pal.textBright));
         g.setFont(juce::FontOptions(10.5f, juce::Font::bold));
-        g.drawText(slot.title, hdr.withTrimmedBottom(12.0f).withTrimmedRight(26.0f).withTrimmedLeft(6.0f).toNearestInt(), juce::Justification::centred);
+        g.drawFittedText(slot.title, hdr.withTrimmedBottom(12.0f).withTrimmedRight(40.0f).withTrimmedLeft(4.0f).toNearestInt(),
+                         juce::Justification::centredLeft, 1);
 
+        const bool silent = slot.enableBtn.getToggleState() && slot.knob.getValue() <= 0.1;
+        const juce::String subtitle = isBrushTarget ? juce::String("PAD BRUSH ACTIVE")
+                                                    : (silent ? juce::String("AMOUNT 0%: NO EFFECT") : slot.subtitle);
         g.setColour(isBrushTarget ? pal.stepPlayheadOutline : pal.textMuted);
         g.setFont(juce::FontOptions(8.2f, juce::Font::plain));
-        g.drawText(isBrushTarget ? "PAD BRUSH ACTIVE" : slot.subtitle, hdr.withTrimmedTop(13.0f).toNearestInt(), juce::Justification::centred);
+        g.drawText(subtitle, hdr.withTrimmedTop(13.0f).withTrimmedLeft(4.0f).toNearestInt(), juce::Justification::centredLeft);
 
         // Live Per-FX Envelope Activity Bar along bottom of card header
         juce::Rectangle<float> envTrack(hdr.getX() + 2.0f, hdr.getBottom() - 2.2f, hdr.getWidth() - 4.0f, 2.0f);
@@ -433,8 +484,11 @@ void OpenGlitchFXEditor::resized() {
     }
 
     // 10 Glitch FX Cards (2 Rows x 5 Columns) + Master Strip on Right
+    const float detailH = 196.0f;
     const float fxTop = 228.0f;
-    const float fxTotalH = h - fxTop - 22.0f;
+    const float fxTotalH = h - fxTop - detailH - 22.0f - 8.0f;
+    detailPanel_.setBounds(static_cast<int>(margin), static_cast<int>(h - 22.0f - detailH),
+                           static_cast<int>(w - margin * 2.0f), static_cast<int>(detailH));
     const float masterW = 190.0f;
     const float fxAreaW = w - margin * 2.0f - masterW - 10.0f;
 
@@ -473,17 +527,16 @@ void OpenGlitchFXEditor::resized() {
     masterPowerButton_.setBounds(powerArea.reduced(10.0f, 0.0f).toNearestInt());
     mInner.removeFromBottom(4.0f);
 
-    const float knobSectionH = mInner.getHeight() / 3.0f;
-
-    auto s1 = mInner.removeFromTop(knobSectionH);
+    // The gap keeps DE-CLICK clear of the value boxes.
+    auto topKnobs = mInner.removeFromTop(mInner.getHeight() * 0.5f);
+    auto s1 = topKnobs.removeFromLeft(topKnobs.getWidth() * 0.5f);
+    auto s2 = topKnobs;
     masterMixLabel_.setBounds(s1.removeFromTop(13.0f).toNearestInt());
     masterMixSlider_.setBounds(s1.toNearestInt());
-
-    auto s2 = mInner.removeFromTop(knobSectionH);
     masterGainLabel_.setBounds(s2.removeFromTop(13.0f).toNearestInt());
     masterGainSlider_.setBounds(s2.toNearestInt());
 
-    auto s3 = mInner;
+    auto s3 = mInner.withTrimmedTop(6.0f);
     smoothLabel_.setBounds(s3.removeFromTop(13.0f).toNearestInt());
     smoothSlider_.setBounds(s3.toNearestInt());
 }

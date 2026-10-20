@@ -2,6 +2,7 @@
 
 #include "BeatStepSequencer.h"
 #include "GlitchEffects.h"
+#include "ModEnvelope.h"
 #include <array>
 #include <cstdint>
 
@@ -25,6 +26,18 @@ enum class GlitchFxId : int {
     Count = 10
 };
 
+enum class MixMode : int { Insert = 0, Parallel };
+enum class TriggerMode : int { Sequencer = 0, Midi };
+
+// In beats. Index 0 uses the pad span.
+inline constexpr std::array<double, 7> kNoteLengthBeats = { 0.0, 0.125, 0.25, 0.5, 1.0, 2.0, 4.0 };
+
+// In beats. Index 0 lets the amount knob set the slice.
+inline constexpr std::array<double, 6> kStutterSliceBeats = { 0.0, 1.0, 0.5, 0.25, 0.125, 0.0625 };
+
+// Notes 60..69 trigger one FX each. Other notes trigger all FX.
+inline constexpr int kMidiSoloBaseNote = 60;
+
 struct MeterTelemetry {
     float inputPeakL = 0.0f;
     float inputPeakR = 0.0f;
@@ -37,6 +50,7 @@ struct MeterTelemetry {
     bool clipOut = false;
     uint16_t currentStepFxMask = BeatStepSequencer::kAllFxMask;
     std::array<float, BeatStepSequencer::kNumFxSlots> fxEnvelopes{};
+    std::array<float, static_cast<size_t>(EnvTarget::Count)> modEnvelopePhases{};
 };
 
 class GlitchProcessorCore {
@@ -66,6 +80,17 @@ public:
     void setTransport(double bpm, bool useHostSync, bool hasValidHostPpq, double hostPpqPosition);
     void setGateSmoothingMs(float ms);
 
+    // Notes apply only in Midi trigger mode.
+    void setTriggerMode(TriggerMode mode, bool syncedStart);
+    void queueMidiNote(int sampleOffset, int noteNumber, bool isNoteOn);
+
+    void setStutterSettings(const StutterSettings& settings) { stutterSettings_ = settings; }
+    void setTapeStopSettings(const TapeStopSettings& settings, double lengthBeats);
+    void setFilter(FilterMode mode, float cutoffHz, float resonance01);
+    void setEnvelopeSettings(EnvTarget target, const ModEnvelopeSettings& settings);
+    void setEnvelopePoints(EnvTarget target, std::vector<EnvelopePoint> points);
+    void setMixMode(MixMode mode) { mixMode_ = mode; }
+
     // Glitch FX parameters
     void setEffectEnabled(GlitchFxId id, bool enabled);
     bool isEffectEnabled(GlitchFxId id) const;
@@ -85,6 +110,17 @@ public:
     MeterTelemetry getTelemetry() const { return telemetry_; }
 
 private:
+    struct MidiTrigger {
+        int sampleOffset = 0;
+        int noteNumber = 0;
+        bool isNoteOn = false;
+    };
+    static constexpr int kMaxQueuedMidi = 256;
+    static constexpr int kNumEnvelopes = static_cast<int>(EnvTarget::Count);
+
+    void applyMidiTrigger(const MidiTrigger& trigger);
+    float envelopePhase(EnvTarget target, float spanPhase, double ppq) const;
+
     double sampleRate_ = 44100.0;
 
     BeatStepSequencer sequencer_;
@@ -108,6 +144,22 @@ private:
     PitchGlitchEffect pitchGlitch_;
     CombResonatorEffect combResonator_;
     WavefolderEffect wavefolder_;
+    WetFilter wetFilter_;
+
+    StutterSettings stutterSettings_{};
+    TapeStopSettings tapeStopSettings_{};
+    double tapeLengthBeats_ = 0.0;
+    FilterMode filterMode_ = FilterMode::Off;
+    float filterCutoffHz_ = 2000.0f;
+    float filterResonance_ = 0.2f;
+    std::array<ModEnvelope, kNumEnvelopes> envelopes_;
+    std::array<ModEnvelopeSettings, kNumEnvelopes> envelopeSettings_{};
+    MixMode mixMode_ = MixMode::Insert;
+
+    TriggerMode triggerMode_ = TriggerMode::Sequencer;
+    std::array<MidiTrigger, kMaxQueuedMidi> midiQueue_{};
+    int midiQueueSize_ = 0;
+    std::array<uint8_t, 128> heldNotes_{};
 
     std::array<bool, kNumEffects> fxEnabled_{};
     std::array<float, kNumEffects> fxAmount_{};

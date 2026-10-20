@@ -2,11 +2,65 @@
 #include "PluginEditor.h"
 #include <cmath>
 
+namespace {
+
+const juce::Identifier kEnvelopesNode{ "ENVELOPES" };
+
+juce::Identifier envelopePropertyId(openglitch::core::EnvTarget target) {
+    return juce::Identifier("env" + juce::String(static_cast<int>(target)));
+}
+
+juce::String encodePoints(const std::vector<openglitch::core::EnvelopePoint>& points) {
+    juce::StringArray pairs;
+    for (const auto& p : points) {
+        pairs.add(juce::String(p.x, 4) + "," + juce::String(p.y, 4));
+    }
+    return pairs.joinIntoString(";");
+}
+
+std::vector<openglitch::core::EnvelopePoint> decodePoints(const juce::String& text) {
+    std::vector<openglitch::core::EnvelopePoint> points;
+    for (const auto& pair : juce::StringArray::fromTokens(text, ";", {})) {
+        const auto x = pair.upToFirstOccurrenceOf(",", false, false).getFloatValue();
+        const auto y = pair.fromFirstOccurrenceOf(",", false, false).getFloatValue();
+        points.push_back({ std::clamp(x, 0.0f, 1.0f), std::clamp(y, 0.0f, 1.0f) });
+    }
+    return points;
+}
+
+} // namespace
+
 OpenGlitchFXProcessor::OpenGlitchFXProcessor()
     : AudioProcessor(BusesProperties()
                      .withInput("Input", juce::AudioChannelSet::stereo(), true)
                      .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
       parameters(*this, nullptr, juce::Identifier("OpenGlitchFXParameters"), openglitch::params::createParameterLayout()) {
+    using openglitch::core::EnvTarget;
+    for (int env = 0; env < static_cast<int>(EnvTarget::Count); ++env) {
+        const auto target = static_cast<EnvTarget>(env);
+        setEnvelopePoints(target, openglitch::core::ModEnvelope::defaultPoints(target));
+    }
+}
+
+std::vector<openglitch::core::EnvelopePoint> OpenGlitchFXProcessor::getEnvelopePoints(openglitch::core::EnvTarget target) const {
+    const auto node = parameters.state.getChildWithName(kEnvelopesNode);
+    const auto points = decodePoints(node.getProperty(envelopePropertyId(target)).toString());
+    return points.empty() ? openglitch::core::ModEnvelope::defaultPoints(target) : points;
+}
+
+void OpenGlitchFXProcessor::setEnvelopePoints(openglitch::core::EnvTarget target,
+                                              const std::vector<openglitch::core::EnvelopePoint>& points) {
+    auto node = parameters.state.getOrCreateChildWithName(kEnvelopesNode, nullptr);
+    node.setProperty(envelopePropertyId(target), encodePoints(points), nullptr);
+    core_.setEnvelopePoints(target, points);
+}
+
+void OpenGlitchFXProcessor::syncEnvelopePointsToCore() {
+    using openglitch::core::EnvTarget;
+    for (int env = 0; env < static_cast<int>(EnvTarget::Count); ++env) {
+        const auto target = static_cast<EnvTarget>(env);
+        core_.setEnvelopePoints(target, getEnvelopePoints(target));
+    }
 }
 
 void OpenGlitchFXProcessor::prepareToPlay(double sampleRate, int /*samplesPerBlock*/) {
@@ -70,13 +124,46 @@ void OpenGlitchFXProcessor::syncParametersToCore() {
     syncFx(GlitchFxId::CombReso,    kCombResoAmt,    kCombResoOn);
     syncFx(GlitchFxId::Wavefold,    kWavefoldAmt,    kWavefoldOn);
 
-    // 4. Master
+    // 4. Buffer, tape, filter, envelopes, trigger
+    using namespace openglitch::core;
+    auto choice = [&](const char* id) { return static_cast<int>(std::round(parameters.getRawParameterValue(id)->load())); };
+    auto flag = [&](const char* id) { return parameters.getRawParameterValue(id)->load() > 0.5f; };
+    auto value = [&](const char* id) { return parameters.getRawParameterValue(id)->load(); };
+
+    StutterSettings stutter;
+    stutter.syncedSliceBeats = kStutterSliceBeats[static_cast<size_t>(std::clamp(choice(kStutterSync), 0, 5))];
+    stutter.advance = flag(kStutterAdvance);
+    stutter.reverse = static_cast<StutterReverse>(choice(kStutterReverse));
+    stutter.gate = value(kStutterGate) * 0.01f;
+    stutter.pitchStepSemitones = value(kStutterPitch);
+    core_.setStutterSettings(stutter);
+
+    TapeStopSettings tape;
+    tape.direction = static_cast<TapeDirection>(choice(kTapeDirection));
+    tape.stepped = choice(kTapeCurve) == 1;
+    tape.slip = flag(kTapeSlip);
+    tape.lowpass = flag(kTapeLowpass);
+    tape.fade = flag(kTapeFade);
+    core_.setTapeStopSettings(tape, kNoteLengthBeats[static_cast<size_t>(std::clamp(choice(kTapeLength), 0, 6))]);
+
+    core_.setFilter(static_cast<FilterMode>(choice(kFilterMode)), value(kFilterCutoff), value(kFilterReso) * 0.01f);
+
+    for (size_t env = 0; env < kEnvDescriptors.size(); ++env) {
+        const auto& desc = kEnvDescriptors[env];
+        const auto lengthBeats = kNoteLengthBeats[static_cast<size_t>(std::clamp(choice(desc.rateParamId), 0, 6))];
+        core_.setEnvelopeSettings(static_cast<EnvTarget>(env), { flag(desc.onParamId), value(desc.depthParamId) * 0.01f, lengthBeats });
+    }
+
+    core_.setTriggerMode(static_cast<TriggerMode>(choice(kTriggerMode)), choice(kTriggerStart) == 1);
+    core_.setMixMode(static_cast<MixMode>(choice(kMixMode)));
+
+    // 5. Master
     core_.setMasterMix(*parameters.getRawParameterValue(kMasterMix) * 0.01f);
     core_.setMasterGainDb(*parameters.getRawParameterValue(kMasterGain));
     core_.setMasterBypassed(*parameters.getRawParameterValue(kMasterPower) < 0.5f);
 }
 
-void OpenGlitchFXProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& /*midiMessages*/) {
+void OpenGlitchFXProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
     juce::ScopedNoDenormals noDenormals;
 
     syncParametersToCore();
@@ -89,7 +176,7 @@ void OpenGlitchFXProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
 
     if (auto* playHead = getPlayHead()) {
         if (const auto pos = playHead->getPosition()) {
-            if (const auto hostBpm = pos->getBpm()) {
+            if (const auto hostBpm = pos->getBpm(); useHostSync && hostBpm) {
                 if (*hostBpm > 10.0) {
                     bpm = *hostBpm;
                 }
@@ -102,6 +189,13 @@ void OpenGlitchFXProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
     }
 
     core_.setTransport(bpm, useHostSync, hasValidHostPpq, hostPpq);
+
+    for (const auto metadata : midiMessages) {
+        const auto message = metadata.getMessage();
+        if (message.isNoteOnOrOff()) {
+            core_.queueMidiNote(metadata.samplePosition, message.getNoteNumber(), message.isNoteOn());
+        }
+    }
 
     const int totalNumInputChannels = getTotalNumInputChannels();
     const int totalNumOutputChannels = getTotalNumOutputChannels();
@@ -136,6 +230,8 @@ void OpenGlitchFXProcessor::setStateInformation(const void* data, int sizeInByte
         if (xmlState->hasTagName(parameters.state.getType())) {
             parameters.replaceState(juce::ValueTree::fromXml(*xmlState));
             syncParametersToCore();
+            syncEnvelopePointsToCore();
+            ++stateVersion_;
         }
     }
 }

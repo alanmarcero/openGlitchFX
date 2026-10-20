@@ -141,7 +141,7 @@ void SampleRateDecimator::processSample(float amount, float& left, float& right)
 // ============================================================================
 void BufferStutter::prepare(double sampleRate) {
     sampleRate_ = std::max(1000.0, sampleRate);
-    const size_t maxSamples = static_cast<size_t>(sampleRate_ * 2.0) + 64;
+    const size_t maxSamples = static_cast<size_t>(sampleRate_ * 4.0) + 64;
     bufferL_.assign(maxSamples, 0.0f);
     bufferR_.assign(maxSamples, 0.0f);
     reset();
@@ -151,21 +151,19 @@ void BufferStutter::reset() {
     std::fill(bufferL_.begin(), bufferL_.end(), 0.0f);
     std::fill(bufferR_.begin(), bufferR_.end(), 0.0f);
     writePos_ = 0;
-    readPos_ = 0;
-    capturedSamples_ = 0;
-    repeatCycle_ = 0;
-    capturing_ = true;
+    triggerCapture();
 }
 
 void BufferStutter::triggerCapture() {
-    writePos_ = 0;
-    readPos_ = 0;
+    loopStart_ = writePos_;
+    loopLen_ = 0;
+    outPos_ = 0;
     capturedSamples_ = 0;
     repeatCycle_ = 0;
     capturing_ = true;
 }
 
-void BufferStutter::processSample(float amount, double bpm, float& left, float& right) {
+void BufferStutter::processSample(float amount, double bpm, const StutterSettings& settings, float& left, float& right) {
     const float amt = std::clamp(amount, 0.0f, 1.0f);
     if (amt <= 1e-4f || bufferL_.empty()) {
         return;
@@ -177,41 +175,58 @@ void BufferStutter::processSample(float amount, double bpm, float& left, float& 
 
     const double maxSliceSec = std::min(0.50, quarterSec * 1.0);
     const double minSliceSec = 0.022;
-    const double sliceSec = maxSliceSec * std::pow(minSliceSec / maxSliceSec, static_cast<double>(amt));
-    const int sliceLen = std::clamp(static_cast<int>(sliceSec * sampleRate_), 256, maxBuf - 1);
+    const double knobSliceSec = maxSliceSec * std::pow(minSliceSec / maxSliceSec, static_cast<double>(amt));
+    const double sliceSec = settings.syncedSliceBeats > 0.0 ? settings.syncedSliceBeats * quarterSec : knobSliceSec;
+    const int sliceLen = std::clamp(static_cast<int>(sliceSec * sampleRate_), 256, maxBuf / 4);
 
-    if (capturing_) {
+    // Advance mode reads new audio, so it keeps recording.
+    if (capturing_ || settings.advance) {
         bufferL_[static_cast<size_t>(writePos_)] = left;
         bufferR_[static_cast<size_t>(writePos_)] = right;
-        ++writePos_;
+        writePos_ = (writePos_ + 1) % maxBuf;
+    }
+
+    if (capturing_) {
         ++capturedSamples_;
         if (capturedSamples_ >= sliceLen) {
             capturing_ = false;
-            readPos_ = 0;
+            loopLen_ = sliceLen;
+            outPos_ = 0;
             repeatCycle_ = 1;
         }
         return;
     }
 
-    const int loopLen = std::clamp(sliceLen, 256, std::max(256, capturedSamples_));
-    if (readPos_ >= loopLen) {
-        readPos_ = 0;
+    if (outPos_ >= loopLen_) {
+        outPos_ = 0;
         ++repeatCycle_;
     }
 
-    // Equal-power cosine crossfade between loop tail and loop start so repeats sustain click-free
-    const int xfadeLen = std::min(160, loopLen / 4);
-    float stutL = bufferL_[static_cast<size_t>(readPos_)];
-    float stutR = bufferR_[static_cast<size_t>(readPos_)];
-    if (xfadeLen > 1 && readPos_ >= loopLen - xfadeLen) {
-        const float t = static_cast<float>(readPos_ - (loopLen - xfadeLen)) / static_cast<float>(xfadeLen);
-        const float angle = t * (0.5f * std::numbers::pi_v<float>);
-        const float gainTail = std::cos(angle);
-        const float gainHead = std::sin(angle);
-        const int wrapIdx = readPos_ - (loopLen - xfadeLen);
-        stutL = stutL * gainTail + bufferL_[static_cast<size_t>(wrapIdx)] * gainHead;
-        stutR = stutR * gainTail + bufferR_[static_cast<size_t>(wrapIdx)] * gainHead;
+    int advanceOffset = settings.advance ? (repeatCycle_ - 1) * (loopLen_ / 2) : 0;
+    if (advanceOffset + 2 * loopLen_ >= maxBuf) {
+        // At the buffer limit, restart the slice on the newest audio.
+        loopStart_ = (writePos_ - loopLen_ + maxBuf) % maxBuf;
+        repeatCycle_ = 1;
+        advanceOffset = 0;
     }
+
+    const double pitchRatio = std::pow(2.0, static_cast<double>(settings.pitchStepSemitones) * repeatCycle_ / 12.0);
+    const double rate = std::clamp(pitchRatio * settings.rateMultiplier, 0.25, 2.0);
+    const bool reversed = settings.reverse == StutterReverse::All
+                       || (settings.reverse == StutterReverse::Alternate && (repeatCycle_ % 2) == 0);
+    const double sliceOffset = std::fmod(static_cast<double>(outPos_) * rate, static_cast<double>(loopLen_));
+    const double readOffset = reversed ? static_cast<double>(loopLen_ - 1) - sliceOffset : sliceOffset;
+    const double readIndex = static_cast<double>(loopStart_ + advanceOffset) + readOffset;
+    float stutL = readHermiteCircular(bufferL_, readIndex);
+    float stutR = readHermiteCircular(bufferR_, readIndex);
+
+    const int gateLen = std::max(32, static_cast<int>(settings.gate * static_cast<float>(loopLen_)));
+    const int fadeLen = std::min(160, gateLen / 4);
+    const float fadeIn = std::min(1.0f, static_cast<float>(outPos_ + 1) / static_cast<float>(std::max(1, fadeLen / 2)));
+    const float fadeOut = std::clamp(static_cast<float>(gateLen - outPos_) / static_cast<float>(std::max(1, fadeLen)), 0.0f, 1.0f);
+    const float window = 0.5f - 0.5f * std::cos(std::numbers::pi_v<float> * std::min(fadeIn, fadeOut));
+    stutL *= window;
+    stutR *= window;
 
     // Subtle rhythmic micro-contour and stereo ping-pong shimmer at high stutter amounts
     if (amt > 0.55f && (repeatCycle_ & 1) != 0) {
@@ -220,7 +235,7 @@ void BufferStutter::processSample(float amount, double bpm, float& left, float& 
         stutR *= (1.0f + panShimmer * 0.5f);
     }
 
-    ++readPos_;
+    ++outPos_;
 
     const float wet = std::min(1.0f, amt * 1.3f);
     left = left * (1.0f - wet) + stutL * wet;
@@ -244,6 +259,8 @@ void TapeStopEffect::reset() {
     writePos_ = 0;
     readPos_ = 0.0;
     speed_ = 1.0;
+    elapsedSamples_ = 0;
+    slipPhase_ = 0.0;
     tapeLpL_ = 0.0f;
     tapeLpR_ = 0.0f;
 }
@@ -252,9 +269,10 @@ void TapeStopEffect::triggerBrake() {
     writePos_ = 0;
     readPos_ = 0.0;
     speed_ = 1.0;
+    elapsedSamples_ = 0;
 }
 
-void TapeStopEffect::processSample(float amount, double spanDurationSec, float& left, float& right) {
+void TapeStopEffect::processSample(float amount, double spanDurationSec, const TapeStopSettings& settings, float& left, float& right) {
     const float amt = std::clamp(amount, 0.0f, 1.0f);
     if (amt <= 1e-4f || bufferL_.empty()) {
         return;
@@ -267,12 +285,27 @@ void TapeStopEffect::processSample(float amount, double spanDurationSec, float& 
         ++writePos_;
     }
 
-    // Scale deceleration across the combined contiguous pad span!
-    const double clampedSpanSec = std::clamp(spanDurationSec, 0.04, 8.0);
+    const bool fixedLength = settings.fixedDurationSec > 0.0;
+    const double clampedSpanSec = std::clamp(fixedLength ? settings.fixedDurationSec : spanDurationSec, 0.04, 8.0);
     const double minFloorSpeed = 0.14 * (1.0 - static_cast<double>(amt) * 0.86);
-    const double stopSeconds = clampedSpanSec * (1.20 - static_cast<double>(amt) * 0.52);
-    const double decelPerSample = (1.0 - minFloorSpeed) / std::max(64.0, stopSeconds * sampleRate_);
-    speed_ = std::max(minFloorSpeed, speed_ - decelPerSample);
+    const double rampScale = fixedLength ? 1.0 : (1.20 - static_cast<double>(amt) * 0.52);
+    const double rampSamples = std::max(64.0, clampedSpanSec * rampScale * sampleRate_);
+    double progress = std::min(1.0, static_cast<double>(elapsedSamples_) / rampSamples);
+    if (settings.stepped) {
+        progress = std::floor(progress * 8.0) / 8.0;
+    }
+    ++elapsedSamples_;
+
+    const double rampDown = 1.0 - (1.0 - minFloorSpeed) * progress;
+    const double rampUp = minFloorSpeed + (1.0 - minFloorSpeed) * progress;
+    speed_ = (settings.direction == TapeDirection::Start) ? rampUp : rampDown;
+
+    if (settings.slip) {
+        slipPhase_ += 1.0 / sampleRate_;
+        const double wow = 0.045 * std::sin(2.0 * std::numbers::pi * 0.9 * slipPhase_);
+        const double flutter = 0.012 * std::sin(2.0 * std::numbers::pi * 7.3 * slipPhase_);
+        speed_ = std::max(0.02, speed_ * (1.0 + static_cast<double>(amt) * (wow + flutter)));
+    }
 
     // 4-point cubic Hermite interpolation within the captured buffer
     const int maxValid = std::max(1, writePos_ - 1);
@@ -301,11 +334,11 @@ void TapeStopEffect::processSample(float amount, double spanDurationSec, float& 
                                bufferR_[static_cast<size_t>(ip2)]);
 
     // Speed-coupled analog tape-head high-frequency rolloff as reel decelerates
-    const float headAlpha = static_cast<float>(std::clamp(0.15 + 0.85 * speed_, 0.15, 1.0));
+    const float headAlpha = settings.lowpass ? static_cast<float>(std::clamp(0.15 + 0.85 * speed_, 0.15, 1.0)) : 1.0f;
     tapeLpL_ += headAlpha * (rawL - tapeLpL_);
     tapeLpR_ += headAlpha * (rawR - tapeLpR_);
 
-    const float gainEnv = static_cast<float>(std::pow(std::max(0.04, speed_), 0.36));
+    const float gainEnv = settings.fade ? static_cast<float>(std::pow(std::max(0.04, speed_), 0.36)) : 1.0f;
     const float tapeL = tapeLpL_ * gainEnv;
     const float tapeR = tapeLpR_ * gainEnv;
 
@@ -680,6 +713,45 @@ void WavefolderEffect::processSample(float amount, float& left, float& right) {
     const float wet = std::min(1.0f, amt * 1.15f);
     left = left * (1.0f - wet) + toneLpL_ * wet;
     right = right * (1.0f - wet) + toneLpR_ * wet;
+}
+
+// ============================================================================
+// WetFilter (TPT state-variable filter)
+// ============================================================================
+void WetFilter::prepare(double sampleRate) {
+    sampleRate_ = std::max(1000.0, sampleRate);
+    reset();
+}
+
+void WetFilter::reset() {
+    ic1_.fill(0.0f);
+    ic2_.fill(0.0f);
+}
+
+void WetFilter::processSample(FilterMode mode, float cutoffHz, float resonance01, float& left, float& right) {
+    if (mode == FilterMode::Off) {
+        return;
+    }
+
+    const double nyquistSafe = sampleRate_ * 0.45;
+    const double fc = std::clamp(static_cast<double>(cutoffHz), 20.0, nyquistSafe);
+    const auto g = static_cast<float>(std::tan(std::numbers::pi * fc / sampleRate_));
+    const float k = 2.0f - 1.9f * std::clamp(resonance01, 0.0f, 1.0f);
+    const float a1 = 1.0f / (1.0f + g * (g + k));
+    const float a2 = g * a1;
+    const float a3 = g * a2;
+
+    auto tick = [&](size_t ch, float v0) noexcept {
+        const float v3 = v0 - ic2_[ch];
+        const float v1 = a1 * ic1_[ch] + a2 * v3;
+        const float v2 = ic2_[ch] + a2 * ic1_[ch] + a3 * v3;
+        ic1_[ch] = 2.0f * v1 - ic1_[ch];
+        ic2_[ch] = 2.0f * v2 - ic2_[ch];
+        return (mode == FilterMode::LowPass) ? v2 : (v0 - k * v1 - v2);
+    };
+
+    left = tick(0, left);
+    right = tick(1, right);
 }
 
 } // namespace openglitch::core

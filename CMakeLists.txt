@@ -18,6 +18,7 @@ add_library(openglitch_core STATIC
     Source/Core/BeatStepSequencer.cpp
     Source/Core/GlitchEffects.cpp
     Source/Core/GlitchProcessorCore.cpp
+    Source/Core/ModEnvelope.cpp
 )
 target_include_directories(openglitch_core PUBLIC Source/Core)
 set_target_properties(openglitch_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -44,7 +45,7 @@ if(OGFX_BUILD_PLUGIN)
         FORMATS VST3
         VST3_CATEGORIES Fx Distortion Modulation
         IS_SYNTH FALSE
-        NEEDS_MIDI_INPUT FALSE
+        NEEDS_MIDI_INPUT TRUE
         NEEDS_MIDI_OUTPUT FALSE
         IS_MIDI_EFFECT FALSE
         EDITOR_WANTS_KEYBOARD_FOCUS FALSE
@@ -54,6 +55,8 @@ if(OGFX_BUILD_PLUGIN)
         Source/Plugin/Parameters.cpp
         Source/Plugin/GlitchLookAndFeel.cpp
         Source/Plugin/StepSequencerComponent.cpp
+        Source/Plugin/EnvelopeEditorComponent.cpp
+        Source/Plugin/DetailPanelComponent.cpp
         Source/Plugin/PluginProcessor.cpp
         Source/Plugin/PluginEditor.cpp)
 

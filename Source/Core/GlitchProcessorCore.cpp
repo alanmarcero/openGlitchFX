@@ -26,6 +26,7 @@ void GlitchProcessorCore::prepare(double sampleRate) {
     pitchGlitch_.prepare(sampleRate_);
     combResonator_.prepare(sampleRate_);
     wavefolder_.prepare(sampleRate_);
+    wetFilter_.prepare(sampleRate_);
 
     reset();
 }
@@ -42,6 +43,10 @@ void GlitchProcessorCore::reset() {
     pitchGlitch_.reset();
     combResonator_.reset();
     wavefolder_.reset();
+    wetFilter_.reset();
+    heldNotes_.fill(0);
+    midiQueueSize_ = 0;
+    sequencer_.setExternalFxMask(0u);
     currentMasterMix_ = masterMix_;
     currentMasterGainLinear_ = masterGainLinear_;
     hasProcessedAudio_ = false;
@@ -100,6 +105,71 @@ void GlitchProcessorCore::setTransport(double bpm, bool useHostSync, bool hasVal
 
 void GlitchProcessorCore::setGateSmoothingMs(float ms) {
     sequencer_.setSmoothingTimeMs(ms);
+}
+
+void GlitchProcessorCore::setTriggerMode(TriggerMode mode, bool syncedStart) {
+    if (mode != triggerMode_) {
+        heldNotes_.fill(0);
+    }
+    triggerMode_ = mode;
+    sequencer_.setExternalTriggerMode(mode == TriggerMode::Midi, syncedStart);
+}
+
+void GlitchProcessorCore::queueMidiNote(int sampleOffset, int noteNumber, bool isNoteOn) {
+    if (midiQueueSize_ >= kMaxQueuedMidi || noteNumber < 0 || noteNumber >= 128) {
+        return;
+    }
+    midiQueue_[static_cast<size_t>(midiQueueSize_++)] = { sampleOffset, noteNumber, isNoteOn };
+}
+
+void GlitchProcessorCore::applyMidiTrigger(const MidiTrigger& trigger) {
+    auto& held = heldNotes_[static_cast<size_t>(trigger.noteNumber)];
+    held = trigger.isNoteOn ? static_cast<uint8_t>(std::min(255, held + 1)) : static_cast<uint8_t>(std::max(0, held - 1));
+
+    uint16_t mask = 0u;
+    for (int note = 0; note < 128; ++note) {
+        if (heldNotes_[static_cast<size_t>(note)] == 0) {
+            continue;
+        }
+        const int soloFx = note - kMidiSoloBaseNote;
+        const bool isSoloNote = soloFx >= 0 && soloFx < kNumEffects;
+        mask |= isSoloNote ? static_cast<uint16_t>(1u << soloFx) : BeatStepSequencer::kAllFxMask;
+    }
+    sequencer_.setExternalFxMask(mask);
+}
+
+void GlitchProcessorCore::setTapeStopSettings(const TapeStopSettings& settings, double lengthBeats) {
+    tapeStopSettings_ = settings;
+    tapeLengthBeats_ = std::max(0.0, lengthBeats);
+}
+
+void GlitchProcessorCore::setFilter(FilterMode mode, float cutoffHz, float resonance01) {
+    filterMode_ = mode;
+    filterCutoffHz_ = std::clamp(cutoffHz, 20.0f, 20000.0f);
+    filterResonance_ = std::clamp(resonance01, 0.0f, 1.0f);
+}
+
+void GlitchProcessorCore::setEnvelopeSettings(EnvTarget target, const ModEnvelopeSettings& settings) {
+    const int idx = static_cast<int>(target);
+    if (idx >= 0 && idx < kNumEnvelopes) {
+        envelopeSettings_[static_cast<size_t>(idx)] = settings;
+    }
+}
+
+void GlitchProcessorCore::setEnvelopePoints(EnvTarget target, std::vector<EnvelopePoint> points) {
+    const int idx = static_cast<int>(target);
+    if (idx >= 0 && idx < kNumEnvelopes) {
+        envelopes_[static_cast<size_t>(idx)].setPoints(std::move(points));
+    }
+}
+
+float GlitchProcessorCore::envelopePhase(EnvTarget target, float spanPhase, double ppq) const {
+    const double lengthBeats = envelopeSettings_[static_cast<size_t>(target)].lengthBeats;
+    if (lengthBeats <= 0.0) {
+        return spanPhase;
+    }
+    const double wrapped = std::fmod(ppq, lengthBeats);
+    return static_cast<float>((wrapped < 0.0 ? wrapped + lengthBeats : wrapped) / lengthBeats);
 }
 
 void GlitchProcessorCore::setEffectEnabled(GlitchFxId id, bool enabled) {
@@ -162,6 +232,9 @@ void GlitchProcessorCore::processBlock(float* leftChannel, float* rightChannel, 
     float maxPeakL = 0.0f;
     float maxPeakR = 0.0f;
     float lastGate = 0.0f;
+    float lastSpanPhase = 0.0f;
+    double lastPpq = blockStartPpq_;
+    int midiIndex = 0;
 
     auto softCeiling = [](float x) noexcept -> float {
         const float absX = std::abs(x);
@@ -185,7 +258,12 @@ void GlitchProcessorCore::processBlock(float* leftChannel, float* rightChannel, 
         reverseGrain_.recordDrySample(dryL, dryR);
         pitchGlitch_.recordDrySample(dryL, dryR);
 
+        while (midiIndex < midiQueueSize_ && midiQueue_[static_cast<size_t>(midiIndex)].sampleOffset <= i) {
+            applyMidiTrigger(midiQueue_[static_cast<size_t>(midiIndex++)]);
+        }
+
         const double sampleHostPpq = blockStartPpq_ + static_cast<double>(i) * ppqPerSample;
+        lastPpq = sampleHostPpq;
         bool enteredActive = false;
         uint16_t fxTransitionMask = 0u;
         const float stepGate = sequencer_.advanceSampleWithFxMask(
@@ -239,10 +317,24 @@ void GlitchProcessorCore::processBlock(float* leftChannel, float* rightChannel, 
 
             const int curStep = sequencer_.getCurrentStep();
             const double secPer32nd = (60.0 / bpm_) * (4.0 / 32.0); // 7.5 / bpm_
+            const double secPerBeat = 60.0 / bpm_;
+
+            const float spanPhase = sequencer_.getMergedPadSpan(curStep).spanPhase;
+            lastSpanPhase = spanPhase;
+            auto modulation = [&](EnvTarget target, float neutral) {
+                const auto& settings = envelopeSettings_[static_cast<size_t>(target)];
+                if (!settings.enabled) {
+                    return neutral;
+                }
+                const float y = envelopes_[static_cast<size_t>(target)].valueAt(envelopePhase(target, spanPhase, sampleHostPpq));
+                return neutral + (y - neutral) * settings.depth;
+            };
 
             // 1. Time/Buffer FX (continuous across combined adjacent pads!)
             applyGatedFx(GlitchFxId::Stutter, [&](float amt, float& l, float& r) {
-                stutter_.processSample(amt, bpm_, l, r);
+                StutterSettings stutter = stutterSettings_;
+                stutter.rateMultiplier = std::pow(2.0, 2.0 * static_cast<double>(modulation(EnvTarget::Pitch, 0.5f)) - 1.0);
+                stutter_.processSample(amt, bpm_, stutter, l, r);
             });
             applyGatedFx(GlitchFxId::Reverse, [&](float amt, float& l, float& r) {
                 const auto span = sequencer_.getActiveFxSpan(curStep, static_cast<int>(GlitchFxId::Reverse));
@@ -251,8 +343,11 @@ void GlitchProcessorCore::processBlock(float* leftChannel, float* rightChannel, 
             });
             applyGatedFx(GlitchFxId::TapeStop, [&](float amt, float& l, float& r) {
                 const auto span = sequencer_.getActiveFxSpan(curStep, static_cast<int>(GlitchFxId::TapeStop));
-                const double spanSec = static_cast<double>(span.lengthSteps) * secPer32nd;
-                tapeStop_.processSample(amt, spanSec, l, r);
+                const double spanSec = tapeLengthBeats_ > 0.0 ? tapeLengthBeats_ * secPerBeat
+                                                              : static_cast<double>(span.lengthSteps) * secPer32nd;
+                TapeStopSettings tape = tapeStopSettings_;
+                tape.fixedDurationSec = tapeLengthBeats_ > 0.0 ? spanSec : 0.0;
+                tapeStop_.processSample(amt, spanSec, tape, l, r);
             });
             applyGatedFx(GlitchFxId::PitchGlitch, [&](float amt, float& l, float& r) {
                 pitchGlitch_.processSample(amt, l, r);
@@ -281,8 +376,19 @@ void GlitchProcessorCore::processBlock(float* leftChannel, float* rightChannel, 
                 chopperGate_.processSample(amt, bpm_, span.lengthSteps, l, r);
             });
 
-            outL = (dryL * (1.0f - effectiveWet) + wetL * effectiveWet) * currentMasterGainLinear_;
-            outR = (dryR * (1.0f - effectiveWet) + wetR * effectiveWet) * currentMasterGainLinear_;
+            // 4. Filter, volume and pan
+            const float filterMod = modulation(EnvTarget::Filter, 1.0f);
+            const float cutoff = filterCutoffHz_ * std::exp2(8.0f * (filterMod - 1.0f));
+            wetFilter_.processSample(filterMode_, cutoff, filterResonance_, wetL, wetR);
+
+            const float volume = modulation(EnvTarget::Volume, 1.0f);
+            const float pan = 2.0f * modulation(EnvTarget::Pan, 0.5f) - 1.0f;
+            wetL *= volume * std::min(1.0f, 1.0f - pan);
+            wetR *= volume * std::min(1.0f, 1.0f + pan);
+
+            const float dryGain = (mixMode_ == MixMode::Parallel) ? 1.0f : (1.0f - effectiveWet);
+            outL = (dryL * dryGain + wetL * effectiveWet) * currentMasterGainLinear_;
+            outR = (dryR * dryGain + wetR * effectiveWet) * currentMasterGainLinear_;
         } else {
             outL = dryL * currentMasterGainLinear_;
             outR = dryR * currentMasterGainLinear_;
@@ -299,6 +405,11 @@ void GlitchProcessorCore::processBlock(float* leftChannel, float* rightChannel, 
         maxPeakL = std::max(maxPeakL, std::abs(outL));
         maxPeakR = std::max(maxPeakR, std::abs(outR));
     }
+
+    while (midiIndex < midiQueueSize_) {
+        applyMidiTrigger(midiQueue_[static_cast<size_t>(midiIndex++)]);
+    }
+    midiQueueSize_ = 0;
 
     currentMasterMix_ = masterMix_;
     currentMasterGainLinear_ = masterGainLinear_;
@@ -323,6 +434,9 @@ void GlitchProcessorCore::processBlock(float* leftChannel, float* rightChannel, 
         const auto idx = static_cast<size_t>(fx);
         const bool armed = fxEnabled_[idx] && (fxAmount_[idx] > 1e-4f);
         telemetry_.fxEnvelopes[idx] = armed ? (sequencer_.getFxEnvelope(fx) * fxAmount_[idx]) : 0.0f;
+    }
+    for (int env = 0; env < kNumEnvelopes; ++env) {
+        telemetry_.modEnvelopePhases[static_cast<size_t>(env)] = envelopePhase(static_cast<EnvTarget>(env), lastSpanPhase, lastPpq);
     }
 }
 

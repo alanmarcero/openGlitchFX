@@ -46,6 +46,47 @@ inline constexpr const char* kCombResoOn     = "combreso_on";
 inline constexpr const char* kWavefoldAmt    = "wavefold_amt";
 inline constexpr const char* kWavefoldOn     = "wavefold_on";
 
+// STUTTER buffer options
+inline constexpr const char* kStutterSync    = "stutter_sync";
+inline constexpr const char* kStutterAdvance = "stutter_advance";
+inline constexpr const char* kStutterReverse = "stutter_reverse";
+inline constexpr const char* kStutterGate    = "stutter_gate";
+inline constexpr const char* kStutterPitch   = "stutter_pitch";
+
+// TAPE STOP options
+inline constexpr const char* kTapeDirection  = "tape_direction";
+inline constexpr const char* kTapeCurve      = "tape_curve";
+inline constexpr const char* kTapeLength     = "tape_length";
+inline constexpr const char* kTapeSlip       = "tape_slip";
+inline constexpr const char* kTapeLowpass    = "tape_lowpass";
+inline constexpr const char* kTapeFade       = "tape_fade";
+
+inline constexpr const char* kFilterMode     = "filter_mode";
+inline constexpr const char* kFilterCutoff   = "filter_cutoff";
+inline constexpr const char* kFilterReso     = "filter_reso";
+inline constexpr const char* kTriggerMode    = "trigger_mode";
+inline constexpr const char* kTriggerStart   = "trigger_start";
+inline constexpr const char* kMixMode        = "mix_mode";
+
+inline const juce::StringArray kNoteLengthLabels{ "PAD SPAN", "1/32", "1/16", "1/8", "1/4", "1/2", "1 BAR" };
+inline const juce::StringArray kStutterSyncLabels{ "KNOB", "1/4", "1/8", "1/16", "1/32", "1/64" };
+
+struct EnvDescriptor {
+    const char* name;
+    const char* title;
+    const char* onParamId;
+    const char* depthParamId;
+    const char* rateParamId;
+};
+
+// Order matches openglitch::core::EnvTarget
+inline constexpr std::array<EnvDescriptor, 4> kEnvDescriptors = {{
+    { "VOLUME", "Volume Envelope", "env_volume_on", "env_volume_depth", "env_volume_rate" },
+    { "PAN",    "Pan Envelope",    "env_pan_on",    "env_pan_depth",    "env_pan_rate"    },
+    { "FILTER", "Filter Envelope", "env_filter_on", "env_filter_depth", "env_filter_rate" },
+    { "PITCH",  "Pitch Envelope",  "env_pitch_on",  "env_pitch_depth",  "env_pitch_rate"  }
+}};
+
 struct FxDescriptor {
     const char* name;
     const char* shortCode;

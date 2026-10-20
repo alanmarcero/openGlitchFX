@@ -88,6 +88,45 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout() {
     addFxParam(kCombResoAmt,    kCombResoOn,    "Comb Resonator",0.0f);
     addFxParam(kWavefoldAmt,    kWavefoldOn,    "Wavefolder",    0.0f);
 
+    auto addChoice = [&](const char* id, const juce::String& title, const juce::StringArray& choices, int defaultIndex) {
+        layout.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{ id, 1 }, title, choices, defaultIndex));
+    };
+    auto addBool = [&](const char* id, const juce::String& title, bool defaultValue) {
+        layout.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{ id, 1 }, title, defaultValue));
+    };
+    auto addFloat = [&](const char* id, const juce::String& title, juce::NormalisableRange<float> range, float defaultValue, const char* label) {
+        layout.push_back(std::make_unique<juce::AudioParameterFloat>(
+            juce::ParameterID{ id, 1 }, title, range, defaultValue, juce::AudioParameterFloatAttributes().withLabel(label)));
+    };
+
+    addChoice(kStutterSync,    "Buffer Size",    kStutterSyncLabels, 0);
+    addBool  (kStutterAdvance, "Buffer Advance", false);
+    addChoice(kStutterReverse, "Buffer Reverse", { "OFF", "ALL", "ALTERNATE" }, 0);
+    addFloat (kStutterGate,    "Buffer Gate",    juce::NormalisableRange<float>(5.0f, 100.0f, 0.1f), 100.0f, "%");
+    addFloat (kStutterPitch,   "Buffer Pitch",   juce::NormalisableRange<float>(-12.0f, 12.0f, 0.1f), 0.0f, "st");
+
+    addChoice(kTapeDirection, "Tape Direction", { "STOP", "START" }, 0);
+    addChoice(kTapeCurve,     "Tape Curve",     { "SMOOTH", "STEPPED" }, 0);
+    addChoice(kTapeLength,    "Tape Length",    kNoteLengthLabels, 0);
+    addBool  (kTapeSlip,      "Tape Slip",      false);
+    addBool  (kTapeLowpass,   "Tape Low-Pass",  true);
+    addBool  (kTapeFade,      "Tape Fade",      true);
+
+    addChoice(kFilterMode,   "Filter Mode",      { "OFF", "LOW-PASS", "HIGH-PASS" }, 0);
+    addFloat (kFilterCutoff, "Filter Cutoff",    juce::NormalisableRange<float>(20.0f, 20000.0f, 1.0f, 0.25f), 2000.0f, "Hz");
+    addFloat (kFilterReso,   "Filter Resonance", juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f), 20.0f, "%");
+
+    for (const auto& env : kEnvDescriptors) {
+        const juce::String title(env.title);
+        addBool  (env.onParamId,    title + " On",     false);
+        addFloat (env.depthParamId, title + " Depth",  juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f), 100.0f, "%");
+        addChoice(env.rateParamId,  title + " Length", kNoteLengthLabels, 0);
+    }
+
+    addChoice(kTriggerMode,  "Trigger Source", { "SEQUENCER", "MIDI" }, 0);
+    addChoice(kTriggerStart, "MIDI Start",     { "FREE", "SYNCED" }, 0);
+    addChoice(kMixMode,      "Dry/Wet Mode",   { "INSERT", "PARALLEL" }, 0);
+
     // Master Controls
     layout.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{ kMasterMix, 1 },

@@ -8,12 +8,14 @@
 
 namespace openglitch::ui {
 
-class StepSequencerComponent final : public juce::Component {
+class StepSequencerComponent final : public juce::Component, public juce::TooltipClient {
 public:
     StepSequencerComponent(juce::AudioProcessorValueTreeState& apvts,
                            const GlitchLookAndFeel& lnf);
 
     void setPlayheadState(int currentStep, float barPhase, bool isStepActive, float gateEnvelope);
+    void setMidiTriggerMode(bool midiMode);
+    bool isMidiTriggerMode() const { return midiMode_; }
     void applyPreset(openglitch::core::StepPatternPreset preset);
     void invertPattern();
     void resetAllStepFxMasksToAll();
@@ -28,6 +30,7 @@ public:
     void mouseExit(const juce::MouseEvent& event) override;
     void mouseDown(const juce::MouseEvent& event) override;
     void mouseDrag(const juce::MouseEvent& event) override;
+    juce::String getTooltip() override;
 
 private:
     struct ContiguousRun {
@@ -61,6 +64,7 @@ private:
     float barPhase_ = 0.0f;
     bool isStepActive_ = false;
     float gateEnvelope_ = 0.0f;
+    bool midiMode_ = false;
 
     int paintTargetFx_ = -1; // -1 = ALL FX, 0..9 = specific FX brush
     bool dragTargetState_ = true;

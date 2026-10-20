@@ -1,5 +1,6 @@
 #pragma once
 
+#include "DetailPanelComponent.h"
 #include "GlitchLookAndFeel.h"
 #include "PluginProcessor.h"
 #include "StepSequencerComponent.h"
@@ -7,6 +8,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 class OpenGlitchFXEditor final : public juce::AudioProcessorEditor,
+                                 public juce::TooltipClient,
                                  private juce::Timer,
                                  private juce::AudioProcessorValueTreeState::Listener {
 public:
@@ -16,11 +18,13 @@ public:
     void paint(juce::Graphics& g) override;
     void resized() override;
     void mouseDown(const juce::MouseEvent& event) override;
+    juce::String getTooltip() override;
 
 private:
     void timerCallback() override;
     void parameterChanged(const juce::String& parameterID, float newValue) override;
     void applyTheme(int themeIndex);
+    int fxCardHeaderAt(juce::Point<float> position) const;
 
     OpenGlitchFXProcessor& processor_;
     openglitch::ui::GlitchLookAndFeel lookAndFeel_;
@@ -42,10 +46,10 @@ private:
     juce::ComboBox paintBrushBox_;
     juce::TextButton presetAllBtn_{ "ALL 32" };
     juce::TextButton presetLastBeatBtn_{ "LAST BEAT" };
-    juce::TextButton presetLast4StepsBtn_{ "LAST 4" };
+    juce::TextButton presetLast4StepsBtn_{ "LAST 1/8" };
     juce::TextButton presetLast32ndBtn_{ "LAST 1/32" };
     juce::TextButton presetBackbeatBtn_{ "BEATS 2&4" };
-    juce::TextButton preset16thBtn_{ "1/16 ALT" };
+    juce::TextButton preset16thBtn_{ "OFF 1/16" };
     juce::TextButton presetInvertBtn_{ "INVERT" };
     juce::TextButton presetResetFxBtn_{ "ALL FX" };
     juce::TextButton presetClearBtn_{ "CLEAR" };
@@ -75,6 +79,10 @@ private:
     juce::Rectangle<float> masterCardBounds_;
     juce::Rectangle<float> masterMeterBounds_;
     float clipHold_ = 0.0f;
+
+    openglitch::ui::DetailPanelComponent detailPanel_;
+    int lastStateVersion_ = -1;
+    juce::TooltipWindow tooltipWindow_{ this, 500 };
 
     // Attachments
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;

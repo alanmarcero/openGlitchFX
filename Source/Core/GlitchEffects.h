@@ -39,31 +39,55 @@ private:
 };
 
 // 3. Buffer Stutter / Beat Repeat (Micro-slice loop repeater controlled by a knob)
+enum class StutterReverse : int { Off = 0, All, Alternate };
+
+struct StutterSettings {
+    double syncedSliceBeats = 0.0; // 0 = the amount knob sets the slice
+    bool advance = false;          // each repeat starts half a slice later
+    StutterReverse reverse = StutterReverse::Off;
+    float gate = 1.0f;             // audible part of each repeat
+    float pitchStepSemitones = 0.0f;
+    double rateMultiplier = 1.0;   // the pitch envelope sets this
+};
+
 class BufferStutter {
 public:
     void prepare(double sampleRate);
     void reset();
     void triggerCapture();
-    void processSample(float amount, double bpm, float& left, float& right);
+    void processSample(float amount, double bpm, const StutterSettings& settings, float& left, float& right);
 
 private:
     double sampleRate_ = 44100.0;
     std::vector<float> bufferL_;
     std::vector<float> bufferR_;
     int writePos_ = 0;
-    int readPos_ = 0;
+    int loopStart_ = 0;
+    int loopLen_ = 0;
+    int outPos_ = 0;
     int capturedSamples_ = 0;
     int repeatCycle_ = 0;
     bool capturing_ = true;
 };
 
 // 4. Tape Stop / Vinyl Brake (Pitch deceleration effect across the combined contiguous pad span)
+enum class TapeDirection : int { Stop = 0, Start };
+
+struct TapeStopSettings {
+    TapeDirection direction = TapeDirection::Stop;
+    bool stepped = false;  // 8 speed steps, not a smooth ramp
+    bool slip = false;
+    bool lowpass = true;   // highs roll off as speed drops
+    bool fade = true;      // volume drops with speed
+    double fixedDurationSec = 0.0; // 0 = use the pad span
+};
+
 class TapeStopEffect {
 public:
     void prepare(double sampleRate);
     void reset();
     void triggerBrake();
-    void processSample(float amount, double spanDurationSec, float& left, float& right);
+    void processSample(float amount, double spanDurationSec, const TapeStopSettings& settings, float& left, float& right);
 
 private:
     double sampleRate_ = 44100.0;
@@ -72,6 +96,8 @@ private:
     int writePos_ = 0;
     double readPos_ = 0.0;
     double speed_ = 1.0;
+    int elapsedSamples_ = 0;
+    double slipPhase_ = 0.0;
     float tapeLpL_ = 0.0f;
     float tapeLpR_ = 0.0f;
 };
@@ -178,6 +204,21 @@ private:
     float dcOutR_ = 0.0f;
     float toneLpL_ = 0.0f;
     float toneLpR_ = 0.0f;
+};
+
+// Filter after the FX chain
+enum class FilterMode : int { Off = 0, LowPass, HighPass };
+
+class WetFilter {
+public:
+    void prepare(double sampleRate);
+    void reset();
+    void processSample(FilterMode mode, float cutoffHz, float resonance01, float& left, float& right);
+
+private:
+    double sampleRate_ = 44100.0;
+    std::array<float, 2> ic1_{};
+    std::array<float, 2> ic2_{};
 };
 
 } // namespace openglitch::core

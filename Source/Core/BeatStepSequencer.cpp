@@ -145,7 +145,30 @@ void BeatStepSequencer::applyPreset(StepPatternPreset preset) {
     }
 }
 
+void BeatStepSequencer::setExternalTriggerMode(bool enabled, bool quantizeToStep) {
+    if (externalMode_ != enabled) {
+        externalPendingMask_ = 0u;
+        externalActiveMask_ = 0u;
+    }
+    externalMode_ = enabled;
+    externalQuantize_ = quantizeToStep;
+}
+
+void BeatStepSequencer::setExternalFxMask(uint16_t fxMask) {
+    externalPendingMask_ = fxMask & kAllFxMask;
+}
+
+// A MIDI note has no pad span, so time-based FX use one beat.
+StepSpanInfo BeatStepSequencer::getExternalSpan() const {
+    constexpr int kNoteSpanSteps = kNumSteps / 4;
+    const auto phase = static_cast<float>(std::clamp(externalElapsedPpq_, 0.0, 1.0));
+    return { currentStep_, currentStep_, kNoteSpanSteps, phase };
+}
+
 StepSpanInfo BeatStepSequencer::getMergedPadSpan(int stepIndex) const {
+    if (externalMode_) {
+        return getExternalSpan();
+    }
     stepIndex = std::clamp(stepIndex, 0, kNumSteps - 1);
     const uint16_t mask = getEffectiveStepFxMask(stepIndex);
     if (mask == 0u) {
@@ -174,6 +197,9 @@ StepSpanInfo BeatStepSequencer::getMergedPadSpan(int stepIndex) const {
 }
 
 StepSpanInfo BeatStepSequencer::getActiveFxSpan(int stepIndex, int fxIndex) const {
+    if (externalMode_) {
+        return getExternalSpan();
+    }
     stepIndex = std::clamp(stepIndex, 0, kNumSteps - 1);
     if (fxIndex < 0 || fxIndex >= kNumFxSlots) {
         return { stepIndex, stepIndex, 1, 0.0f };
@@ -255,6 +281,9 @@ bool BeatStepSequencer::isCurrentStepEnabled() const {
 }
 
 uint16_t BeatStepSequencer::getCurrentStepActiveFxMask() const {
+    if (externalMode_) {
+        return externalActiveMask_;
+    }
     return getEffectiveStepFxMask(currentStep_);
 }
 
@@ -296,7 +325,15 @@ float BeatStepSequencer::advanceSampleWithFxMask(double bpm,
         }
     }
 
+    const int previousStep = currentStep_;
     currentStep_ = computeStepFromPpq(effectivePpq, &currentBarPhase_);
+    if (externalMode_ && (!externalQuantize_ || currentStep_ != previousStep)) {
+        if (externalActiveMask_ == 0u && externalPendingMask_ != 0u) {
+            externalElapsedPpq_ = 0.0;
+        }
+        externalActiveMask_ = externalPendingMask_;
+    }
+    externalElapsedPpq_ += (safeBpm / 60.0) / sampleRate_;
     const uint16_t activeFxMaskNow = getCurrentStepActiveFxMask();
     const bool activeNow = (activeFxMaskNow != 0u);
 

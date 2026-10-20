@@ -52,6 +52,11 @@ public:
     uint32_t getPatternBitmask() const;
     void applyPreset(StepPatternPreset preset);
 
+    // In MIDI mode, held notes set the FX mask instead of the pads.
+    // With quantizeToStep, a mask change waits for the next 1/32 step.
+    void setExternalTriggerMode(bool enabled, bool quantizeToStep);
+    void setExternalFxMask(uint16_t fxMask);
+
     void setSmoothingTimeMs(float ms);
     float getSmoothingTimeMs() const { return smoothingTimeMs_; }
 
@@ -89,6 +94,7 @@ public:
 private:
     void updateSmoothingCoeff();
     uint16_t getEffectiveStepFxMask(int stepIndex) const;
+    StepSpanInfo getExternalSpan() const;
 
     double sampleRate_ = 44100.0;
     double internalPpq_ = 0.0;
@@ -99,6 +105,12 @@ private:
     double currentBarPhase_ = 0.0;
     bool wasActiveStep_ = false;
     uint16_t wasActiveFxMask_ = 0u;
+
+    bool externalMode_ = false;
+    bool externalQuantize_ = false;
+    uint16_t externalPendingMask_ = 0u;
+    uint16_t externalActiveMask_ = 0u;
+    double externalElapsedPpq_ = 0.0;
 
     float smoothingTimeMs_ = 2.5f;
     float smoothCoeff_ = 0.99f;

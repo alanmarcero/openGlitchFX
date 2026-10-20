@@ -26,6 +26,21 @@ void StepSequencerComponent::setPlayheadState(int currentStep, float barPhase, b
     }
 }
 
+void StepSequencerComponent::setMidiTriggerMode(bool midiMode) {
+    if (midiMode_ != midiMode) {
+        midiMode_ = midiMode;
+        repaint();
+    }
+}
+
+juce::String StepSequencerComponent::getTooltip() {
+    if (midiMode_) {
+        return "TRIGGER is set to MIDI, so the pads are ignored. Notes 60-69 trigger one FX each; any other note triggers every FX.";
+    }
+    return "Click a pad to turn it on or off, drag to paint. Right-click for its FX routing. "
+           "Adjacent pads with the same FX join into one block, and time-based FX run once across the block.";
+}
+
 void StepSequencerComponent::setPaintTargetFx(int fxIndex) {
     paintTargetFx_ = std::clamp(fxIndex, -1, 9);
     repaint();
@@ -83,22 +98,18 @@ StepSequencerComponent::ContiguousRun StepSequencerComponent::findContiguousRun(
         return { stepIndex, stepIndex, 0u };
     }
 
+    // Only pads with identical FX join, as in BeatStepSequencer::getMergedPadSpan
     int start = stepIndex;
-    while (start > 0 && (getEffectiveStepFxMask(start - 1) & mask) != 0u) {
+    while (start > 0 && getEffectiveStepFxMask(start - 1) == mask) {
         --start;
     }
 
     int end = stepIndex;
-    while (end + 1 < 32 && (getEffectiveStepFxMask(end + 1) & mask) != 0u) {
+    while (end + 1 < 32 && getEffectiveStepFxMask(end + 1) == mask) {
         ++end;
     }
 
-    uint16_t combinedMask = 0u;
-    for (int s = start; s <= end; ++s) {
-        combinedMask |= getEffectiveStepFxMask(s);
-    }
-
-    return { start, end, combinedMask };
+    return { start, end, mask };
 }
 
 void StepSequencerComponent::setStepFxMaskParam(int stepIndex, uint16_t mask) {
@@ -314,7 +325,7 @@ void StepSequencerComponent::showStepContextMenu(int step) {
     }
 
     menu.addSeparator();
-    menu.addItem(300, "Copy FX Routing to Current Beat (8 Pads)");
+    menu.addItem(300, "Copy This Pad (On/Off + FX) to Its Beat (8 Pads)");
     menu.addItem(301, "Copy FX Routing to All 32 Pads");
 
     const int applyStart = isMergedGroup ? run.startStep : step;
@@ -485,43 +496,44 @@ void StepSequencerComponent::paint(juce::Graphics& g) {
     g.setColour(pal.cardBorder);
     g.drawRoundedRectangle(fullBounds, 6.0f, 1.2f);
 
-    // Beat Group Headers (BEAT 1..4) with live hover inspection readout
-    juce::String beat1Header = "BEAT 1 (1-8)  [ADJACENT PADS MERGE | R-CLICK FOR FX]";
-    if (hoveredStep_ >= 0 && hoveredStep_ < 32) {
-        const uint16_t hMask = getEffectiveStepFxMask(hoveredStep_);
-        if (hMask == 0u) {
-            beat1Header = juce::String::formatted("INSPECT PAD %02d/32: DRY PASS-THROUGH (CLICK TO ENABLE)", hoveredStep_ + 1);
-        } else {
-            const auto hRun = findContiguousRun(hoveredStep_);
-            beat1Header = juce::String::formatted("INSPECT PAD %02d/32  |  SPAN %02d-%02d (%d/32)  |  %s",
-                                                  hoveredStep_ + 1,
-                                                  hRun.startStep + 1,
-                                                  hRun.endStep + 1,
-                                                  hRun.length(),
-                                                  formatStepFxBadge(hRun.fxMask, 1).toRawUTF8());
-        }
-    }
-
+    // Beat Group Headers (BEAT 1..4), or one readout for the hovered pad
     const juce::String beatTitles[4] = {
-        beat1Header,
+        "BEAT 1 (1-8)",
         "BEAT 2 (9-16)",
         "BEAT 3 (17-24)",
         "BEAT 4 (25-32)"
     };
 
-    for (int b = 0; b < 4; ++b) {
+    if (hoveredStep_ >= 0 && hoveredStep_ < 32) {
+        const uint16_t hMask = getEffectiveStepFxMask(hoveredStep_);
+        const auto hRun = findContiguousRun(hoveredStep_);
+        const juce::String readout = (hMask == 0u)
+            ? juce::String::formatted("PAD %02d/32: OFF (DRY)  |  CLICK TO TURN ON  |  RIGHT-CLICK FOR FX ROUTING", hoveredStep_ + 1)
+            : juce::String::formatted("PAD %02d/32  |  BLOCK %02d-%02d (%d/32)  |  FX: %s  |  RIGHT-CLICK FOR FX ROUTING",
+                                      hoveredStep_ + 1, hRun.startStep + 1, hRun.endStep + 1, hRun.length(),
+                                      formatStepFxBadge(hMask, 1).toRawUTF8());
+        const auto firstStepRect = getStepBounds(0);
+        const auto lastStepRect = getStepBounds(31);
+        const juce::Rectangle<float> header(firstStepRect.getX(), fullBounds.getY() + 5.0f,
+                                            lastStepRect.getRight() - firstStepRect.getX(), 18.0f);
+        g.setColour(pal.accentSecondary.withAlpha(0.20f));
+        g.fillRoundedRectangle(header, 3.0f);
+        g.setColour(pal.textBright);
+        g.setFont(juce::FontOptions(9.5f, juce::Font::bold));
+        g.drawText(readout, header.toNearestInt(), juce::Justification::centred);
+    }
+
+    for (int b = 0; b < 4 && hoveredStep_ < 0; ++b) {
         const auto firstStepRect = getStepBounds(b * 8);
         const auto lastStepRect  = getStepBounds(b * 8 + 7);
         juce::Rectangle<float> beatHeader(firstStepRect.getX(), fullBounds.getY() + 5.0f,
                                           lastStepRect.getRight() - firstStepRect.getX(), 18.0f);
 
         const bool playheadInBeat = (currentStep_ / 8) == b;
-        const bool hoverInfoActive = (b == 0 && hoveredStep_ >= 0);
-        g.setColour(hoverInfoActive ? pal.accentSecondary.withAlpha(0.20f)
-                                    : (playheadInBeat ? pal.accentPrimary.withAlpha(0.18f) : pal.headerPlate.withAlpha(0.7f)));
+        g.setColour(playheadInBeat ? pal.accentPrimary.withAlpha(0.18f) : pal.headerPlate.withAlpha(0.7f));
         g.fillRoundedRectangle(beatHeader, 3.0f);
 
-        g.setColour(hoverInfoActive ? pal.textBright : (playheadInBeat ? pal.accentPrimary : pal.textMuted));
+        g.setColour(playheadInBeat ? pal.accentPrimary : pal.textMuted);
         g.setFont(juce::FontOptions(9.5f, juce::Font::bold));
         g.drawText(beatTitles[b], beatHeader.toNearestInt(), juce::Justification::centred);
     }
@@ -675,6 +687,16 @@ void StepSequencerComponent::paint(juce::Graphics& g) {
     juce::Rectangle<float> progFill = progTrack.withWidth(progTrack.getWidth() * barPhase_);
     g.setColour(isStepActive_ ? pal.accentPrimary : pal.textMuted.withAlpha(0.5f));
     g.fillRoundedRectangle(progFill, 2.0f);
+
+    if (midiMode_) {
+        const auto grid = firstRect.getUnion(lastRect);
+        g.setColour(pal.cardBg.withAlpha(0.72f));
+        g.fillRoundedRectangle(grid, 5.0f);
+        g.setColour(pal.textBright);
+        g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
+        g.drawText("TRIGGER: MIDI  |  PADS IGNORED  |  NOTES 60-69 = ONE FX EACH, OTHER NOTES = ALL FX",
+                   grid.toNearestInt(), juce::Justification::centred);
+    }
 }
 
 } // namespace openglitch::ui
