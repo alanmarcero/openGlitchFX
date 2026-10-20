@@ -204,6 +204,8 @@ private:
     float dcOutR_ = 0.0f;
     float toneLpL_ = 0.0f;
     float toneLpR_ = 0.0f;
+    double previousL_ = 0.0;
+    double previousR_ = 0.0;
 };
 
 // Filter after the FX chain

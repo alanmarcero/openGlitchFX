@@ -479,3 +479,34 @@ TEST_CASE("Bitrate crusher quantizes a full-scale signal to 2^bits levels", "[co
         }
     }
 }
+
+TEST_CASE("Wavefolder antiderivative anti-aliasing keeps folded harmonics from aliasing", "[core][wavefold]") {
+    constexpr double fs = 48000.0;
+    WavefolderEffect folder;
+    folder.prepare(fs);
+    std::vector<float> output(9600);
+    for (size_t i = 0; i < output.size(); ++i) {
+        float left = 0.5f * static_cast<float>(std::sin(2.0 * std::numbers::pi * 7000.0 * static_cast<double>(i) / fs));
+        float right = left;
+        folder.processSample(0.5f, left, right);
+        output[i] = left;
+    }
+
+    // Harmonics of 7 kHz sit at 7, 14 and 21 kHz. Folded-back aliases land on the other whole-kHz bins.
+    const auto power = [&](double hz) {
+        double re = 0.0;
+        double im = 0.0;
+        for (size_t i = 4800; i < output.size(); ++i) {
+            const double angle = 2.0 * std::numbers::pi * hz * static_cast<double>(i) / fs;
+            re += output[i] * std::cos(angle);
+            im += output[i] * std::sin(angle);
+        }
+        return re * re + im * im;
+    };
+    double harmonics = 0.0;
+    double aliases = 0.0;
+    for (int khz = 1; khz < 24; ++khz) {
+        (khz % 7 == 0 ? harmonics : aliases) += power(khz * 1000.0);
+    }
+    REQUIRE(10.0 * std::log10(aliases / harmonics) < -30.0);
+}
