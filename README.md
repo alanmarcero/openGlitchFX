@@ -66,7 +66,7 @@ Each of the **10 Glitch FX** features a dedicated **Amount Knob (`0% – 100%`)*
 1. **BITCRUSH (Bitrate & Depth Crusher):**
    - Continuously variable knob that dials bit resolution from pristine 16-bit down to gritty 1.5-bit quantization, paired with bitrate packet-hold frame decimation and tanh saturation compensation.
 2. **DOWNSAMPLE (Sample Rate Decimator):**
-   - Variable sample-and-hold clock divider (`1x` to `56x`) for authentic early-sampler aliasing and vocal/synth crunch.
+   - Variable sample-and-hold clock divider (`1x` to `59x`) for authentic early-sampler aliasing and vocal/synth crunch.
 3. **STUTTER (Beat Repeat / Buffer Stutter):**
    - Captures audio at the start of an active step region and loops rhythmic micro-slices (`1/8` beat down to `8 ms` buzz-saw grains) with raised-cosine anti-click windowing.
 4. **TAPE STOP (Vinyl Brake):**

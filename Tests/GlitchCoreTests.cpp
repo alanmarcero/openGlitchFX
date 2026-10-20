@@ -431,3 +431,51 @@ TEST_CASE("MIDI trigger mode ignores the pattern and glitches only while a note 
     core.processBlock(l.data(), r.data(), kN);
     REQUIRE(computeRmsDifference(dryL, l) > 0.01f);
 }
+
+TEST_CASE("Pitch glitch fourth interval jumps up 19 semitones", "[core][pitch]") {
+    constexpr double fs = 48000.0;
+    PitchGlitchEffect effect;
+    effect.prepare(fs);
+    std::vector<float> output(48000);
+    for (size_t i = 0; i < output.size(); ++i) {
+        const auto x = 0.5f * static_cast<float>(std::sin(2.0 * std::numbers::pi * 200.0 * static_cast<double>(i) / fs));
+        effect.recordDrySample(x, x);
+        float left = x;
+        float right = x;
+        effect.processSample(1.0f, left, right);
+        output[i] = left;
+    }
+
+    // At full amount each interval holds 12000 samples, so the fourth (+19) plays from 36000 on.
+    const auto levelAt = [&](double hz) {
+        double re = 0.0;
+        double im = 0.0;
+        for (size_t i = 38000; i < 47000; ++i) {
+            const double angle = 2.0 * std::numbers::pi * hz * static_cast<double>(i) / fs;
+            re += output[i] * std::cos(angle);
+            im += output[i] * std::sin(angle);
+        }
+        return std::hypot(re, im);
+    };
+    REQUIRE(levelAt(200.0 * 2.996614) > 4.0 * levelAt(200.0 * 1.259921));
+}
+
+TEST_CASE("Bitrate crusher quantizes a full-scale signal to 2^bits levels", "[core][bitcrush]") {
+    BitrateCrusher crusher;
+    crusher.prepare(48000.0);
+    for (const float amount : {0.8f, 1.0f}) {
+        const float stepsPerUnit = std::pow(2.0f, 16.0f - amount * 14.5f - 1.0f);
+        for (float input = 0.05f; input < 0.95f; input += 0.05f) {
+            crusher.reset();
+            float left = input;
+            float right = input;
+            for (int i = 0; i < 2000; ++i) {
+                left = input;
+                right = input;
+                crusher.processSample(amount, left, right);
+            }
+            const float levels = left * stepsPerUnit;
+            REQUIRE_THAT(levels, Catch::Matchers::WithinAbs(std::round(levels), 1e-3));
+        }
+    }
+}

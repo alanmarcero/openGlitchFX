@@ -62,7 +62,8 @@ void BitrateCrusher::processSample(float amount, float& left, float& right) {
 
     // Continuous bit-depth reduction from 16-bit down to 1.5-bit with mid-tread quantization
     const float bits = 16.0f - amt * 14.5f;
-    const float steps = std::pow(2.0f, bits);
+    // A signed signal in -1..1 spans 2^bits levels, so each unit holds half of them.
+    const float steps = std::pow(2.0f, bits - 1.0f);
     const float invSteps = 1.0f / steps;
 
     // Asymmetric harmonic pre-drive with gain normalization
@@ -580,7 +581,8 @@ void PitchGlitchEffect::processSample(float amount, float& left, float& right) {
         intervalIndex_ = (intervalIndex_ + 1) & 3;
     }
 
-    static constexpr std::array<double, 4> kRatios = { 1.498307, 2.0, 0.5, 1.259921 };
+    // +7, +12, -12 and +19 semitones
+    static constexpr std::array<double, 4> kRatios = { 1.498307, 2.0, 0.5, 2.996614 };
     const double targetRatio = 1.0 + (kRatios[static_cast<size_t>(intervalIndex_)] - 1.0) * static_cast<double>(amt);
     currentRatio_ += 0.015 * (targetRatio - currentRatio_);
 
