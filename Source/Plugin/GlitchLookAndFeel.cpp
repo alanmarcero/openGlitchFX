@@ -68,21 +68,21 @@ ThemePalette makePalette(Theme t) {
         case Theme::CyberNeon:
         default:
             return {
-                juce::Colour(0xff10131c), // bgTop
-                juce::Colour(0xff080a10), // bgBottom
-                juce::Colour(0xd8151926), // cardBg
-                juce::Colour(0xff2a334d), // cardBorder
-                juce::Colour(0xff00f0ff), // cardActiveBorder
-                juce::Colour(0xff1c2233), // headerPlate
-                juce::Colour(0xff00f0ff), // accentPrimary (Electric Cyan)
-                juce::Colour(0xffd946ef), // accentSecondary (Neon Magenta)
-                juce::Colour(0xff00f0ff), // stepActiveFill
-                juce::Colour(0xff1a2030), // stepInactiveFill
-                juce::Colour(0xffffdd55), // stepPlayheadOutline
-                juce::Colour(0xff2c3347), // knobBodyTop
-                juce::Colour(0xff11141f), // knobBodyBottom
+                juce::Colour(0xff1b2529), // bgTop
+                juce::Colour(0xff0b1115), // bgBottom
+                juce::Colour(0xef172126), // cardBg
+                juce::Colour(0xff3e5158), // cardBorder
+                juce::Colour(0xff83d4d0), // cardActiveBorder
+                juce::Colour(0xff273337), // headerPlate
+                juce::Colour(0xff83d4d0), // accentPrimary (Electric Cyan)
+                juce::Colour(0xffd7ac7b), // accentSecondary (Neon Magenta)
+                juce::Colour(0xff83d4d0), // stepActiveFill
+                juce::Colour(0xff1c2a30), // stepInactiveFill
+                juce::Colour(0xffeee1b5), // stepPlayheadOutline
+                juce::Colour(0xff536369), // knobBodyTop
+                juce::Colour(0xff172126), // knobBodyBottom
                 juce::Colour(0xffedf6ff), // textBright
-                juce::Colour(0xff8596b5)  // textMuted
+                juce::Colour(0xffafbdc2)  // textMuted
             };
     }
 }

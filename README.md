@@ -11,8 +11,8 @@ Unlike traditional glitch plugins that run continuously or require complex MIDI 
 ## Interface & Look Themes
 
 ### 1. Cyber Neon Edition (Default)
-*Anodized obsidian & brushed gunmetal faceplate, electric cyan and neon magenta LED arcs, 32-step beat sequencer bar, and 10 rotary glitch modules.*
-![openGlitchFX Cyber Neon UI](assets/gui_cyber_neon.jpg)
+*Machined gunmetal faceplate, muted cyan and copper accents, a 32-step beat sequencer, and ten tactile rotary modules.*
+![Actual openGlitchFX analog/cyber editor](assets/analog-cyber-preview.png)
 
 ### 2. Industrial Amber Edition
 *Brushed bronze and dark charcoal chassis with incandescent warm amber/orange LED indicators and 32-step sequencer pads.*
@@ -127,7 +127,7 @@ openGlitchFX/
 │       └── build.yml                  # macOS Universal + Windows MSVC CI, CTest & pluginval
 ├── assets/
 │   ├── alan_marcero_logo.jpg          # Custom Alan Marcero emblem (embedded in plugin & README)
-│   ├── plugin_backdrop.jpg            # Dark cyber-hardware texture (embedded in plugin BinaryData)
+│   ├── analog-cyber-faceplate.png      # Generated machined-metal texture (embedded in BinaryData)
 │   ├── banner.jpg                     # 16:9 README hero banner
 │   ├── gui_cyber_neon.jpg             # Cyber Neon UI theme showcase
 │   ├── gui_industrial_amber.jpg       # Industrial Amber UI theme showcase
