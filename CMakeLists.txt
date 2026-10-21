@@ -33,7 +33,7 @@ if(OGFX_BUILD_PLUGIN)
     juce_add_binary_data(OpenGlitchFXAssets
         SOURCES
             assets/alan_marcero_logo.jpg
-            assets/plugin_backdrop.jpg)
+            assets/analog-cyber-faceplate.png)
     set_target_properties(OpenGlitchFXAssets PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
     juce_add_plugin(openGlitchFX

@@ -8,11 +8,10 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
       detailPanel_(owner, lookAndFeel_) {
     setLookAndFeel(&lookAndFeel_);
 
-    // Load Gemini-generated custom Alan Marcero logo & backdrop texture from BinaryData
     customLogoImage_ = juce::ImageCache::getFromMemory(BinaryData::alan_marcero_logo_jpg,
                                                        BinaryData::alan_marcero_logo_jpgSize);
-    backdropImage_ = juce::ImageCache::getFromMemory(BinaryData::plugin_backdrop_jpg,
-                                                     BinaryData::plugin_backdrop_jpgSize);
+    backdropImage_ = juce::ImageCache::getFromMemory(BinaryData::analogcyberfaceplate_png,
+                                                     BinaryData::analogcyberfaceplate_pngSize);
 
     // Header Look Selector
     themeBox_.addItemList({ "Cyber Neon", "Industrial Amber", "Acid Matrix", "Arctic Glitch" }, 1);
@@ -249,13 +248,12 @@ void OpenGlitchFXEditor::paint(juce::Graphics& g) {
     const float h = static_cast<float>(getHeight());
     const auto& pal = lookAndFeel_.getPalette();
 
-    // 1. Base Gradient + Gemini-Generated Hardware Backdrop Texture
     juce::ColourGradient bgGrad(pal.bgTop, 0.0f, 0.0f, pal.bgBottom, 0.0f, h, false);
     g.setGradientFill(bgGrad);
     g.fillRect(0.0f, 0.0f, w, h);
 
     if (backdropImage_.isValid()) {
-        g.setOpacity(0.28f);
+        g.setOpacity(0.62f);
         g.drawImage(backdropImage_, juce::Rectangle<float>(0.0f, 0.0f, w, h),
                     juce::RectanglePlacement::stretchToFit);
         g.setOpacity(1.0f);
@@ -333,7 +331,7 @@ void OpenGlitchFXEditor::paint(juce::Graphics& g) {
         g.fillRoundedRectangle(r, 6.0f);
 
         if (firingNow || isBrushTarget) {
-            g.setColour((firingNow ? pal.accentSecondary : pal.accentPrimary).withAlpha(0.18f));
+            g.setColour((firingNow ? pal.accentSecondary : pal.accentPrimary).withAlpha(0.1f));
             g.drawRoundedRectangle(r.expanded(1.5f), 7.0f, 2.2f);
         }
 
