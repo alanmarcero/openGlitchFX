@@ -445,6 +445,10 @@ void OpenGlitchFXEditor::paint(juce::Graphics& g) {
             g.drawText("CLIP", clipBadge.toNearestInt(), juce::Justification::centred);
         }
     }
+
+    g.setColour(pal.textMuted);
+    g.setFont(juce::FontOptions(10.0f, juce::Font::plain));
+    g.drawText("v1.1.0", static_cast<int>(w - 180.0f), static_cast<int>(h - 20.0f), 150, 16, juce::Justification::centredRight);
 }
 
 void OpenGlitchFXEditor::resized() {
