@@ -1,27 +1,28 @@
 # openGlitchFX
 
-![openGlitchFX Banner](assets/banner.jpg)
+[Install with OpenVST Manager](https://github.com/alanmarcero/alan-m-OpenVSTManager/releases/latest)
+
+![openGlitchFX native editor](assets/native-ui.png)
+
+*Captured from the released v1.1.0 VST3 editor. [Capture details and provenance](docs/SCREENSHOTS.md).*
 
 **openGlitchFX** is a beat-synchronized multi-glitch VST3 audio processor by **Alan Marcero**.
 
-Unlike traditional glitch plugins that run continuously or require complex MIDI routing and automation lanes, **openGlitchFX** features an integrated **32-Step 4/4 Bar Beat-Synced Enable/Disable Sequencer**. Leave the plugin enabled on your drum bus, synth lead, or master track, and select any of the **32 spots in a 4/4 bar** (down to a single `1/32` note, the last beat of a bar, or custom rhythmic patterns) where the glitch engine engages—passing 100% pristine dry audio everywhere else with click-free micro-crossfade smoothing.
+Unlike traditional glitch plugins that run continuously or require complex MIDI routing and automation lanes, **openGlitchFX** features an integrated **32-Step 4/4 Bar Beat-Synced Enable/Disable Sequencer**. Leave the plugin enabled on your drum bus, synth lead, or master track, and select any of the **32 spots in a 4/4 bar** (down to a single `1/32` note, the last beat of a bar, or custom rhythmic patterns) where the glitch engine engages—passing dry audio between active regions, with smoothing at transitions. Output trim still applies to the dry signal.
 
 ---
 
-## Interface & Look Themes
+## Interface and themes
 
-### 1. Cyber Neon Edition (Default)
-*Machined gunmetal faceplate, muted cyan and copper accents, a 32-step beat sequencer, and ten tactile rotary modules.*
-![Actual openGlitchFX analog/cyber editor](assets/analog-cyber-preview.png)
+The native editor has four selectable color themes: **Cyber Neon** (default), **Industrial Amber**, **Acid Matrix**, and **Arctic Glitch**. The theme is saved with the session and can be automated.
 
-### 2. Industrial Amber Edition
-*Brushed bronze and dark charcoal chassis with incandescent warm amber/orange LED indicators and 32-step sequencer pads.*
-![openGlitchFX Industrial Amber UI](assets/gui_industrial_amber.jpg)
+### Hardware inspiration
 
-### 3. Hardware Controller Inspiration & Custom Branding
-| Studio Hardware Concept | Custom Alan Marcero Emblem |
+These generated concept images show the hardware inspiration and branding; they are not plugin screenshots.
+
+| Studio hardware concept | Alan Marcero emblem |
 | :---: | :---: |
-| ![Studio Hardware](assets/studio_hardware.jpg) | <img src="assets/alan_marcero_logo.jpg" width="280" alt="Alan Marcero Custom Logo" /> |
+| ![Studio hardware concept](assets/studio_hardware.jpg) | <img src="assets/alan_marcero_logo.jpg" width="280" alt="Alan Marcero emblem" /> |
 
 ---
 
@@ -53,7 +54,7 @@ Unlike traditional glitch plugins that run continuously or require complex MIDI 
   - **ALL FX / CLEAR:** Instant FX routing reset or pattern clear.
 - **Sample-Accurate DAW Sync & Anti-Click Gate Envelope:**
   - Locks directly to the DAW host playhead (`PPQ` bar position and `BPM`) or runs on an internal BPM clock when host transport is stopped.
-  - Adjustable **DE-CLICK** smoothing (`0.5 ms` to `25 ms`) ensures zero pops or clicks when transitioning between dry pass-through and active glitch steps, or when switching between different effects on adjacent pads.
+  - Adjustable **DE-CLICK** smoothing (`0.5 ms` to `25 ms`) reduces clicks when transitioning between dry pass-through and active glitch steps, or when switching between different effects on adjacent pads.
   - Automatically triggers buffer capture for time-based effects (`STUTTER`, `TAPE STOP`, `REVERSE`) on the exact sample **that specific effect's** pad assignment transitions from inactive to active.
 
 ---
@@ -68,23 +69,23 @@ Each of the **10 Glitch FX** features a dedicated **Amount Knob (`0% – 100%`)*
 2. **DOWNSAMPLE (Sample Rate Decimator):**
    - Variable sample-and-hold clock divider (`1x` to `59x`) for authentic early-sampler aliasing and vocal/synth crunch.
 3. **STUTTER (Beat Repeat / Buffer Stutter):**
-   - Captures audio at the start of an active step region and loops rhythmic micro-slices (`1/8` beat down to `8 ms` buzz-saw grains) with raised-cosine anti-click windowing.
+   - Captures audio at the start of an active step region and loops a slice with smoothed edges. In KNOB mode, slice duration ranges from a quarter note (capped at 500 ms) down to 22 ms; BUFFER SIZE can select a fixed tempo division instead.
 4. **TAPE STOP (Vinyl Brake):**
-   - Simulates pressing a finger against a spinning tape reel or turntable platter, decelerating playback speed and pitch smoothly to a halt.
+   - Simulates pressing a finger against a spinning tape reel or turntable platter, decelerating playback speed and pitch to a low-speed floor.
 5. **RING MOD (Cybernetic Carrier Modulator):**
-   - Exponentially swept sine carrier oscillator (`45 Hz` to `1600 Hz`) for metallic, robotic, and sci-fi harmonic textures.
+   - Exponentially swept sine-based carrier oscillator (`45 Hz` to `1600 Hz`) for metallic, robotic, and sci-fi harmonic textures.
 
 ### Phase 2 — 5 Additional Glitch FX
 6. **REVERSE (Backwards Grain Player):**
-   - Real-time circular buffer grain reverser that flips incoming audio backwards across Hanning-windowed slices (`220 ms` down to `35 ms`).
+   - Reads recorded dry-audio history backwards across the joined pad span within the available buffer, with raised-cosine fades at the span boundaries. On a cold start it first fills a short buffer.
 7. **CHOPPER (Rhythmic Slicer Gate):**
-   - High-speed tempo-scaled square/trance chopper (`4 Hz` to `48 Hz`) with variable duty cycle and staccato depth.
+   - Tempo-scaled raised-cosine gate. Amount changes rate, depth and shape; longer joined pad spans slow the gate, and high amounts add a stereo phase offset.
 8. **PITCH GLITCH (Octave & Fifth Arpeggiator):**
-   - Dual-head crossfaded granular pitch shifter that jumps across stepped glitch intervals (`+7`, `+12`, `-12`, `+19` semitones).
+   - Dual-head crossfaded granular pitch shifter that cycles toward `+7`, `+12`, `-12`, and `+19` semitones. Full Amount reaches those intervals; lower settings reduce the shifts.
 9. **COMB RESO (Metallic Feedback Resonator):**
    - Short-delay (`1.4 ms` to `14 ms`) high-feedback comb filter with soft-clipped feedback loop for metallic flanging and tuned tube resonances.
 10. **WAVEFOLD (Harmonic Digital Wavefolder):**
-    - Multi-stage trigonometric wavefolder (`sin(drive × x)`) that folds waveform peaks back into complex harmonic overtones.
+    - Sine-based harmonic wavefolder with first-order antiderivative anti-aliasing, DC blocking and tone filtering.
 
 ---
 
@@ -99,7 +100,7 @@ The panel below the FX cards adds four groups of controls.
   - **PITCH / REPEAT:** Pitch change per repeat (`-12` to `+12` semitones).
   - **ADVANCE:** Each repeat starts half a slice later, so the stutter moves forward through the audio.
 - **TAPE (TAPE STOP options):**
-  - **DIRECTION:** `STOP` slows the tape to a halt. `START` spins it up from a standstill.
+  - **DIRECTION:** `STOP` slows the tape toward its low-speed floor. `START` ramps from that floor to normal speed.
   - **CURVE:** `SMOOTH` ramp or `STEPPED` (8 speed steps).
   - **LENGTH:** `PAD SPAN` or a fixed note length (`1/32` to `1 BAR`).
   - **SLIP:** Wow and flutter. **LPF:** Highs roll off as the tape slows. **FADE:** Volume drops as the tape slows.
@@ -128,9 +129,7 @@ openGlitchFX/
 ├── assets/
 │   ├── alan_marcero_logo.jpg          # Custom Alan Marcero emblem (embedded in plugin & README)
 │   ├── analog-cyber-faceplate.png      # Generated machined-metal texture (embedded in BinaryData)
-│   ├── banner.jpg                     # 16:9 README hero banner
-│   ├── gui_cyber_neon.jpg             # Cyber Neon UI theme showcase
-│   ├── gui_industrial_amber.jpg       # Industrial Amber UI theme showcase
+│   ├── native-ui.png                  # Released VST3 editor capture
 │   └── studio_hardware.jpg            # Studio hardware macro concept shot
 ├── Source/
 │   ├── Core/                          # Pure C++20 DSP engine (zero GUI dependencies)
@@ -156,18 +155,29 @@ openGlitchFX/
 
 ---
 
+## Install
+
+1. Download and install [OpenVST Manager](https://github.com/alanmarcero/alan-m-OpenVSTManager/releases/latest) for macOS or Windows.
+2. Open the manager and refresh the catalog.
+3. Choose **openGlitchFX**, select **VST3**, and install.
+4. Rescan plugins in your DAW. If you chose a custom install folder, add it to the DAW's search paths.
+
+Manual downloads: [v1.1.0 release](https://github.com/alanmarcero/openGlitchFX/releases/tag/v1.1.0). Packages contain **VST3 only** for macOS 11+ (universal Apple Silicon/Intel) and Windows x64. Extract and copy the entire `openGlitchFX.vst3` bundle to `~/Library/Audio/Plug-Ins/VST3/` on macOS or `C:\Program Files\Common Files\VST3\` on Windows, then rescan your DAW. macOS builds are signed ad hoc.
+
 ## Building & Testing
 
 ### Prerequisites
-- CMake 3.22+
-- C++20 compatible compiler (MSVC 2022+, Clang 14+, GCC 12+)
+
+CMake 3.22+, Git, and a C++20 compiler (Xcode command-line tools on macOS or Visual Studio 2022 C++ tools on Windows). The first configure downloads JUCE 8.0.9 and Catch2 3.9.1.
 
 ### Build Commands
 ```bash
-cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release --parallel
 ctest --test-dir build -C Release --output-on-failure
 ```
+
+Outputs are in `build/openGlitchFX_artefacts/Release/VST3/`. Add `-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0` when configuring a universal macOS build; use `-A x64` with the Visual Studio generator on Windows. CI builds and validates the VST3 on macOS and Windows.
 
 ---
 
