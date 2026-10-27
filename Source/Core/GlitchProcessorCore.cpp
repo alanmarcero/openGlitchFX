@@ -26,6 +26,11 @@ void GlitchProcessorCore::prepare(double sampleRate) {
     pitchGlitch_.prepare(sampleRate_);
     combResonator_.prepare(sampleRate_);
     wavefolder_.prepare(sampleRate_);
+    chorus_.prepare(sampleRate_);
+    flanger_.prepare(sampleRate_);
+    phaser_.prepare(sampleRate_);
+    pingPong_.prepare(sampleRate_);
+    saturation_.prepare(sampleRate_);
     wetFilter_.prepare(sampleRate_);
 
     reset();
@@ -39,10 +44,17 @@ void GlitchProcessorCore::reset() {
     tapeStop_.reset();
     ringMod_.reset();
     reverseGrain_.reset();
+    reverseSpanSec_ = 0.0;
+    reverseSpanPhase_ = 0.0f;
     chopperGate_.reset();
     pitchGlitch_.reset();
     combResonator_.reset();
     wavefolder_.reset();
+    chorus_.reset();
+    flanger_.reset();
+    phaser_.reset();
+    pingPong_.reset();
+    saturation_.reset();
     wetFilter_.reset();
     heldNotes_.fill(0);
     midiQueueSize_ = 0;
@@ -270,7 +282,12 @@ void GlitchProcessorCore::processBlock(float* leftChannel, float* rightChannel, 
             bpm_, useHostSync_, hasValidHostPpq_, sampleHostPpq, enteredActive, fxTransitionMask);
         lastGate = stepGate;
 
+        auto advanceSilentEcho = [&] {
+            float l = 0.0f, r = 0.0f;
+            pingPong_.processSample(std::max(0.001f, fxAmount_[static_cast<size_t>(GlitchFxId::PingPong)]), bpm_, l, r);
+        };
         if (masterBypassed_) {
+            advanceSilentEcho();
             maxPeakL = std::max(maxPeakL, std::abs(dryL));
             maxPeakR = std::max(maxPeakR, std::abs(dryR));
             continue;
@@ -290,6 +307,7 @@ void GlitchProcessorCore::processBlock(float* leftChannel, float* rightChannel, 
         float outL = dryL;
         float outR = dryR;
 
+        bool echoProcessed = false;
         const float effectiveWet = stepGate * currentMasterMix_;
         if (effectiveWet > 1e-5f) {
             float wetL = dryL;
@@ -338,8 +356,11 @@ void GlitchProcessorCore::processBlock(float* leftChannel, float* rightChannel, 
             });
             applyGatedFx(GlitchFxId::Reverse, [&](float amt, float& l, float& r) {
                 const auto span = sequencer_.getActiveFxSpan(curStep, static_cast<int>(GlitchFxId::Reverse));
-                const double spanSec = static_cast<double>(span.lengthSteps) * secPer32nd;
-                reverseGrain_.processSample(amt, span.spanPhase, spanSec, l, r);
+                if ((sequencer_.getCurrentStepActiveFxMask() & (1u << static_cast<int>(GlitchFxId::Reverse))) != 0u) {
+                    reverseSpanSec_ = static_cast<double>(span.lengthSteps) * secPer32nd;
+                    reverseSpanPhase_ = span.spanPhase;
+                }
+                reverseGrain_.processSample(amt, reverseSpanPhase_, reverseSpanSec_, l, r);
             });
             applyGatedFx(GlitchFxId::TapeStop, [&](float amt, float& l, float& r) {
                 const auto span = sequencer_.getActiveFxSpan(curStep, static_cast<int>(GlitchFxId::TapeStop));
@@ -376,6 +397,23 @@ void GlitchProcessorCore::processBlock(float* leftChannel, float* rightChannel, 
                 chopperGate_.processSample(amt, bpm_, span.lengthSteps, l, r);
             });
 
+            applyGatedFx(GlitchFxId::Chorus, [&](float amt, float& l, float& r) {
+                chorus_.processSample(ModulatedDelayEffect::Mode::Chorus, amt, l, r);
+            });
+            applyGatedFx(GlitchFxId::Flanger, [&](float amt, float& l, float& r) {
+                flanger_.processSample(ModulatedDelayEffect::Mode::Flanger, amt, l, r);
+            });
+            applyGatedFx(GlitchFxId::Phaser, [&](float amt, float& l, float& r) {
+                phaser_.processSample(amt, l, r);
+            });
+            applyGatedFx(GlitchFxId::PingPong, [&](float amt, float& l, float& r) {
+                pingPong_.processSample(amt, bpm_, l, r);
+                echoProcessed = true;
+            });
+            applyGatedFx(GlitchFxId::Saturation, [&](float amt, float& l, float& r) {
+                saturation_.processSample(amt, l, r);
+            });
+
             // 4. Filter, volume and pan
             const float filterMod = modulation(EnvTarget::Filter, 1.0f);
             const float cutoff = filterCutoffHz_ * std::exp2(8.0f * (filterMod - 1.0f));
@@ -393,6 +431,8 @@ void GlitchProcessorCore::processBlock(float* leftChannel, float* rightChannel, 
             outL = dryL * currentMasterGainLinear_;
             outR = dryR * currentMasterGainLinear_;
         }
+
+        if (!echoProcessed) advanceSilentEcho();
 
         outL = softCeiling(outL);
         outR = softCeiling(outR);

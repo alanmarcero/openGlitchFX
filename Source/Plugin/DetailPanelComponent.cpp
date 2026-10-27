@@ -69,7 +69,7 @@ DetailPanelComponent::DetailPanelComponent(OpenGlitchFXProcessor& processor, con
     setupBar(filterCutoffSlider_, kFilterCutoff, "CUTOFF", "Filter cutoff frequency.");
     setupBar(filterResoSlider_, kFilterReso, "RESONANCE", "Filter resonance.");
     setupCombo(triggerModeBox_, kTriggerMode, "TRIGGER",
-               "SEQUENCER uses the 32 pads. MIDI ignores the pads: any note triggers every FX, notes 60-69 trigger one FX each.");
+               "SEQUENCER uses the 32 pads. MIDI ignores the pads: any note triggers every FX, notes 60-74 trigger one FX each.");
     setupCombo(triggerStartBox_, kTriggerStart, "MIDI START",
                "FREE starts on the note. SYNCED waits for the next 1/32 step.");
     setupCombo(mixModeBox_, kMixMode, "DRY/WET",

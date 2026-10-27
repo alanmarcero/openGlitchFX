@@ -54,7 +54,7 @@ private:
     juce::TextButton presetResetFxBtn_{ "ALL FX" };
     juce::TextButton presetClearBtn_{ "CLEAR" };
 
-    // 10 Glitch FX Slot UI (2 rows x 5 columns)
+    // 15 Glitch FX Slot UI (3 rows x 5 columns)
     struct FxSlotUi {
         juce::String title;
         juce::String subtitle;
@@ -65,7 +65,7 @@ private:
         juce::Rectangle<float> cardBounds;
     };
 
-    static constexpr int kNumUiFx = 10;
+    static constexpr int kNumUiFx = openglitch::core::GlitchProcessorCore::kNumEffects;
     std::array<FxSlotUi, kNumUiFx> fxSlots_;
 
     // Master Output Strip Controls & Live Telemetry Meter

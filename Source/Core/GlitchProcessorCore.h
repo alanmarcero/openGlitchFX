@@ -23,7 +23,13 @@ enum class GlitchFxId : int {
     CombReso = 8,
     Wavefold = 9,
 
-    Count = 10
+    Chorus = 10,
+    Flanger = 11,
+    Phaser = 12,
+    PingPong = 13,
+    Saturation = 14,
+
+    Count = 15
 };
 
 enum class MixMode : int { Insert = 0, Parallel };
@@ -35,7 +41,7 @@ inline constexpr std::array<double, 7> kNoteLengthBeats = { 0.0, 0.125, 0.25, 0.
 // In beats. Index 0 lets the amount knob set the slice.
 inline constexpr std::array<double, 6> kStutterSliceBeats = { 0.0, 1.0, 0.5, 0.25, 0.125, 0.0625 };
 
-// Notes 60..69 trigger one FX each. Other notes trigger all FX.
+// Notes 60..74 trigger one FX each. Other notes trigger all FX.
 inline constexpr int kMidiSoloBaseNote = 60;
 
 struct MeterTelemetry {
@@ -62,7 +68,7 @@ public:
     void prepare(double sampleRate);
     void reset();
 
-    // 32-Step Sequencer access (global step enable + per-step 10-FX assignment bitmask)
+    // 32-Step Sequencer access (global step enable + per-step 15-FX assignment bitmask)
     void setStep(int stepIndex, bool enabled);
     bool getStep(int stepIndex) const;
     void setStepFxMask(int stepIndex, uint16_t fxMask);
@@ -140,10 +146,17 @@ private:
 
     // Phase 2: 5 Additional Glitch FX (10 Total)
     ReverseGrainEffect reverseGrain_;
+    double reverseSpanSec_ = 0.0;
+    float reverseSpanPhase_ = 0.0f;
     ChopperGateEffect chopperGate_;
     PitchGlitchEffect pitchGlitch_;
     CombResonatorEffect combResonator_;
     WavefolderEffect wavefolder_;
+    ModulatedDelayEffect chorus_;
+    ModulatedDelayEffect flanger_;
+    PhaserEffect phaser_;
+    PingPongEchoEffect pingPong_;
+    SaturationEffect saturation_;
     WetFilter wetFilter_;
 
     StutterSettings stutterSettings_{};

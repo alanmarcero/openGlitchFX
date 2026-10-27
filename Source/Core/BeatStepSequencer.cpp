@@ -22,9 +22,9 @@ void BeatStepSequencer::reset() {
     currentStep_ = 0;
     currentBarPhase_ = 0.0;
     const uint16_t activeMask0 = getEffectiveStepFxMask(0);
-    wasActiveStep_ = (activeMask0 != 0u);
-    wasActiveFxMask_ = activeMask0;
-    envelope_ = wasActiveStep_ ? 1.0f : 0.0f;
+    wasActiveStep_ = false;
+    wasActiveFxMask_ = 0u;
+    envelope_ = activeMask0 != 0u ? 1.0f : 0.0f;
     for (int fx = 0; fx < kNumFxSlots; ++fx) {
         const bool fxOn = ((activeMask0 >> fx) & 1u) != 0u;
         fxEnvelopes_[static_cast<size_t>(fx)] = fxOn ? 1.0f : 0.0f;
@@ -175,25 +175,7 @@ StepSpanInfo BeatStepSequencer::getMergedPadSpan(int stepIndex) const {
         return { stepIndex, stepIndex, 1, 0.0f };
     }
 
-    int start = stepIndex;
-    while (start > 0 && getEffectiveStepFxMask(start - 1) == mask) {
-        --start;
-    }
-
-    int end = stepIndex;
-    while (end + 1 < kNumSteps && getEffectiveStepFxMask(end + 1) == mask) {
-        ++end;
-    }
-
-    const int len = end - start + 1;
-    float spanPhase = 0.0f;
-    if (currentStep_ >= start && currentStep_ <= end) {
-        const double stepStartPhase = static_cast<double>(start) / static_cast<double>(kNumSteps);
-        const double spanTotalPhase = static_cast<double>(len) / static_cast<double>(kNumSteps);
-        spanPhase = static_cast<float>(std::clamp((currentBarPhase_ - stepStartPhase) / spanTotalPhase, 0.0, 1.0));
-    }
-
-    return { start, end, len, spanPhase };
+    return getCircularSpan(stepIndex, mask, true);
 }
 
 StepSpanInfo BeatStepSequencer::getActiveFxSpan(int stepIndex, int fxIndex) const {
@@ -210,41 +192,34 @@ StepSpanInfo BeatStepSequencer::getActiveFxSpan(int stepIndex, int fxIndex) cons
         return { stepIndex, stepIndex, 1, 0.0f };
     }
 
+    return getCircularSpan(stepIndex, bit, false);
+}
+
+StepSpanInfo BeatStepSequencer::getCircularSpan(int stepIndex, uint16_t mask, bool exactMask) const {
+    const auto matches = [&](int step) {
+        const uint16_t candidate = getEffectiveStepFxMask(step);
+        return exactMask ? candidate == mask : (candidate & mask) != 0u;
+    };
     int start = stepIndex;
-    while (start > 0 && (getEffectiveStepFxMask(start - 1) & bit) != 0u) {
-        --start;
+    int len = 1;
+    while (len < kNumSteps) {
+        const int previous = (start + kNumSteps - 1) % kNumSteps;
+        if (!matches(previous)) break;
+        start = previous;
+        ++len;
     }
-
-    int end = stepIndex;
-    while (end + 1 < kNumSteps && (getEffectiveStepFxMask(end + 1) & bit) != 0u) {
-        ++end;
-    }
-
-    int len = end - start + 1;
-    // If all 32 steps are enabled, or the span touches the bar boundary and wraps around into the next bar,
-    // extend the logical span duration so effects sustain across bar boundaries too!
-    if (len < kNumSteps) {
-        if (start == 0) {
-            int tail = kNumSteps - 1;
-            while (tail > end && (getEffectiveStepFxMask(tail) & bit) != 0u) {
-                --tail;
-                ++len;
-            }
-        } else if (end == kNumSteps - 1) {
-            int head = 0;
-            while (head < start && (getEffectiveStepFxMask(head) & bit) != 0u) {
-                ++head;
-                ++len;
-            }
+    if (len == kNumSteps) {
+        start = 0;
+    } else {
+        int next = (stepIndex + 1) % kNumSteps;
+        while (len < kNumSteps && matches(next)) {
+            ++len;
+            next = (next + 1) % kNumSteps;
         }
     }
-
-    float spanPhase = 0.0f;
-    if (currentStep_ >= start && currentStep_ <= end) {
-        const double stepStartPhase = static_cast<double>(start) / static_cast<double>(kNumSteps);
-        const double spanTotalPhase = static_cast<double>(end - start + 1) / static_cast<double>(kNumSteps);
-        spanPhase = static_cast<float>(std::clamp((currentBarPhase_ - stepStartPhase) / spanTotalPhase, 0.0, 1.0));
-    }
+    const int end = (start + len - 1) % kNumSteps;
+    const double offset = std::fmod(currentBarPhase_ * kNumSteps - start + kNumSteps, kNumSteps);
+    const float spanPhase = offset < len ? static_cast<float>(offset / len) : 0.0f;
 
     return { start, end, len, spanPhase };
 }

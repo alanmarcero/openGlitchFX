@@ -27,8 +27,8 @@ struct StepSpanInfo {
 class BeatStepSequencer {
 public:
     static constexpr int kNumSteps = 32;
-    static constexpr int kNumFxSlots = 10;
-    static constexpr uint16_t kAllFxMask = (1u << kNumFxSlots) - 1u; // 0x03FF (all 10 FX enabled on pad)
+    static constexpr int kNumFxSlots = 15;
+    static constexpr uint16_t kAllFxMask = (1u << kNumFxSlots) - 1u; // all 15 FX enabled on pad
     static constexpr double kQuarterNotesPerBar = 4.0; // 4/4 bar
 
     BeatStepSequencer();
@@ -40,7 +40,7 @@ public:
     void setStep(int stepIndex, bool enabled);
     bool getStep(int stepIndex) const;
 
-    // Per-step FX assignment bitmask (bits 0..9 correspond to the 10 Glitch FX)
+    // Per-step FX assignment bitmask (bits 0..14 correspond to the 15 Glitch FX)
     void setStepFxMask(int stepIndex, uint16_t fxMask);
     uint16_t getStepFxMask(int stepIndex) const;
     void setStepFxEnabled(int stepIndex, int fxIndex, bool enabled);
@@ -95,6 +95,7 @@ private:
     void updateSmoothingCoeff();
     uint16_t getEffectiveStepFxMask(int stepIndex) const;
     StepSpanInfo getExternalSpan() const;
+    StepSpanInfo getCircularSpan(int stepIndex, uint16_t mask, bool exactMask) const;
 
     double sampleRate_ = 44100.0;
     double internalPpq_ = 0.0;

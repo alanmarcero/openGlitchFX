@@ -5,6 +5,7 @@
 namespace openglitch::ui {
 
 namespace {
+constexpr int kNumFx = openglitch::core::BeatStepSequencer::kNumFxSlots;
 constexpr uint16_t kAllFx = openglitch::core::BeatStepSequencer::kAllFxMask;
 } // namespace
 
@@ -35,19 +36,19 @@ void StepSequencerComponent::setMidiTriggerMode(bool midiMode) {
 
 juce::String StepSequencerComponent::getTooltip() {
     if (midiMode_) {
-        return "TRIGGER is set to MIDI, so the pads are ignored. Notes 60-69 trigger one FX each; any other note triggers every FX.";
+        return "TRIGGER is set to MIDI, so the pads are ignored. Notes 60-74 trigger one FX each; any other note triggers every FX.";
     }
     return "Click a pad to turn it on or off, drag to paint. Right-click for its FX routing. "
            "Adjacent pads with the same FX join into one block, and time-based FX run once across the block.";
 }
 
 void StepSequencerComponent::setPaintTargetFx(int fxIndex) {
-    paintTargetFx_ = std::clamp(fxIndex, -1, 9);
+    paintTargetFx_ = std::clamp(fxIndex, -1, kNumFx - 1);
     repaint();
 }
 
 int StepSequencerComponent::countStepsRoutingToFx(int fxIndex) const {
-    if (fxIndex < 0 || fxIndex >= 10) {
+    if (fxIndex < 0 || fxIndex >= kNumFx) {
         return 0;
     }
     const uint16_t bit = static_cast<uint16_t>(1u << fxIndex);
@@ -79,11 +80,7 @@ void StepSequencerComponent::setStepParam(int stepIndex, bool state) {
 
 uint16_t StepSequencerComponent::getStepFxMaskParam(int stepIndex) const {
     if (stepIndex < 0 || stepIndex >= 32) return kAllFx;
-    if (auto* raw = apvts_.getRawParameterValue(openglitch::params::stepFxParamId(stepIndex))) {
-        const int val = static_cast<int>(std::round(raw->load()));
-        return static_cast<uint16_t>(std::clamp(val, 0, static_cast<int>(kAllFx))) & kAllFx;
-    }
-    return kAllFx;
+    return openglitch::params::readStepFxMask(apvts_, stepIndex);
 }
 
 uint16_t StepSequencerComponent::getEffectiveStepFxMask(int stepIndex) const {
@@ -115,16 +112,21 @@ StepSequencerComponent::ContiguousRun StepSequencerComponent::findContiguousRun(
 void StepSequencerComponent::setStepFxMaskParam(int stepIndex, uint16_t mask) {
     if (stepIndex < 0 || stepIndex >= 32) return;
     const uint16_t clamped = mask & kAllFx;
-    if (auto* param = apvts_.getParameter(openglitch::params::stepFxParamId(stepIndex))) {
-        const float norm = param->convertTo0to1(static_cast<float>(clamped));
-        param->beginChangeGesture();
-        param->setValueNotifyingHost(norm);
-        param->endChangeGesture();
+    const std::array<juce::String, 2> ids = { openglitch::params::stepFxParamId(stepIndex),
+                                            openglitch::params::stepExtraFxParamId(stepIndex) };
+    const std::array<uint16_t, 2> values = { static_cast<uint16_t>(clamped & 1023u),
+                                           static_cast<uint16_t>(clamped >> 10) };
+    for (size_t i = 0; i < ids.size(); ++i) {
+        if (auto* param = apvts_.getParameter(ids[i])) {
+            param->beginChangeGesture();
+            param->setValueNotifyingHost(param->convertTo0to1(static_cast<float>(values[i])));
+            param->endChangeGesture();
+        }
     }
 }
 
 void StepSequencerComponent::ensureFxAudible(int fxIndex) {
-    if (fxIndex < 0 || fxIndex >= 10) return;
+    if (fxIndex < 0 || fxIndex >= kNumFx) return;
     const auto& desc = openglitch::params::kFxDescriptors[static_cast<size_t>(fxIndex)];
 
     if (auto* onParam = apvts_.getParameter(desc.onParamId)) {
@@ -152,7 +154,7 @@ void StepSequencerComponent::applyPreset(openglitch::core::StepPatternPreset pre
     for (int i = 0; i < 32; ++i) {
         const bool stepOn = tempSeq.getStep(i);
         setStepParam(i, stepOn);
-        if (stepOn && paintTargetFx_ >= 0 && paintTargetFx_ < 10) {
+        if (stepOn && paintTargetFx_ >= 0 && paintTargetFx_ < kNumFx) {
             setStepFxMaskParam(i, static_cast<uint16_t>(1u << paintTargetFx_));
             ensureFxAudible(paintTargetFx_);
         } else if (stepOn && getStepFxMaskParam(i) == 0u) {
@@ -285,12 +287,12 @@ void StepSequencerComponent::showStepContextMenu(int step) {
         ? juce::String::formatted("Combined Block (Pads %02d-%02d)", run.startStep + 1, run.endStep + 1)
         : juce::String::formatted("Pad %02d", step + 1);
 
-    menu.addItem(1, "Enable ALL 10 FX on " + targetLabel, true, stepOn && mask == kAllFx);
+    menu.addItem(1, "Enable ALL 15 FX on " + targetLabel, true, stepOn && mask == kAllFx);
     menu.addItem(2, "Disable " + targetLabel + " (Dry Pass-Through)", true, !stepOn);
 
     menu.addSeparator();
     menu.addSectionHeader("SOLO SINGLE EFFECT ON " + targetLabel.toUpperCase());
-    for (int fx = 0; fx < 10; ++fx) {
+    for (int fx = 0; fx < kNumFx; ++fx) {
         const auto& desc = openglitch::params::kFxDescriptors[static_cast<size_t>(fx)];
         const uint16_t singleBit = static_cast<uint16_t>(1u << fx);
         const bool isSoloed = stepOn && (mask == singleBit);
@@ -302,7 +304,7 @@ void StepSequencerComponent::showStepContextMenu(int step) {
 
     menu.addSeparator();
     menu.addSectionHeader("TOGGLE MULTI-FX ON " + targetLabel.toUpperCase());
-    for (int fx = 0; fx < 10; ++fx) {
+    for (int fx = 0; fx < kNumFx; ++fx) {
         const auto& desc = openglitch::params::kFxDescriptors[static_cast<size_t>(fx)];
         const uint16_t bit = static_cast<uint16_t>(1u << fx);
         const bool fxChecked = stepOn && ((mask & bit) != 0u);
@@ -315,7 +317,7 @@ void StepSequencerComponent::showStepContextMenu(int step) {
     if (isMergedGroup) {
         juce::PopupMenu splitSubMenu;
         splitSubMenu.addItem(400, juce::String::formatted("Disable Only Pad %02d (Split Block)", step + 1));
-        for (int fx = 0; fx < 10; ++fx) {
+        for (int fx = 0; fx < kNumFx; ++fx) {
             const auto& desc = openglitch::params::kFxDescriptors[static_cast<size_t>(fx)];
             splitSubMenu.addItem(410 + fx,
                                  juce::String::formatted("Solo %s (%s) on Only Pad %02d", desc.name, desc.shortCode, step + 1));
@@ -348,11 +350,11 @@ void StepSequencerComponent::showStepContextMenu(int step) {
             for (int s = applyStart; s <= applyEnd; ++s) {
                 setStepParam(s, false);
             }
-        } else if (result >= 100 && result < 110) {
+        } else if (result >= 100 && result < 100 + kNumFx) {
             const int fx = result - 100;
             ensureFxAudible(fx);
             applyToRange(static_cast<uint16_t>(1u << fx), true);
-        } else if (result >= 200 && result < 210) {
+        } else if (result >= 200 && result < 200 + kNumFx) {
             const int fx = result - 200;
             const uint16_t bit = static_cast<uint16_t>(1u << fx);
             uint16_t baseMask = stepOn ? mask : 0u;
@@ -376,7 +378,7 @@ void StepSequencerComponent::showStepContextMenu(int step) {
             }
         } else if (result == 400) {
             setStepParam(step, false);
-        } else if (result >= 410 && result < 420) {
+        } else if (result >= 410 && result < 410 + kNumFx) {
             const int fx = result - 410;
             ensureFxAudible(fx);
             setStepFxMaskParam(step, static_cast<uint16_t>(1u << fx));
@@ -443,7 +445,7 @@ juce::String StepSequencerComponent::formatStepFxBadge(uint16_t mask, int spanLe
     if (mask != kAllFx) {
         const int count = std::popcount(mask);
         if (count == 1) {
-            for (int fx = 0; fx < 10; ++fx) {
+            for (int fx = 0; fx < kNumFx; ++fx) {
                 if ((mask & (1u << fx)) != 0u) {
                     const auto& desc = openglitch::params::kFxDescriptors[static_cast<size_t>(fx)];
                     fxText = (spanLen >= 4) ? juce::String(desc.name) : juce::String(desc.shortCode);
@@ -452,7 +454,7 @@ juce::String StepSequencerComponent::formatStepFxBadge(uint16_t mask, int spanLe
             }
         } else if (count == 2 && spanLen >= 2) {
             juce::StringArray codes;
-            for (int fx = 0; fx < 10; ++fx) {
+            for (int fx = 0; fx < kNumFx; ++fx) {
                 if ((mask & (1u << fx)) != 0u) {
                     codes.add(openglitch::params::kFxDescriptors[static_cast<size_t>(fx)].shortCode);
                 }
@@ -649,15 +651,15 @@ void StepSequencerComponent::paint(juce::Graphics& g) {
         g.setFont(juce::FontOptions(runLen >= 2 ? 9.5f : 8.5f, juce::Font::bold));
         g.drawText(formatStepFxBadge(runMask, runLen), badgeRect.toNearestInt(), juce::Justification::centred);
 
-        // Unified 2x5 Mini LED Dot Matrix centered at the bottom of the combined block
+        // Unified 3x5 Mini LED Dot Matrix centered at the bottom of the combined block
         const float maxMatrixW = std::min(mergedRect.getWidth() - 6.0f, 80.0f);
         juce::Rectangle<float> matrixArea(mergedRect.getCentreX() - maxMatrixW * 0.5f,
-                                          mergedRect.getBottom() - 15.0f,
+                                          mergedRect.getBottom() - 21.0f,
                                           maxMatrixW,
-                                          12.0f);
+                                          18.0f);
         const float cellW = matrixArea.getWidth() / 5.0f;
-        const float cellH = matrixArea.getHeight() / 2.0f;
-        for (int fx = 0; fx < 10; ++fx) {
+        const float cellH = matrixArea.getHeight() / 3.0f;
+        for (int fx = 0; fx < kNumFx; ++fx) {
             const int mRow = fx / 5;
             const int mCol = fx % 5;
             const float dx = matrixArea.getX() + static_cast<float>(mCol) * cellW + cellW * 0.5f;
@@ -694,7 +696,7 @@ void StepSequencerComponent::paint(juce::Graphics& g) {
         g.fillRoundedRectangle(grid, 5.0f);
         g.setColour(pal.textBright);
         g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
-        g.drawText("TRIGGER: MIDI  |  PADS IGNORED  |  NOTES 60-69 = ONE FX EACH, OTHER NOTES = ALL FX",
+        g.drawText("TRIGGER: MIDI  |  PADS IGNORED  |  NOTES 60-74 = ONE FX EACH, OTHER NOTES = ALL FX",
                    grid.toNearestInt(), juce::Justification::centred);
     }
 }

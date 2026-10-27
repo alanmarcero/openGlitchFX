@@ -28,6 +28,48 @@ float computeRmsDifference(const std::vector<float>& a, const std::vector<float>
 
 } // namespace
 
+TEST_CASE("Reverse reads the whole region backwards without short loops", "[core][reverse][span]") {
+    for (double duration : { 0.025, 0.5, 6.0, 12.0 }) {
+        INFO("Span seconds " << duration);
+        constexpr double sr = 8000;
+        const int length = static_cast<int>(sr * duration);
+        ReverseGrainEffect reverse;
+        reverse.prepare(sr);
+        for (int i = 0; i < length; ++i) reverse.recordDrySample(0.2f + 0.6f * i / length, -0.2f - 0.6f * i / length);
+        reverse.triggerGrain();
+        for (int i = 0; i < length; ++i) {
+            reverse.recordDrySample(-0.9f, 0.9f);
+            float l = 0, r = 0;
+            reverse.processSample(1, static_cast<float>(i) / length, duration, l, r);
+            if (i > length / 8 && i < length * 7 / 8) {
+                const float expected = 0.2f + 0.6f * (length - 1 - i) / length;
+                REQUIRE_THAT(l, Catch::Matchers::WithinAbs(expected, 1e-5));
+                REQUIRE_THAT(r, Catch::Matchers::WithinAbs(-expected, 1e-5));
+            }
+        }
+    }
+}
+
+TEST_CASE("Cold reverse captures a complete span instead of repeating tiny grains", "[core][reverse][span]") {
+    ReverseGrainEffect reverse;
+    reverse.prepare(8000);
+    reverse.triggerGrain();
+    for (int i = 0; i < 4000; ++i) {
+        const float dry = 0.2f + 0.6f * i / 4000;
+        float l = dry, r = -dry;
+        reverse.processSample(1, static_cast<float>(i) / 4000, 0.5, l, r);
+        reverse.recordDrySample(dry, -dry);
+        REQUIRE(l == dry);
+        REQUIRE(r == -dry);
+    }
+    for (int i = 0; i < 4000; ++i) {
+        float l = 0, r = 0;
+        reverse.processSample(1, static_cast<float>(i) / 4000, 0.5, l, r);
+        reverse.recordDrySample(0, 0);
+        if (i > 500 && i < 3500) REQUIRE_THAT(l, Catch::Matchers::WithinAbs(0.2 + 0.6 * (3999 - i) / 4000, 1e-5));
+    }
+}
+
 TEST_CASE("GlitchProcessorCore passes dry audio when current beat step is disabled", "[core]") {
     constexpr double kSr = 48000.0;
     constexpr int kN = 512;
@@ -55,24 +97,11 @@ TEST_CASE("GlitchProcessorCore passes dry audio when current beat step is disabl
     }
 }
 
-TEST_CASE("All 10 Glitch FX (Phase 1 + Phase 2) modify signal when beat step is enabled", "[core][fx]") {
+TEST_CASE("Every FX modifies audio when routed and passes dry audio at zero amount", "[core][fx]") {
     constexpr double kSr = 48000.0;
-    constexpr int kN = 4096;
 
-    const std::array<GlitchFxId, 10> allFx = {
-        GlitchFxId::Bitcrush,
-        GlitchFxId::Downsample,
-        GlitchFxId::Stutter,
-        GlitchFxId::TapeStop,
-        GlitchFxId::RingMod,
-        GlitchFxId::Reverse,
-        GlitchFxId::Chopper,
-        GlitchFxId::PitchGlitch,
-        GlitchFxId::CombReso,
-        GlitchFxId::Wavefold
-    };
-
-    for (auto fx : allFx) {
+    for (int index = 0; index < 15; ++index) {
+        const auto fx = static_cast<GlitchFxId>(index);
         GlitchProcessorCore core;
         core.prepare(kSr);
         core.applyPatternPreset(StepPatternPreset::AllOn);
@@ -82,18 +111,28 @@ TEST_CASE("All 10 Glitch FX (Phase 1 + Phase 2) modify signal when beat step is 
         }
         core.setEffectEnabled(fx, true);
         core.setEffectAmount(fx, 0.85f);
-        core.setTransport(120.0, true, true, 3.1); // Beat 4 active
-
-        std::vector<float> dryL(kN), dryR(kN);
+        core.setAllSteps(false);
+        core.setGateSmoothingMs(0);
+        std::vector<float> historyL(96000), historyR(96000);
+        fillSineStereo(historyL, historyR, kSr, 217.0);
+        core.setTransport(120, true, true, -4);
+        core.processBlock(historyL.data(), historyR.data(), static_cast<int>(historyL.size()));
+        core.setAllSteps(true);
+        core.setTransport(120, true, true, 0);
+        std::vector<float> dryL(24000), dryR(24000);
         fillSineStereo(dryL, dryR, kSr, 330.0);
         auto wetL = dryL;
         auto wetR = dryR;
-
-        core.processBlock(wetL.data(), wetR.data(), kN);
+        core.processBlock(wetL.data(), wetR.data(), static_cast<int>(wetL.size()));
 
         const float diff = computeRmsDifference(dryL, wetL);
         INFO("Testing FX ID: " << static_cast<int>(fx));
         REQUIRE(diff > 0.01f);
+        core.setEffectAmount(fx, 0);
+        wetL = dryL;
+        wetR = dryR;
+        core.processBlock(wetL.data(), wetR.data(), static_cast<int>(wetL.size()));
+        REQUIRE(computeRmsDifference(dryL, wetL) < 1e-6f);
     }
 }
 
@@ -209,7 +248,7 @@ TEST_CASE("Linked adjacent 1/32 pads sustain effects continuously across step bo
     REQUIRE(sumSqStep25 < sumSqStep24);
 }
 
-TEST_CASE("ReverseGrainEffect outputs full reversed waveform energy on both cold start and pre-warmed history", "[core][reverse]") {
+TEST_CASE("ReverseGrainEffect plays recorded history when the input becomes silent", "[core][reverse]") {
     constexpr double kSr = 48000.0;
     constexpr int kN = 3000;
 
@@ -509,4 +548,198 @@ TEST_CASE("Wavefolder antiderivative anti-aliasing keeps folded harmonics from a
         (khz % 7 == 0 ? harmonics : aliases) += power(khz * 1000.0);
     }
     REQUIRE(10.0 * std::log10(aliases / harmonics) < -30.0);
+}
+
+TEST_CASE("Every FX keeps its audio continuous across mixed routing and the bar line", "[core][span]") {
+    for (int fx = 0; fx < GlitchProcessorCore::kNumEffects; ++fx) {
+        INFO("FX slot " << fx);
+        auto render = [&](int start, bool mixed, int blockSize) {
+            GlitchProcessorCore core;
+            core.setAllStepsFxMask(0);
+            for (int i = 0; i < 8; ++i) {
+                const auto mask = static_cast<uint16_t>((1u << fx) | (mixed && i % 2 ? 1u << ((fx + 1) % 15) : 0));
+                core.setStepFxMask((start + i) % 32, mask);
+            }
+            core.prepare(8000);
+            core.setGateSmoothingMs(0);
+            core.setEffectAmount(static_cast<GlitchFxId>(fx), 0.9f);
+            std::vector<float> l(4000), r(4000);
+            fillSineStereo(l, r, 8000, 113);
+            core.setTransport(120, true, true, start * 0.125 - 1);
+            core.processBlock(l.data(), r.data(), 4000);
+            fillSineStereo(l, r, 8000, 219);
+            for (int offset = 0; offset < 4000; offset += blockSize) {
+                core.setTransport(120, true, true, start * 0.125 + offset / 4000.0);
+                core.processBlock(l.data() + offset, r.data() + offset, std::min(blockSize, 4000 - offset));
+            }
+            l.insert(l.end(), r.begin(), r.end());
+            return l;
+        };
+        const auto reference = render(8, false, 4000);
+        REQUIRE(computeRmsDifference(reference, render(8, true, 127)) < 1e-5f);
+        REQUIRE(computeRmsDifference(reference, render(28, true, 193)) < 1e-5f);
+    }
+}
+
+TEST_CASE("Tape braking lasts the entire slow-tempo pad span", "[core][tapestop]") {
+    TapeStopEffect tape;
+    tape.prepare(8000);
+    tape.triggerBrake();
+    TapeStopSettings settings;
+    settings.lowpass = false;
+    float l = 0, r = 0;
+    for (int i = 0; i <= 48000; ++i) {
+        l = r = 1;
+        tape.processSample(1, 12, settings, l, r);
+    }
+    REQUIRE_THAT(l, Catch::Matchers::WithinAbs(std::pow(0.5098, 0.36), 1e-4));
+}
+
+TEST_CASE("Stutter honors a quarter-note capture at 20 BPM", "[core][stutter]") {
+    BufferStutter stutter;
+    stutter.prepare(8000);
+    StutterSettings settings;
+    settings.syncedSliceBeats = 1;
+    for (int i = 0; i < 24000; ++i) {
+        const float dry = 0.2f + i / 48000.0f;
+        float l = dry, r = dry;
+        stutter.processSample(1, 20, settings, l, r);
+        REQUIRE(l == dry);
+    }
+    float l = 0, r = 0;
+    stutter.processSample(1, 20, settings, l, r);
+    REQUIRE(l > 0);
+}
+
+TEST_CASE("Ping-pong echoes alternate sides for a centered impulse", "[core][echo]") {
+    PingPongEchoEffect echo;
+    echo.prepare(8000);
+    std::vector<float> l(6100), r(6100);
+    l[0] = r[0] = 1;
+    for (size_t i = 0; i < l.size(); ++i) echo.processSample(1, 120, l[i], r[i]);
+    REQUIRE(l[2000] > 0.5f);
+    REQUIRE(std::abs(r[2000]) < 1e-6f);
+    REQUIRE(r[4000] > 0.1f);
+    REQUIRE(std::abs(l[4000]) < 1e-6f);
+    REQUIRE(l[6000] > 0.05f);
+}
+
+TEST_CASE("Echo delay time keeps advancing through disabled pads", "[core][echo]") {
+    GlitchProcessorCore core;
+    core.setAllStepsFxMask(0);
+    core.setStepFxMask(0, 1u << static_cast<int>(GlitchFxId::PingPong));
+    core.setStepFxMask(4, 1u << static_cast<int>(GlitchFxId::PingPong));
+    core.prepare(8000);
+    core.setGateSmoothingMs(0);
+    core.setEffectAmount(GlitchFxId::PingPong, 1);
+    core.setTransport(120, true, true, 0);
+    std::vector<float> l(2500), r(2500);
+    l[0] = r[0] = 1;
+    core.processBlock(l.data(), r.data(), 2500);
+    REQUIRE(l[2000] > 0.5f);
+    for (int i = 500; i < 2000; ++i) REQUIRE(l[i] == 0.0f);
+}
+
+TEST_CASE("Cold reverse fades from dry into the first available long reversal", "[core][reverse]") {
+    GlitchProcessorCore core;
+    core.prepare(8000);
+    core.setEffectAmount(GlitchFxId::Reverse, 1);
+    core.setTransport(120, true, true, 0);
+    std::vector<float> l(16100, 0.5f), r = l;
+    core.processBlock(l.data(), r.data(), static_cast<int>(l.size()));
+    for (int i = 15980; i < 16080; ++i) REQUIRE(std::abs(l[i] - l[i - 1]) < 0.05f);
+}
+
+TEST_CASE("Extending an active reverse region does not restart at its old length", "[core][reverse]") {
+    ReverseGrainEffect reverse;
+    reverse.prepare(8000);
+    for (int i = 0; i < 8000; ++i) reverse.recordDrySample(0.2f + 0.6f * i / 8000, 0);
+    reverse.triggerGrain();
+    for (int i = 0; i < 8000; ++i) {
+        const double duration = i < 2000 ? 0.5 : 1.0;
+        float l = 0, r = 0;
+        reverse.processSample(1, static_cast<float>(i / (duration * 8000)), duration, l, r);
+        reverse.recordDrySample(0, 0);
+        if (i > 3000 && i < 7000) REQUIRE_THAT(l, Catch::Matchers::WithinAbs(0.2 + 0.6 * (7999 - i) / 8000, 1e-5));
+    }
+}
+
+TEST_CASE("Wavefolder retains the same bass response at different sample rates", "[core][wavefold]") {
+    double reference = 0;
+    for (double sr : { 44100.0, 48000.0, 96000.0, 192000.0 }) {
+        WavefolderEffect folder;
+        folder.prepare(sr);
+        double energy = 0;
+        for (int i = 0; i < static_cast<int>(sr); ++i) {
+            float l = 0.01f * static_cast<float>(std::sin(2.0 * std::numbers::pi * 50.0 * i / sr));
+            float r = l;
+            folder.processSample(1, l, r);
+            if (i >= static_cast<int>(sr / 2)) energy += l * l;
+        }
+        const double rms = std::sqrt(energy / (sr / 2));
+        if (reference == 0) reference = rms;
+        REQUIRE_THAT(rms, Catch::Matchers::WithinRel(reference, 0.03));
+    }
+}
+
+TEST_CASE("Saturation suppresses folded aliases compared with direct tanh clipping", "[core][saturation]") {
+    SaturationEffect saturation;
+    saturation.prepare(48000);
+    std::vector<float> processed(9600), naive(9600);
+    for (size_t i = 0; i < processed.size(); ++i) {
+        const float input = 0.8f * static_cast<float>(std::sin(2.0 * std::numbers::pi * 7000 * i / 48000));
+        float l = input, r = input;
+        saturation.processSample(1, l, r);
+        processed[i] = l;
+        naive[i] = std::tanh(6 * input) / std::sqrt(6.0f);
+    }
+    auto aliasEnergy = [](const std::vector<float>& signal) {
+        double energy = 0;
+        for (int khz = 1; khz < 24; ++khz) {
+            if (khz % 7 == 0) continue;
+            double real = 0, imaginary = 0;
+            for (size_t i = 4800; i < signal.size(); ++i) {
+                const double angle = 2.0 * std::numbers::pi * khz * 1000 * i / 48000;
+                real += signal[i] * std::cos(angle);
+                imaginary += signal[i] * std::sin(angle);
+            }
+            energy += real * real + imaginary * imaginary;
+        }
+        return energy;
+    };
+    REQUIRE(aliasEnergy(processed) < aliasEnergy(naive) * 0.5);
+}
+
+TEST_CASE("Long synced stutters still alternate reverse on successive repeats", "[core][stutter]") {
+    BufferStutter stutter;
+    stutter.prepare(8000);
+    StutterSettings settings;
+    settings.syncedSliceBeats = 1;
+    settings.reverse = StutterReverse::Alternate;
+    float firstEarly = 0, firstLate = 0, secondEarly = 0, secondLate = 0;
+    for (int i = 0; i < 72000; ++i) {
+        float l = 0.2f + 0.6f * (i % 24000) / 24000, r = l;
+        stutter.processSample(1, 20, settings, l, r);
+        if (i == 30000) firstEarly = l;
+        if (i == 42000) firstLate = l;
+        if (i == 54000) secondEarly = l;
+        if (i == 66000) secondLate = l;
+    }
+    REQUIRE(firstLate > firstEarly + 0.2f);
+    REQUIRE(secondEarly > secondLate + 0.2f);
+}
+
+TEST_CASE("A faster tempo does not retrigger reverse in the middle of an active run", "[core][reverse]") {
+    ReverseGrainEffect reverse;
+    reverse.prepare(8000);
+    for (int i = 0; i < 8000; ++i) reverse.recordDrySample(0.2f + 0.6f * i / 8000, 0);
+    reverse.triggerGrain();
+    for (int i = 0; i < 7000; ++i) {
+        const double duration = i < 6000 ? 1.0 : 0.5;
+        const float phase = i < 6000 ? i / 8000.0f : 0.75f + (i - 6000) / 4000.0f;
+        float l = 0, r = 0;
+        reverse.processSample(1, phase, duration, l, r);
+        reverse.recordDrySample(0, 0);
+        if (i > 5900) REQUIRE_THAT(l, Catch::Matchers::WithinAbs(0.2 + 0.6 * (7999 - i) / 8000, 1e-5));
+    }
 }

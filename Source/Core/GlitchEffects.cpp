@@ -142,7 +142,7 @@ void SampleRateDecimator::processSample(float amount, float& left, float& right)
 // ============================================================================
 void BufferStutter::prepare(double sampleRate) {
     sampleRate_ = std::max(1000.0, sampleRate);
-    const size_t maxSamples = static_cast<size_t>(sampleRate_ * 4.0) + 64;
+    const size_t maxSamples = static_cast<size_t>(sampleRate_ * 6.0) + 64;
     bufferL_.assign(maxSamples, 0.0f);
     bufferR_.assign(maxSamples, 0.0f);
     reset();
@@ -171,14 +171,14 @@ void BufferStutter::processSample(float amount, double bpm, const StutterSetting
     }
 
     const int maxBuf = static_cast<int>(bufferL_.size());
-    const double safeBpm = std::clamp(bpm, 40.0, 240.0);
+    const double safeBpm = std::clamp(bpm, 20.0, 300.0);
     const double quarterSec = 60.0 / safeBpm;
 
     const double maxSliceSec = std::min(0.50, quarterSec * 1.0);
     const double minSliceSec = 0.022;
     const double knobSliceSec = maxSliceSec * std::pow(minSliceSec / maxSliceSec, static_cast<double>(amt));
     const double sliceSec = settings.syncedSliceBeats > 0.0 ? settings.syncedSliceBeats * quarterSec : knobSliceSec;
-    const int sliceLen = std::clamp(static_cast<int>(sliceSec * sampleRate_), 256, maxBuf / 4);
+    const int sliceLen = std::clamp(static_cast<int>(std::round(sliceSec * sampleRate_)), 4, maxBuf - 4);
 
     // Advance mode reads new audio, so it keeps recording.
     if (capturing_ || settings.advance) {
@@ -204,7 +204,7 @@ void BufferStutter::processSample(float amount, double bpm, const StutterSetting
     }
 
     int advanceOffset = settings.advance ? (repeatCycle_ - 1) * (loopLen_ / 2) : 0;
-    if (advanceOffset + 2 * loopLen_ >= maxBuf) {
+    if (settings.advance && advanceOffset + 2 * loopLen_ >= maxBuf) {
         // At the buffer limit, restart the slice on the newest audio.
         loopStart_ = (writePos_ - loopLen_ + maxBuf) % maxBuf;
         repeatCycle_ = 1;
@@ -248,7 +248,7 @@ void BufferStutter::processSample(float amount, double bpm, const StutterSetting
 // ============================================================================
 void TapeStopEffect::prepare(double sampleRate) {
     sampleRate_ = std::max(1000.0, sampleRate);
-    const size_t maxSamples = static_cast<size_t>(sampleRate_ * 8.5) + 64;
+    const size_t maxSamples = static_cast<size_t>(sampleRate_ * 12.0) + 64;
     bufferL_.assign(maxSamples, 0.0f);
     bufferR_.assign(maxSamples, 0.0f);
     reset();
@@ -261,6 +261,7 @@ void TapeStopEffect::reset() {
     readPos_ = 0.0;
     speed_ = 1.0;
     elapsedSamples_ = 0;
+    rampSamples_ = 0.0;
     slipPhase_ = 0.0;
     tapeLpL_ = 0.0f;
     tapeLpR_ = 0.0f;
@@ -271,6 +272,7 @@ void TapeStopEffect::triggerBrake() {
     readPos_ = 0.0;
     speed_ = 1.0;
     elapsedSamples_ = 0;
+    rampSamples_ = 0.0;
 }
 
 void TapeStopEffect::processSample(float amount, double spanDurationSec, const TapeStopSettings& settings, float& left, float& right) {
@@ -287,11 +289,12 @@ void TapeStopEffect::processSample(float amount, double spanDurationSec, const T
     }
 
     const bool fixedLength = settings.fixedDurationSec > 0.0;
-    const double clampedSpanSec = std::clamp(fixedLength ? settings.fixedDurationSec : spanDurationSec, 0.04, 8.0);
+    if (rampSamples_ == 0.0) {
+        const double duration = fixedLength ? settings.fixedDurationSec : spanDurationSec;
+        rampSamples_ = std::clamp(duration * sampleRate_, 1.0, 12.0 * sampleRate_);
+    }
     const double minFloorSpeed = 0.14 * (1.0 - static_cast<double>(amt) * 0.86);
-    const double rampScale = fixedLength ? 1.0 : (1.20 - static_cast<double>(amt) * 0.52);
-    const double rampSamples = std::max(64.0, clampedSpanSec * rampScale * sampleRate_);
-    double progress = std::min(1.0, static_cast<double>(elapsedSamples_) / rampSamples);
+    double progress = std::min(1.0, static_cast<double>(elapsedSamples_) / rampSamples_);
     if (settings.stepped) {
         progress = std::floor(progress * 8.0) / 8.0;
     }
@@ -394,7 +397,7 @@ void RingModEffect::processSample(float amount, float& left, float& right) {
 // ============================================================================
 void ReverseGrainEffect::prepare(double sampleRate) {
     sampleRate_ = std::max(1000.0, sampleRate);
-    const size_t maxBuf = static_cast<size_t>(sampleRate_ * 8.5) + 64;
+    const size_t maxBuf = static_cast<size_t>(sampleRate_ * 24.0) + 64;
     bufferL_.assign(maxBuf, 0.0f);
     bufferR_.assign(maxBuf, 0.0f);
     reset();
@@ -406,8 +409,11 @@ void ReverseGrainEffect::reset() {
     writePos_ = 0;
     recordedSamples_ = 0;
     preRollSamples_ = 0;
+    fadeFromDry_ = true;
     grainStartWritePos_ = 0;
     grainPos_ = 0;
+    spanSamples_ = 0;
+    previousSpanPhase_ = 0.0f;
 }
 
 void ReverseGrainEffect::recordDrySample(float left, float right) {
@@ -427,55 +433,39 @@ void ReverseGrainEffect::triggerGrain() {
     grainStartWritePos_ = writePos_;
     preRollSamples_ = recordedSamples_;
     grainPos_ = 0;
+    spanSamples_ = 0;
+    previousSpanPhase_ = 0.0f;
 }
 
-void ReverseGrainEffect::processSample(float amount, float /*spanPhase01*/, double spanDurationSec, float& left, float& right) {
+void ReverseGrainEffect::processSample(float amount, float spanPhase01, double spanDurationSec, float& left, float& right) {
     const float amt = std::clamp(amount, 0.0f, 1.0f);
     const int bufSize = static_cast<int>(bufferL_.size());
     if (amt <= 1e-4f || bufSize == 0) {
         return;
     }
 
-    // Reverse grain spans the full combined multi-pad region without resetting every 1/32!
-    const double clampedSpanSec = std::clamp(spanDurationSec, 0.06, 8.0);
-    const int spanSamples = std::clamp(static_cast<int>(clampedSpanSec * sampleRate_), 256, bufSize / 2 - 1);
-    const int posInSpan = grainPos_ % spanSamples;
-
-    int readIdx = 0;
-    if (preRollSamples_ >= 256) {
-        // Pre-warmed buffer: step backwards continuously from grainStartWritePos_ through pre-roll history
-        const int revLen = std::min(spanSamples, preRollSamples_);
-        const int backFromStart = posInSpan % revLen;
-        readIdx = grainStartWritePos_ - 1 - backFromStart;
-    } else if (grainPos_ >= 256) {
-        // Cold start (playback started directly on an active pad): reverse each completed 256-sample grain
-        const int chunkIdx = grainPos_ / 256;
-        const int offsetInChunk = grainPos_ % 256;
-        readIdx = grainStartWritePos_ + (chunkIdx * 256 - 1 - offsetInChunk);
-    } else {
-        // First 256 samples of a cold start: half-speed pre-fill
-        readIdx = grainStartWritePos_ + (grainPos_ / 2);
+    const int currentSpanSamples = std::clamp(static_cast<int>(std::round(spanDurationSec * sampleRate_)), 1, bufSize / 2 - 1);
+    const bool wrapped = previousSpanPhase_ > 0.9f && spanPhase01 < 0.1f;
+    const bool heldNoteCycle = spanPhase01 >= 1.0f && grainPos_ >= spanSamples_;
+    if (grainPos_ > 0 && (wrapped || heldNoteCycle)) triggerGrain();
+    previousSpanPhase_ = spanPhase01;
+    spanSamples_ = std::max(spanSamples_, currentSpanSamples);
+    const int position = std::min(grainPos_, spanSamples_ - 1);
+    if (grainPos_ < spanSamples_) ++grainPos_;
+    // A causal reverse needs a complete preceding region; never loop a short cold-start fragment.
+    if (preRollSamples_ < spanSamples_) {
+        fadeFromDry_ = true;
+        return;
     }
-    while (readIdx < 0) {
-        readIdx += bufSize;
-    }
-    readIdx %= bufSize;
+    const int readIdx = (grainStartWritePos_ - 1 - position + bufSize) % bufSize;
+    const int fadeLen = std::max(1, std::min(static_cast<int>(0.003 * sampleRate_), spanSamples_ / 8));
+    const float edge = static_cast<float>(std::min(position, spanSamples_ - 1 - position)) / fadeLen;
+    const float win = 0.5f * (1.0f - std::cos(std::numbers::pi_v<float> * std::min(1.0f, edge)));
 
-    // Apply a smooth 128-sample raised-cosine de-click ramp at the outer boundaries of the combined span
-    float win = 1.0f;
-    const int fadeLen = std::min(128, spanSamples / 8);
-    if (fadeLen > 1) {
-        if (posInSpan < fadeLen) {
-            win = 0.5f * (1.0f - std::cos(std::numbers::pi_v<float> * static_cast<float>(posInSpan) / static_cast<float>(fadeLen)));
-        } else if (posInSpan >= spanSamples - fadeLen) {
-            const int rem = spanSamples - 1 - posInSpan;
-            win = 0.5f * (1.0f - std::cos(std::numbers::pi_v<float> * static_cast<float>(rem) / static_cast<float>(fadeLen)));
-        }
-    }
-
-    const float revL = bufferL_[static_cast<size_t>(readIdx)] * win;
-    const float revR = bufferR_[static_cast<size_t>(readIdx)] * win;
-    ++grainPos_;
+    if (position >= fadeLen) fadeFromDry_ = false;
+    const float dryFade = fadeFromDry_ ? 1.0f - win : 0.0f;
+    const float revL = bufferL_[static_cast<size_t>(readIdx)] * win + left * dryFade;
+    const float revR = bufferR_[static_cast<size_t>(readIdx)] * win + right * dryFade;
 
     const float wet = std::min(1.0f, amt * 1.25f);
     left = left * (1.0f - wet) + revL * wet;
@@ -502,7 +492,7 @@ void ChopperGateEffect::processSample(float amount, double bpm, int spanLengthSt
         return;
     }
 
-    const double safeBpm = std::clamp(bpm, 40.0, 240.0);
+    const double safeBpm = std::clamp(bpm, 20.0, 300.0);
     // Scale chopper cycle across the linked span length so linked pads produce a wider, sustained swell/chop
     const double spanScale = 1.0 / std::sqrt(static_cast<double>(std::clamp(spanLengthSteps, 1, 32)));
     const double baseHz = (safeBpm / 60.0) * (1.5 + static_cast<double>(amt) * 10.5) * spanScale;
@@ -673,6 +663,7 @@ void CombResonatorEffect::processSample(float amount, float& left, float& right)
 // ============================================================================
 void WavefolderEffect::prepare(double sampleRate) {
     sampleRate_ = std::max(1000.0, sampleRate);
+    dcPole_ = static_cast<float>(std::pow(0.995, 44100.0 / sampleRate_));
     reset();
 }
 
@@ -719,11 +710,10 @@ void WavefolderEffect::processSample(float amount, float& left, float& right) {
     const float foldL = fold(left, previousL_);
     const float foldR = fold(right, previousR_);
 
-    // DC blocker (R = 0.995)
-    constexpr float kDcR = 0.995f;
-    dcOutL_ = foldL - dcInL_ + kDcR * dcOutL_;
+    // Keep the DC cutoff fixed in Hz when the host sample rate changes.
+    dcOutL_ = foldL - dcInL_ + dcPole_ * dcOutL_;
     dcInL_ = foldL;
-    dcOutR_ = foldR - dcInR_ + kDcR * dcOutR_;
+    dcOutR_ = foldR - dcInR_ + dcPole_ * dcOutR_;
     dcInR_ = foldR;
 
     // One-pole tone contour
@@ -737,8 +727,157 @@ void WavefolderEffect::processSample(float amount, float& left, float& right) {
 }
 
 // ============================================================================
-// WetFilter (TPT state-variable filter)
+// Stereo modulation, echo and antialiased saturation
 // ============================================================================
+void ModulatedDelayEffect::prepare(double sampleRate) {
+    sampleRate_ = std::max(1000.0, sampleRate);
+    for (auto& channel : delay_) channel.assign(static_cast<size_t>(sampleRate_ * 0.05) + 8, 0.0f);
+    reset();
+}
+
+void ModulatedDelayEffect::reset() {
+    for (auto& channel : delay_) std::fill(channel.begin(), channel.end(), 0.0f);
+    phase_ = 0.0;
+    writePos_ = 0;
+    damp_.fill(0.0f);
+}
+
+void ModulatedDelayEffect::processSample(Mode mode, float amount, float& left, float& right) {
+    const float amt = std::clamp(amount, 0.0f, 1.0f);
+    if (amt <= 1e-4f || delay_[0].empty()) return;
+    const bool flanger = mode == Mode::Flanger;
+    const double rate = flanger ? 0.08 + 0.52 * amt : 0.15 + 0.85 * amt;
+    phase_ += rate / sampleRate_;
+    phase_ -= std::floor(phase_);
+    const float damping = static_cast<float>(1.0 - std::exp(-2.0 * std::numbers::pi * 6000.0 / sampleRate_));
+    const std::array<float, 2> input = { left, right };
+    std::array<float, 2> output{};
+    for (size_t ch = 0; ch < 2; ++ch) {
+        const double angle = 2.0 * std::numbers::pi * (phase_ + 0.25 * ch);
+        const double delaySec = flanger ? 0.003 + 0.0025 * amt * std::sin(angle)
+                                        : 0.018 + 0.006 * amt * std::sin(angle);
+        const double offset = std::max(3.0, sampleRate_ * delaySec);
+        float delayed = readHermiteCircular(delay_[ch], writePos_ - offset);
+        if (!flanger) {
+            const double secondOffset = sampleRate_ * (0.027 + 0.005 * amt * std::sin(angle + 2.1));
+            delayed = 0.5f * (delayed + readHermiteCircular(delay_[ch], writePos_ - secondOffset));
+        }
+        damp_[ch] += damping * (delayed - damp_[ch]);
+        const float feedback = flanger ? 0.65f * amt : 0.0f;
+        delay_[ch][static_cast<size_t>(writePos_)] = input[ch] * (1.0f - feedback) + damp_[ch] * feedback;
+        const float mix = 0.5f * amt;
+        output[ch] = input[ch] * (1.0f - mix) + delayed * mix;
+    }
+    writePos_ = (writePos_ + 1) % static_cast<int>(delay_[0].size());
+    left = output[0];
+    right = output[1];
+}
+
+void PhaserEffect::prepare(double sampleRate) {
+    sampleRate_ = std::max(1000.0, sampleRate);
+    reset();
+}
+
+void PhaserEffect::reset() {
+    for (auto& channel : state_) channel.fill(0.0f);
+    feedback_.fill(0.0f);
+    phase_ = 0.0;
+}
+
+void PhaserEffect::processSample(float amount, float& left, float& right) {
+    const float amt = std::clamp(amount, 0.0f, 1.0f);
+    if (amt <= 1e-4f) return;
+    phase_ += (0.08 + 1.2 * amt) / sampleRate_;
+    phase_ -= std::floor(phase_);
+    const std::array<float, 2> input = { left, right };
+    std::array<float, 2> output{};
+    for (size_t ch = 0; ch < 2; ++ch) {
+        const double sweep = 0.5 + 0.5 * std::sin(2.0 * std::numbers::pi * (phase_ + 0.15 * ch));
+        const double frequency = 180.0 * std::pow(16.0, sweep);
+        float value = input[ch] + 0.35f * amt * std::tanh(feedback_[ch]);
+        for (size_t stage = 0; stage < state_[ch].size(); ++stage) {
+            const double cutoff = std::min(sampleRate_ * 0.4, frequency * (0.7 + 0.12 * stage));
+            const double g = std::tan(std::numbers::pi * cutoff / sampleRate_);
+            const float coefficient = static_cast<float>((g - 1.0) / (g + 1.0));
+            const float filtered = coefficient * value + state_[ch][stage];
+            state_[ch][stage] = value - coefficient * filtered;
+            value = filtered;
+        }
+        feedback_[ch] = value;
+        output[ch] = input[ch] * (1.0f - 0.5f * amt) + value * (0.5f * amt);
+    }
+    left = output[0];
+    right = output[1];
+}
+
+void PingPongEchoEffect::prepare(double sampleRate) {
+    sampleRate_ = std::max(1000.0, sampleRate);
+    for (auto& channel : delay_) channel.assign(static_cast<size_t>(sampleRate_ * 1.5) + 8, 0.0f);
+    reset();
+}
+
+void PingPongEchoEffect::reset() {
+    for (auto& channel : delay_) std::fill(channel.begin(), channel.end(), 0.0f);
+    damp_.fill(0.0f);
+    writePos_ = 0;
+    delaySamples_ = 0.0;
+}
+
+void PingPongEchoEffect::processSample(float amount, double bpm, float& left, float& right) {
+    const float amt = std::clamp(amount, 0.0f, 1.0f);
+    if (amt <= 1e-4f || delay_[0].empty()) return;
+    const double target = sampleRate_ * 30.0 / std::clamp(bpm, 20.0, 300.0);
+    if (delaySamples_ == 0.0) delaySamples_ = target;
+    const double smoothing = 1.0 - std::exp(-1.0 / (0.02 * sampleRate_));
+    delaySamples_ += smoothing * (target - delaySamples_);
+    const float dL = readHermiteCircular(delay_[0], writePos_ - delaySamples_);
+    const float dR = readHermiteCircular(delay_[1], writePos_ - delaySamples_);
+    const float damping = static_cast<float>(1.0 - std::exp(-2.0 * std::numbers::pi * 4500.0 / sampleRate_));
+    damp_[0] += damping * (dL - damp_[0]);
+    damp_[1] += damping * (dR - damp_[1]);
+    const float feedback = 0.2f + 0.55f * amt;
+    delay_[0][static_cast<size_t>(writePos_)] = 0.5f * (left + right) + feedback * std::tanh(damp_[1]);
+    delay_[1][static_cast<size_t>(writePos_)] = feedback * std::tanh(damp_[0]);
+    writePos_ = (writePos_ + 1) % static_cast<int>(delay_[0].size());
+    left = left * (1.0f - 0.4f * amt) + dL * 0.6f * amt;
+    right = right * (1.0f - 0.4f * amt) + dR * 0.6f * amt;
+}
+
+void SaturationEffect::prepare(double sampleRate) {
+    dcPole_ = static_cast<float>(std::exp(-2.0 * std::numbers::pi * 15.0 / std::max(1000.0, sampleRate)));
+    reset();
+}
+
+void SaturationEffect::reset() {
+    previous_.fill(0.0);
+    dcIn_.fill(0.0f);
+    dcOut_.fill(0.0f);
+}
+
+void SaturationEffect::processSample(float amount, float& left, float& right) {
+    const float amt = std::clamp(amount, 0.0f, 1.0f);
+    if (amt <= 1e-4f) return;
+    const double drive = 1.0 + 5.0 * amt;
+    const double gain = 1.0 / std::sqrt(drive);
+    const auto antiderivative = [](double x) {
+        const double a = std::abs(x);
+        return a + std::log1p(std::exp(-2.0 * a));
+    };
+    auto tick = [&](float input, size_t ch) {
+        const double x = drive * input;
+        const double delta = x - previous_[ch];
+        const double shaped = std::abs(delta) < 1e-5 ? std::tanh(0.5 * (x + previous_[ch]))
+            : (antiderivative(x) - antiderivative(previous_[ch])) / delta;
+        previous_[ch] = x;
+        const float wet = static_cast<float>(gain * shaped);
+        dcOut_[ch] = wet - dcIn_[ch] + dcPole_ * dcOut_[ch];
+        dcIn_[ch] = wet;
+        return input * (1.0f - amt) + dcOut_[ch] * amt;
+    };
+    left = tick(left, 0);
+    right = tick(right, 1);
+}
+
 void WetFilter::prepare(double sampleRate) {
     sampleRate_ = std::max(1000.0, sampleRate);
     reset();

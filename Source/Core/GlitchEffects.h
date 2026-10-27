@@ -97,6 +97,7 @@ private:
     double readPos_ = 0.0;
     double speed_ = 1.0;
     int elapsedSamples_ = 0;
+    double rampSamples_ = 0.0;
     double slipPhase_ = 0.0;
     float tapeLpL_ = 0.0f;
     float tapeLpR_ = 0.0f;
@@ -136,6 +137,9 @@ private:
     int preRollSamples_ = 0;
     int grainStartWritePos_ = 0;
     int grainPos_ = 0;
+    int spanSamples_ = 0;
+    float previousSpanPhase_ = 0.0f;
+    bool fadeFromDry_ = true;
 };
 
 // 7. Chopper Gate (Rhythmic slicer / gate envelope that sustains across combined contiguous pads)
@@ -198,6 +202,7 @@ public:
 
 private:
     double sampleRate_ = 44100.0;
+    float dcPole_ = 0.995f;
     float dcInL_ = 0.0f;
     float dcOutL_ = 0.0f;
     float dcInR_ = 0.0f;
@@ -206,6 +211,57 @@ private:
     float toneLpR_ = 0.0f;
     double previousL_ = 0.0;
     double previousR_ = 0.0;
+};
+
+class ModulatedDelayEffect {
+public:
+    enum class Mode { Chorus, Flanger };
+    void prepare(double sampleRate);
+    void reset();
+    void processSample(Mode mode, float amount, float& left, float& right);
+private:
+    double sampleRate_ = 44100.0;
+    double phase_ = 0.0;
+    int writePos_ = 0;
+    std::array<std::vector<float>, 2> delay_;
+    std::array<float, 2> damp_{};
+};
+
+class PhaserEffect {
+public:
+    void prepare(double sampleRate);
+    void reset();
+    void processSample(float amount, float& left, float& right);
+private:
+    double sampleRate_ = 44100.0;
+    double phase_ = 0.0;
+    std::array<std::array<float, 6>, 2> state_{};
+    std::array<float, 2> feedback_{};
+};
+
+class PingPongEchoEffect {
+public:
+    void prepare(double sampleRate);
+    void reset();
+    void processSample(float amount, double bpm, float& left, float& right);
+private:
+    double sampleRate_ = 44100.0;
+    double delaySamples_ = 0.0;
+    int writePos_ = 0;
+    std::array<std::vector<float>, 2> delay_;
+    std::array<float, 2> damp_{};
+};
+
+class SaturationEffect {
+public:
+    void prepare(double sampleRate);
+    void reset();
+    void processSample(float amount, float& left, float& right);
+private:
+    std::array<double, 2> previous_{};
+    std::array<float, 2> dcIn_{};
+    std::array<float, 2> dcOut_{};
+    float dcPole_ = 0.995f;
 };
 
 // Filter after the FX chain

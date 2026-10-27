@@ -87,22 +87,19 @@ void OpenGlitchFXProcessor::syncParametersToCore() {
     using namespace openglitch::params;
     using openglitch::core::GlitchFxId;
 
-    // 1. 32-Step Beat Sequencer Pattern + Per-Pad 10-FX Routing Bitmask
+    // 1. 32-Step Beat Sequencer Pattern + Per-Pad 15-FX Routing Bitmask
     for (int i = 0; i < 32; ++i) {
         if (auto* raw = parameters.getRawParameterValue(stepParamId(i))) {
             core_.setStep(i, raw->load() > 0.5f);
         }
-        if (auto* fxRaw = parameters.getRawParameterValue(stepFxParamId(i))) {
-            const int maskInt = static_cast<int>(std::round(fxRaw->load()));
-            core_.setStepFxMask(i, static_cast<uint16_t>(std::clamp(maskInt, 0, 1023)));
-        }
+        core_.setStepFxMask(i, readStepFxMask(parameters, i));
     }
 
     // 2. Gate smoothing
     const float smoothMs = *parameters.getRawParameterValue(kSmoothMs);
     core_.setGateSmoothingMs(smoothMs);
 
-    // 3. All 10 Glitch FX (Phase 1 + Phase 2)
+    // 3. All 15 Glitch FX
     auto syncFx = [&](GlitchFxId id, const char* amtId, const char* onId) {
         const float amt = *parameters.getRawParameterValue(amtId) * 0.01f;
         const bool on = *parameters.getRawParameterValue(onId) > 0.5f;
@@ -123,6 +120,12 @@ void OpenGlitchFXProcessor::syncParametersToCore() {
     syncFx(GlitchFxId::PitchGlitch, kPitchGlitchAmt, kPitchGlitchOn);
     syncFx(GlitchFxId::CombReso,    kCombResoAmt,    kCombResoOn);
     syncFx(GlitchFxId::Wavefold,    kWavefoldAmt,    kWavefoldOn);
+
+    syncFx(GlitchFxId::Chorus, kChorusAmt, kChorusOn);
+    syncFx(GlitchFxId::Flanger, kFlangerAmt, kFlangerOn);
+    syncFx(GlitchFxId::Phaser, kPhaserAmt, kPhaserOn);
+    syncFx(GlitchFxId::PingPong, kPingPongAmt, kPingPongOn);
+    syncFx(GlitchFxId::Saturation, kSaturationAmt, kSaturationOn);
 
     // 4. Buffer, tape, filter, envelopes, trigger
     using namespace openglitch::core;
@@ -216,6 +219,12 @@ void OpenGlitchFXProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
     core_.processBlock(leftChannel, rightChannel, numSamples);
 }
 
+double OpenGlitchFXProcessor::getTailLengthSeconds() const {
+    const bool echoEnabled = parameters.getRawParameterValue(openglitch::params::kPingPongOn)->load() > 0.5f;
+    const float amount = parameters.getRawParameterValue(openglitch::params::kPingPongAmt)->load();
+    return echoEnabled && amount > 0.01f ? 40.0 : 0.0;
+}
+
 juce::AudioProcessorEditor* OpenGlitchFXProcessor::createEditor() {
     return new OpenGlitchFXEditor(*this);
 }
@@ -229,7 +238,21 @@ void OpenGlitchFXProcessor::getStateInformation(juce::MemoryBlock& destData) {
 void OpenGlitchFXProcessor::setStateInformation(const void* data, int sizeInBytes) {
     if (auto xmlState = getXmlFromBinary(data, sizeInBytes)) {
         if (xmlState->hasTagName(parameters.state.getType())) {
-            parameters.replaceState(juce::ValueTree::fromXml(*xmlState));
+            auto restored = juce::ValueTree::fromXml(*xmlState);
+            // Missing v1.2 parameters must not retain values from the previously loaded session.
+            for (auto* parameter : getParameters()) {
+                auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(parameter);
+                if (ranged != nullptr && ranged->getVersionHint() == 2
+                    && !restored.getChildWithProperty("id", ranged->paramID).isValid()) {
+                    juce::ValueTree value("PARAM");
+                    value.setProperty("id", ranged->paramID, nullptr);
+                    const float fallback = ranged->paramID.startsWith("step_fx_extra_") ? 0.0f
+                        : ranged->convertFrom0to1(ranged->getDefaultValue());
+                    value.setProperty("value", fallback, nullptr);
+                    restored.appendChild(value, nullptr);
+                }
+            }
+            parameters.replaceState(restored);
             syncParametersToCore();
             syncEnvelopePointsToCore();
             ++stateVersion_;

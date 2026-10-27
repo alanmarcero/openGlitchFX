@@ -39,14 +39,14 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
     addAndMakeVisible(paintBrushLabel_);
 
     paintBrushBox_.addItem("ALL ACTIVE FX (DEFAULT)", 1);
-    for (int fx = 0; fx < 10; ++fx) {
+    for (int fx = 0; fx < kNumUiFx; ++fx) {
         const auto& desc = openglitch::params::kFxDescriptors[static_cast<size_t>(fx)];
         paintBrushBox_.addItem(juce::String::formatted("ONLY: %s [%s]", desc.name, desc.shortCode), fx + 2);
     }
     paintBrushBox_.setSelectedId(1, juce::dontSendNotification);
     paintBrushBox_.setTooltip("What a left-click on a pad paints. You can also click an FX card's title to pick it.");
     paintBrushBox_.onChange = [this]() {
-        const int idx = paintBrushBox_.getSelectedItemIndex(); // 0 = All (-1), 1..10 = FX 0..9
+        const int idx = paintBrushBox_.getSelectedItemIndex(); // 0 = All (-1), 1..15 = FX 0..14
         sequencerGrid_.setPaintTargetFx(idx - 1);
     };
     addAndMakeVisible(paintBrushBox_);
@@ -72,12 +72,12 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
                    [this]() { sequencerGrid_.applyPreset(StepPatternPreset::Stutter16ths); });
     setupPresetBtn(presetInvertBtn_,     "Swap on and off for every pad.",
                    [this]() { sequencerGrid_.invertPattern(); });
-    setupPresetBtn(presetResetFxBtn_,    "Route all 10 FX to every pad. Pad on/off stays the same.",
+    setupPresetBtn(presetResetFxBtn_,    "Route all 15 FX to every pad. Pad on/off stays the same.",
                    [this]() { sequencerGrid_.resetAllStepFxMasksToAll(); });
     setupPresetBtn(presetClearBtn_,      "Turn off all 32 pads.",
                    [this]() { sequencerGrid_.applyPreset(StepPatternPreset::ClearAll); });
 
-    // 10 Glitch FX Slots (2 Rows x 5 Columns)
+    // 15 Glitch FX Slots (3 Rows x 5 Columns)
     using namespace openglitch::params;
     struct FxMeta {
         const char* title;
@@ -95,11 +95,16 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
         { "TAPE STOP [TS]",    "VINYL BRAKE",      kTapeStopAmt,    kTapeStopOn,    0.0  },
         { "RING MOD [RM]",     "CYBER CARRIER",    kRingModAmt,     kRingModOn,     0.0  },
         // Row 2: 5 Additional Glitch FX (10 Total)
-        { "REVERSE [RV]",      "BACKWARDS GRAIN",  kReverseAmt,     kReverseOn,     0.0  },
+        { "REVERSE [RV]",      "FULL SPAN REVERSE",  kReverseAmt,     kReverseOn,     0.0  },
         { "CHOPPER [CH]",      "RHYTHMIC SLICER",  kChopperAmt,     kChopperOn,     0.0  },
         { "PITCH GLITCH [PG]", "OCTAVE ARPEGGIO",  kPitchGlitchAmt, kPitchGlitchOn, 0.0  },
         { "COMB RESO [CR]",    "METALLIC FLANGE",  kCombResoAmt,    kCombResoOn,    0.0  },
-        { "WAVEFOLD [WF]",     "HARMONIC FOLD",    kWavefoldAmt,    kWavefoldOn,    0.0  }
+        { "WAVEFOLD [WF]",     "HARMONIC FOLD",    kWavefoldAmt,    kWavefoldOn,    0.0  },
+        { "CHORUS [CO]", "STEREO ENSEMBLE", kChorusAmt, kChorusOn, 0.0 },
+        { "FLANGER [FL]", "FEEDBACK SWEEP", kFlangerAmt, kFlangerOn, 0.0 },
+        { "PHASER [PH]", "SIX STAGE SWIRL", kPhaserAmt, kPhaserOn, 0.0 },
+        { "PING-PONG [PP]", "SYNCED ECHO", kPingPongAmt, kPingPongOn, 0.0 },
+        { "SATURATION [SA]", "ANALOG DRIVE", kSaturationAmt, kSaturationOn, 0.0 }
     }};
 
     for (size_t i = 0; i < kNumUiFx; ++i) {
@@ -161,7 +166,9 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
     processor_.parameters.addParameterListener(kTheme, this);
     applyTheme(themeBox_.getSelectedItemIndex());
 
-    setSize(1080, 900);
+    setResizable(true, true);
+    setResizeLimits(1080, 900, 1620, 1350);
+    setSize(1080, 980);
     startTimerHz(30);
 }
 
@@ -315,7 +322,7 @@ void OpenGlitchFXEditor::paint(juce::Graphics& g) {
     g.setColour(pal.cardBorder);
     g.drawLine(28.0f, 58.0f, w - 28.0f, 58.0f, 1.0f);
 
-    // 3. Draw 10 FX Slot Cards (2x5 Matrix) -- highlight when active on the current 1/32 pad!
+    // 3. Draw 15 FX Slot Cards (3x5 Matrix) -- highlight when active on the current 1/32 pad!
     const int activeBrushFx = sequencerGrid_.getPaintTargetFx();
     for (size_t i = 0; i < kNumUiFx; ++i) {
         const auto& slot = fxSlots_[i];
@@ -485,7 +492,7 @@ void OpenGlitchFXEditor::resized() {
                                  static_cast<int>(presetH));
     }
 
-    // 10 Glitch FX Cards (2 Rows x 5 Columns) + Master Strip on Right
+    // 15 Glitch FX Cards (3 Rows x 5 Columns) + Master Strip on Right
     const float detailH = 196.0f;
     const float fxTop = 228.0f;
     const float fxTotalH = h - fxTop - detailH - 22.0f - 8.0f;
@@ -495,11 +502,11 @@ void OpenGlitchFXEditor::resized() {
     const float fxAreaW = w - margin * 2.0f - masterW - 10.0f;
 
     constexpr int kCols = 5;
-    constexpr int kRows = 2;
+    constexpr int kRows = 3;
     const float colGap = 8.0f;
     const float rowGap = 8.0f;
     const float cardW = (fxAreaW - colGap * static_cast<float>(kCols - 1)) / static_cast<float>(kCols);
-    const float cardH = (fxTotalH - rowGap) / static_cast<float>(kRows);
+    const float cardH = (fxTotalH - rowGap * static_cast<float>(kRows - 1)) / static_cast<float>(kRows);
 
     for (size_t i = 0; i < kNumUiFx; ++i) {
         const int row = static_cast<int>(i) / kCols;
@@ -517,7 +524,7 @@ void OpenGlitchFXEditor::resized() {
         slot.enableBtn.setBounds(btnArea.reduced(14.0f, 0.0f).toNearestInt());
     }
 
-    // Master Card on the far right spanning both rows
+    // Master Card on the far right spanning all rows
     masterCardBounds_ = { w - margin - masterW, fxTop, masterW, fxTotalH };
     auto mInner = masterCardBounds_.reduced(10.0f);
     mInner.removeFromTop(24.0f);

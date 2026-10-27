@@ -11,6 +11,16 @@ juce::String stepFxParamId(int stepIndex) {
     return juce::String::formatted("step_fx_%02d", stepIndex + 1);
 }
 
+juce::String stepExtraFxParamId(int stepIndex) {
+    return juce::String::formatted("step_fx_extra_%02d", stepIndex + 1);
+}
+
+uint16_t readStepFxMask(const juce::AudioProcessorValueTreeState& state, int stepIndex) {
+    const auto low = static_cast<uint16_t>(state.getRawParameterValue(stepFxParamId(stepIndex))->load());
+    const auto high = static_cast<uint16_t>(state.getRawParameterValue(stepExtraFxParamId(stepIndex))->load());
+    return static_cast<uint16_t>((low & 1023u) | ((high & 31u) << 10));
+}
+
 juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout() {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> layout;
 
@@ -40,7 +50,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout() {
         juce::AudioParameterFloatAttributes().withLabel("ms")));
 
     // 32 Selectable Spots in a 4/4 Bar + Per-Pad 10-Bit FX Routing Mask
-    constexpr int kAllFxInt = static_cast<int>(openglitch::core::BeatStepSequencer::kAllFxMask);
+    constexpr int kAllFxInt = 1023; // Preserve the normalized automation range of v1.0/v1.1.
     for (int i = 0; i < 32; ++i) {
         const bool defaultActive = (i >= 24);
         const auto id = stepParamId(i);
@@ -60,16 +70,16 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout() {
             kAllFxInt));
     }
 
-    auto addFxParam = [&](const char* amtId, const char* onId, const char* title, float defaultPct) {
+    auto addFxParam = [&](const char* amtId, const char* onId, const char* title, float defaultPct, int version = 1) {
         layout.push_back(std::make_unique<juce::AudioParameterFloat>(
-            juce::ParameterID{ amtId, 1 },
+            juce::ParameterID{ amtId, version },
             juce::String(title) + " Amount",
             juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
             defaultPct,
             juce::AudioParameterFloatAttributes().withLabel("%")));
 
         layout.push_back(std::make_unique<juce::AudioParameterBool>(
-            juce::ParameterID{ onId, 1 },
+            juce::ParameterID{ onId, version },
             juce::String(title) + " Enable",
             true));
     };
@@ -146,6 +156,17 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout() {
         juce::ParameterID{ kMasterPower, 1 },
         "Master Power",
         true));
+
+    for (int i = 0; i < 32; ++i) {
+        layout.push_back(std::make_unique<juce::AudioParameterInt>(
+            juce::ParameterID{ stepExtraFxParamId(i), 2 },
+            juce::String::formatted("Step %02d Extra FX Mask", i + 1), 0, 31, 31));
+    }
+    addFxParam(kChorusAmt, kChorusOn, "Chorus", 0.0f, 2);
+    addFxParam(kFlangerAmt, kFlangerOn, "Flanger", 0.0f, 2);
+    addFxParam(kPhaserAmt, kPhaserOn, "Phaser", 0.0f, 2);
+    addFxParam(kPingPongAmt, kPingPongOn, "Ping-Pong", 0.0f, 2);
+    addFxParam(kSaturationAmt, kSaturationOn, "Saturation", 0.0f, 2);
 
     return { layout.begin(), layout.end() };
 }

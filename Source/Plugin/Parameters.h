@@ -46,6 +46,17 @@ inline constexpr const char* kCombResoOn     = "combreso_on";
 inline constexpr const char* kWavefoldAmt    = "wavefold_amt";
 inline constexpr const char* kWavefoldOn     = "wavefold_on";
 
+inline constexpr const char* kChorusAmt = "chorus_amt";
+inline constexpr const char* kChorusOn = "chorus_on";
+inline constexpr const char* kFlangerAmt = "flanger_amt";
+inline constexpr const char* kFlangerOn = "flanger_on";
+inline constexpr const char* kPhaserAmt = "phaser_amt";
+inline constexpr const char* kPhaserOn = "phaser_on";
+inline constexpr const char* kPingPongAmt = "pingpong_amt";
+inline constexpr const char* kPingPongOn = "pingpong_on";
+inline constexpr const char* kSaturationAmt = "saturation_amt";
+inline constexpr const char* kSaturationOn = "saturation_on";
+
 // STUTTER buffer options
 inline constexpr const char* kStutterSync    = "stutter_sync";
 inline constexpr const char* kStutterAdvance = "stutter_advance";
@@ -94,7 +105,7 @@ struct FxDescriptor {
     const char* onParamId;
 };
 
-inline constexpr std::array<FxDescriptor, 10> kFxDescriptors = {{
+inline constexpr std::array<FxDescriptor, 15> kFxDescriptors = {{
     { "BITCRUSH",     "BC", kBitcrushAmt,    kBitcrushOn    },
     { "DOWNSAMPLE",   "DS", kDownsampleAmt,  kDownsampleOn  },
     { "STUTTER",      "ST", kStutterAmt,     kStutterOn     },
@@ -104,11 +115,19 @@ inline constexpr std::array<FxDescriptor, 10> kFxDescriptors = {{
     { "CHOPPER",      "CH", kChopperAmt,     kChopperOn     },
     { "PITCH GLITCH", "PG", kPitchGlitchAmt, kPitchGlitchOn },
     { "COMB RESO",    "CR", kCombResoAmt,    kCombResoOn    },
-    { "WAVEFOLD",     "WF", kWavefoldAmt,    kWavefoldOn    }
+    { "WAVEFOLD",     "WF", kWavefoldAmt,    kWavefoldOn    },
+    { "CHORUS", "CO", kChorusAmt, kChorusOn },
+    { "FLANGER", "FL", kFlangerAmt, kFlangerOn },
+    { "PHASER", "PH", kPhaserAmt, kPhaserOn },
+    { "PING-PONG", "PP", kPingPongAmt, kPingPongOn },
+    { "SATURATION", "SA", kSaturationAmt, kSaturationOn }
 }};
 
 juce::String stepParamId(int stepIndex);   // 0..31 -> "step_01".."step_32"
 juce::String stepFxParamId(int stepIndex); // 0..31 -> "step_fx_01".."step_fx_32"
+
+juce::String stepExtraFxParamId(int stepIndex);
+uint16_t readStepFxMask(const juce::AudioProcessorValueTreeState& state, int stepIndex);
 
 juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 

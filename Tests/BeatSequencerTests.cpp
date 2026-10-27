@@ -4,6 +4,53 @@
 
 using namespace openglitch::core;
 
+TEST_CASE("Every FX triggers once per run even when neighboring routing changes", "[sequencer][span]") {
+    for (int fx = 0; fx < 15; ++fx) {
+        INFO("FX slot " << fx);
+        BeatStepSequencer seq;
+        seq.setAllStepsFxMask(0);
+        const auto bit = static_cast<uint16_t>(1u << fx);
+        seq.setStepFxMask(0, bit);
+        seq.setStepFxMask(1, BeatStepSequencer::kAllFxMask);
+        seq.setStepFxMask(2, bit);
+        seq.setStepFxMask(4, bit);
+        seq.prepare(48000);
+        bool entered = false;
+        uint16_t transitions = 0;
+        seq.advanceSampleWithFxMask(120, true, true, 0.0, entered, transitions);
+        REQUIRE((transitions & bit) != 0);
+        for (double ppq : { 0.125, 0.25 }) {
+            seq.advanceSampleWithFxMask(120, true, true, ppq, entered, transitions);
+            REQUIRE((transitions & bit) == 0);
+            REQUIRE(seq.getActiveFxSpan(seq.getCurrentStep(), fx).lengthSteps == 3);
+            REQUIRE(seq.getFxEnvelope(fx) == 1.0f);
+        }
+        seq.advanceSampleWithFxMask(120, true, true, 0.375, entered, transitions);
+        seq.advanceSampleWithFxMask(120, true, true, 0.5, entered, transitions);
+        REQUIRE((transitions & bit) != 0);
+    }
+}
+
+TEST_CASE("An FX span crossing the bar has one duration and continuous phase", "[sequencer][span]") {
+    BeatStepSequencer seq;
+    seq.setAllSteps(false);
+    for (int step : { 30, 31, 0, 1 }) seq.setStep(step, true);
+    seq.prepare(48000);
+    bool entered = false;
+    uint16_t transitions = 0;
+    const std::array<double, 4> ppq = { 3.75, 3.875, 4.0, 4.125 };
+    for (size_t i = 0; i < ppq.size(); ++i) {
+        seq.advanceSampleWithFxMask(120, true, true, ppq[i], entered, transitions);
+        const auto span = seq.getActiveFxSpan(seq.getCurrentStep(), 5);
+        REQUIRE_THAT(seq.getMergedPadSpan(seq.getCurrentStep()).spanPhase, Catch::Matchers::WithinAbs(0.25 * i, 1e-6));
+        REQUIRE(span.startStep == 30);
+        REQUIRE(span.endStep == 1);
+        REQUIRE(span.lengthSteps == 4);
+        REQUIRE_THAT(span.spanPhase, Catch::Matchers::WithinAbs(0.25 * i, 1e-6));
+        REQUIRE(transitions == (i == 0 ? BeatStepSequencer::kAllFxMask : 0));
+    }
+}
+
 TEST_CASE("BeatStepSequencer maps 4/4 bar PPQ to 32 steps accurately", "[sequencer]") {
     double phase = 0.0;
 

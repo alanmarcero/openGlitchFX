@@ -4,7 +4,7 @@
 
 ![openGlitchFX native editor](assets/native-ui.png)
 
-*Captured from the released v1.1.0 VST3 editor. [Capture details and provenance](docs/SCREENSHOTS.md).*
+*Captured from the native v1.2.0 VST3 editor. [Capture details and provenance](docs/SCREENSHOTS.md).*
 
 **openGlitchFX** is a beat-synchronized multi-glitch VST3 audio processor by **Alan Marcero**.
 
@@ -31,19 +31,19 @@ These generated concept images show the hardware inspiration and branding; they 
 - **32 Selectable Spots per 4/4 Bar & Automatic Contiguous Pad Merging:**
   - Every 4/4 bar (4 quarter-note beats) is subdivided into **32 steps** (`8 steps per beat × 4 beats = 32 steps`, each representing `1/32` of a bar).
   - **Continuous Multi-Pad Spanning (Zero `1/32` Resets):** When two or more adjacent pads are enabled with the same FX routing, **openGlitchFX** automatically combines them both **visually** (into a single unified glowing capsule block showing the combined duration such as `ALL FX (8/32 | 1 BEAT)` or `TAPE STOP (4/32 | 1/8 BAR)`) and **in the DSP engine**—the effect continues seamlessly across the entire combined block without resetting on every `1/32` subdivision!
-  - Time-based processors (`TAPE STOP`, `REVERSE`, `STUTTER`) automatically scale their deceleration and buffer windows across the full combined multi-pad span and only trigger once at the start of the combined block.
-- **Per-Pad (1/32 Step) Effect Assignment (Option 3: Hybrid Right-Click Menu + Pad Brush + 2×5 Mini LED Matrix):**
-  - Each of the 32 pads stores its own **10-bit FX Routing Mask** (`step_fx_01` .. `step_fx_32`), backed by **10 independent smoothed DSP gate envelopes** so different pads or combined blocks can trigger completely different effects (e.g., *Bitcrush* on Pads 25–28, *Stutter* on Pads 29–31, and *Tape Stop* only on Pad 32).
+  - `TAPE STOP` and `REVERSE` use the full continuous pad span. Each effect continues across neighboring pads that share it, including runs across the bar line. `STUTTER` captures once per run and repeats its selected rhythmic slice; `CHOPPER` and `PITCH GLITCH` keep their intentional modulation.
+- **Per-Pad (1/32 Step) Effect Assignment (Option 3: Hybrid Right-Click Menu + Pad Brush + 3×5 Mini LED Matrix):**
+  - Each of the 32 pads stores its own **15-bit FX routing**, stored in the original ten-bit masks plus five additional routing bits, backed by **15 independent smoothed DSP gate envelopes** so different pads or combined blocks can trigger completely different effects (e.g., *Bitcrush* on Pads 25–28, *Stutter* on Pads 29–31, and *Tape Stop* only on Pad 32).
   - **Right-Click Any Pad or Combined Block (Context Menu):**
-    - **Enable ALL 10 FX (`ALL`)** or **Disable (Dry Pass-Through)** on the clicked pad or entire combined block.
-    - **Solo Single Effect:** One-click soloing of any of the 10 FX (`Only BITCRUSH (BC)`, `Only TAPE STOP (TS)`, etc.) on that pad or combined block (automatically waking up the effect's dial to `50%` if currently at `0%`).
-    - **Toggle Multi-FX Combination:** Check/uncheck any combination of the 10 effects.
+    - **Enable ALL 15 FX (`ALL`)** or **Disable (Dry Pass-Through)** on the clicked pad or entire combined block.
+    - **Solo Single Effect:** One-click soloing of any of the 15 FX (`Only BITCRUSH (BC)`, `Only TAPE STOP (TS)`, etc.) on that pad or combined block (automatically waking up the effect's dial to `50%` if currently at `0%`).
+    - **Toggle Multi-FX Combination:** Check/uncheck any combination of the 15 effects.
     - **Split / Edit Single Pad Only:** Submenu to split an individual `1/32` pad out of a combined multi-pad block.
     - **Copy FX Routing:** Copy routing to the current 8-step beat or across all 32 pads.
   - **Left-Click `PAD BRUSH` Mode:**
-    - Use the **`PAD BRUSH:`** dropdown (`ALL ACTIVE FX` or `ONLY: BITCRUSH [BC]` .. `ONLY: WAVEFOLD [WF]`) to left-click and drag-paint a specific effect across any pads in the bar—adjacent painted pads merge automatically!
+    - Use the **`PAD BRUSH:`** dropdown (`ALL ACTIVE FX` or `ONLY: BITCRUSH [BC]` .. `ONLY: SATURATION [SA]`) to left-click and drag-paint a specific effect across any pads in the bar—adjacent painted pads merge automatically!
   - **On-Pad Visual Feedback:**
-    - Each pad or combined block displays a live routing & duration badge (`ALL FX (8/32 | 1 BEAT)`, `BC 2/32`, `TS`, `3FX`, etc.), a continuous playhead sweep across the merged block, and a **2×5 mini LED dot matrix** indicating which of the 10 effects are assigned.
+    - Each pad or combined block displays a live routing & duration badge (`ALL FX (8/32 | 1 BEAT)`, `BC 2/32`, `TS`, `3FX`, etc.), a continuous playhead sweep across the merged block, and a **3×5 mini LED dot matrix** indicating which of the 15 effects are assigned.
 - **One-Click Musical Pattern Presets:**
   - **ALL 32:** Continuous glitch processing across the entire bar.
   - **LAST BEAT (25-32):** Engages only on Beat 4 of every bar for automatic end-of-bar turnarounds and fills.
@@ -59,9 +59,9 @@ These generated concept images show the hardware inspiration and branding; they 
 
 ---
 
-## 10 Glitch FX Modules (Phase 1 + Phase 2)
+## 15 Glitch FX Modules
 
-Each of the **10 Glitch FX** features a dedicated **Amount Knob (`0% – 100%`)** and an independent **ON/OFF** toggle so you can dial in a single effect or stack multiple glitch processors in series:
+Each of the **15 Glitch FX** features a dedicated **Amount Knob (`0% – 100%`)** and an independent **ON/OFF** toggle so you can dial in a single effect or stack multiple glitch processors in series:
 
 ### Phase 1 — Core 5 Glitch FX
 1. **BITCRUSH (Bitrate & Depth Crusher):**
@@ -77,7 +77,7 @@ Each of the **10 Glitch FX** features a dedicated **Amount Knob (`0% – 100%`)*
 
 ### Phase 2 — 5 Additional Glitch FX
 6. **REVERSE (Backwards Grain Player):**
-   - Reads recorded dry-audio history backwards across the joined pad span within the available buffer, with raised-cosine fades at the span boundaries. On a cold start it first fills a short buffer.
+   - Reads the preceding full pad span backwards with raised-cosine edge fades, supporting spans up to 12 seconds. On a cold start it passes dry audio while capturing a complete region, then fades into reverse. No short-grain retriggers between adjacent pads.
 7. **CHOPPER (Rhythmic Slicer Gate):**
    - Tempo-scaled raised-cosine gate. Amount changes rate, depth and shape; longer joined pad spans slow the gate, and high amounts add a stereo phase offset.
 8. **PITCH GLITCH (Octave & Fifth Arpeggiator):**
@@ -85,7 +85,19 @@ Each of the **10 Glitch FX** features a dedicated **Amount Knob (`0% – 100%`)*
 9. **COMB RESO (Metallic Feedback Resonator):**
    - Short-delay (`1.4 ms` to `14 ms`) high-feedback comb filter with soft-clipped feedback loop for metallic flanging and tuned tube resonances.
 10. **WAVEFOLD (Harmonic Digital Wavefolder):**
-    - Sine-based harmonic wavefolder with first-order antiderivative anti-aliasing, DC blocking and tone filtering.
+    - Sine-based harmonic wavefolder with first-order antiderivative anti-aliasing, sample-rate-correct DC blocking and tone filtering.
+
+---
+
+## Third row — Modulation, Echo & Drive
+
+11. **CHORUS [CO]:** Two modulated delay voices per channel for stereo ensemble movement.
+12. **FLANGER [FL]:** Short fractional delay with damped feedback for sweeping comb notches.
+13. **PHASER [PH]:** Six swept allpass stages with stereo phase offsets.
+14. **PING-PONG [PP]:** Tempo-synced eighth-note echoes alternating left and right. The delay keeps time through dry pads; repeats are heard on active pads.
+15. **SATURATION [SA]:** Gain-compensated tanh drive with antiderivative antialiasing and DC removal.
+
+The editor can be resized. New effects start at 0%, so older sessions retain their sound. [Algorithm sources and verification](docs/DSP.md) · [Release changes](CHANGELOG.md).
 
 ---
 
@@ -111,7 +123,7 @@ The panel below the FX cards adds four groups of controls.
   - The session saves the drawn points.
 - **FILTER & TRIGGER:**
   - **FILTER:** Low-pass or high-pass state-variable filter on the wet signal, with `CUTOFF` and `RESONANCE`.
-  - **TRIGGER:** `SEQUENCER` uses the 32 pads. `MIDI` ignores the pads: notes `60`-`69` trigger one FX each (BITCRUSH to WAVEFOLD), and any other note triggers all FX.
+  - **TRIGGER:** `SEQUENCER` uses the 32 pads. `MIDI` ignores the pads: notes `60`-`74` trigger one FX each (BITCRUSH to SATURATION), and any other note triggers all FX.
   - **MIDI START:** `FREE` starts on the note. `SYNCED` waits for the next `1/32` step.
   - **DRY/WET:** `INSERT` replaces the dry signal on active pads. `PARALLEL` keeps the dry signal and adds the glitch on top.
 
@@ -134,20 +146,21 @@ openGlitchFX/
 ├── Source/
 │   ├── Core/                          # Pure C++20 DSP engine (zero GUI dependencies)
 │   │   ├── BeatStepSequencer.h/.cpp   # 32-step 4/4 bar PPQ sync & anti-click gate envelope
-│   │   ├── GlitchEffects.h/.cpp       # All 10 DSP glitch effect processors + wet filter
+│   │   ├── GlitchEffects.h/.cpp       # All 15 DSP glitch effect processors + wet filter
 │   │   ├── ModEnvelope.h/.cpp         # Drawn n-point modulation envelopes
 │   │   └── GlitchProcessorCore.h/.cpp # Master glitch chain & telemetry
 │   └── Plugin/                        # JUCE 8 VST3 Plugin & GUI
-│       ├── Parameters.h/.cpp          # APVTS layout (32 steps + 10 FX + master controls)
+│       ├── Parameters.h/.cpp          # APVTS layout (32 steps + 15 FX + master controls)
 │       ├── GlitchLookAndFeel.h/.cpp   # 4 selectable themes & custom rotary/button rendering
 │       ├── StepSequencerComponent.h/.cpp # Interactive 32-step 4/4 beat grid UI
 │       ├── DetailPanelComponent.h/.cpp   # Buffer, tape, envelope, filter & trigger controls
 │       ├── EnvelopeEditorComponent.h/.cpp # Breakpoint envelope editor
 │       ├── PluginProcessor.h/.cpp     # JUCE AudioProcessor & playhead integration
-│       └── PluginEditor.h/.cpp        # 10-FX 2x5 matrix + 32-step sequencer editor
+│       └── PluginEditor.h/.cpp        # 15-FX 3x5 matrix + 32-step sequencer editor
 ├── Tests/                             # Catch2 unit test suite
 │   ├── BeatSequencerTests.cpp
-│   └── GlitchCoreTests.cpp
+│   ├── GlitchCoreTests.cpp
+│   └── PluginStateTests.cpp
 ├── CMakeLists.txt
 ├── LICENSE
 └── README.md
@@ -162,7 +175,7 @@ openGlitchFX/
 3. Choose **openGlitchFX**, select **VST3**, and install.
 4. Rescan plugins in your DAW. If you chose a custom install folder, add it to the DAW's search paths.
 
-Manual downloads: [v1.1.1 release](https://github.com/alanmarcero/openGlitchFX/releases/tag/v1.1.1). Packages contain **VST3 only** for macOS 11+ (universal Apple Silicon/Intel) and Windows x64. Extract and copy the entire `openGlitchFX.vst3` bundle to `~/Library/Audio/Plug-Ins/VST3/` on macOS or `C:\Program Files\Common Files\VST3\` on Windows, then rescan your DAW. macOS builds are signed ad hoc.
+Manual downloads: [v1.2.0 release](https://github.com/alanmarcero/openGlitchFX/releases/tag/v1.2.0). Packages contain **VST3 only** for macOS 11+ (universal Apple Silicon/Intel) and Windows x64. Extract and copy the entire `openGlitchFX.vst3` bundle to `~/Library/Audio/Plug-Ins/VST3/` on macOS or `C:\Program Files\Common Files\VST3\` on Windows, then rescan your DAW. macOS builds are signed ad hoc.
 
 ## Building & Testing
 

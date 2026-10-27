@@ -20,7 +20,7 @@ public:
     void invertPattern();
     void resetAllStepFxMasksToAll();
 
-    // Paint target mode: -1 = All FX (default), 0..9 = specific Glitch FX index
+    // Paint target mode: -1 = All FX (default), 0..14 = specific Glitch FX index
     void setPaintTargetFx(int fxIndex);
     int getPaintTargetFx() const { return paintTargetFx_; }
     int countStepsRoutingToFx(int fxIndex) const;
@@ -66,7 +66,7 @@ private:
     float gateEnvelope_ = 0.0f;
     bool midiMode_ = false;
 
-    int paintTargetFx_ = -1; // -1 = ALL FX, 0..9 = specific FX brush
+    int paintTargetFx_ = -1; // -1 = ALL FX, 0..14 = specific FX brush
     bool dragTargetState_ = true;
 };
 
