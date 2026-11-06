@@ -153,7 +153,7 @@ openGlitchFX/
 3. Choose **openGlitchFX**, select **VST3**, and install.
 4. Rescan plugins in your DAW. If you chose a custom install folder, add it to the DAW's search paths.
 
-Manual downloads: [v1.2.0 release](https://github.com/alanmarcero/openGlitchFX/releases/tag/v1.2.0). Packages contain **VST3 only** for macOS 11+ (universal Apple Silicon/Intel) and Windows x64. Extract and copy the entire `openGlitchFX.vst3` bundle to `~/Library/Audio/Plug-Ins/VST3/` on macOS or `C:\Program Files\Common Files\VST3\` on Windows, then rescan your DAW. macOS builds are signed ad hoc.
+Manual downloads: [v1.2.1 release](https://github.com/alanmarcero/openGlitchFX/releases/tag/v1.2.1). Packages contain **VST3 only** for macOS 11+ (universal Apple Silicon/Intel) and Windows x64. Extract and copy the entire `openGlitchFX.vst3` bundle to `~/Library/Audio/Plug-Ins/VST3/` on macOS or `C:\Program Files\Common Files\VST3\` on Windows, then rescan your DAW. macOS builds are signed ad hoc.
 
 ## Building & Testing
 
