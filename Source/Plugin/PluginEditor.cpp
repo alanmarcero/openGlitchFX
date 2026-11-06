@@ -92,19 +92,19 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
         { "BITCRUSH [BC]",     "BITRATE & DEPTH",  kBitcrushAmt,    kBitcrushOn,    35.0 },
         { "DOWNSAMPLE [DS]",   "SAMPLE & HOLD",    kDownsampleAmt,  kDownsampleOn,  0.0  },
         { "STUTTER [ST]",      "BEAT REPEAT",      kStutterAmt,     kStutterOn,     0.0  },
-        { "TAPE STOP [TS]",    "VINYL BRAKE",      kTapeStopAmt,    kTapeStopOn,    0.0  },
-        { "RING MOD [RM]",     "CYBER CARRIER",    kRingModAmt,     kRingModOn,     0.0  },
+        { "TAPE STOP [TS]",    "SLOW TO STOP",     kTapeStopAmt,    kTapeStopOn,    0.0  },
+        { "RING MOD [RM]",     "SINE CARRIER",     kRingModAmt,     kRingModOn,     0.0  },
         // Row 2: 5 Additional Glitch FX (10 Total)
         { "REVERSE [RV]",      "FULL SPAN REVERSE",  kReverseAmt,     kReverseOn,     0.0  },
         { "CHOPPER [CH]",      "RHYTHMIC SLICER",  kChopperAmt,     kChopperOn,     0.0  },
         { "PITCH GLITCH [PG]", "OCTAVE ARPEGGIO",  kPitchGlitchAmt, kPitchGlitchOn, 0.0  },
-        { "COMB RESO [CR]",    "METALLIC FLANGE",  kCombResoAmt,    kCombResoOn,    0.0  },
+        { "COMB RESO [CR]",    "SHORT COMB",       kCombResoAmt,    kCombResoOn,    0.0  },
         { "WAVEFOLD [WF]",     "HARMONIC FOLD",    kWavefoldAmt,    kWavefoldOn,    0.0  },
         { "CHORUS [CO]", "STEREO ENSEMBLE", kChorusAmt, kChorusOn, 0.0 },
         { "FLANGER [FL]", "FEEDBACK SWEEP", kFlangerAmt, kFlangerOn, 0.0 },
-        { "PHASER [PH]", "SIX STAGE SWIRL", kPhaserAmt, kPhaserOn, 0.0 },
+        { "PHASER [PH]", "6 ALLPASS STAGES", kPhaserAmt, kPhaserOn, 0.0 },
         { "PING-PONG [PP]", "SYNCED ECHO", kPingPongAmt, kPingPongOn, 0.0 },
-        { "SATURATION [SA]", "ANALOG DRIVE", kSaturationAmt, kSaturationOn, 0.0 }
+        { "SATURATION [SA]", "TANH DRIVE", kSaturationAmt, kSaturationOn, 0.0 }
     }};
 
     for (size_t i = 0; i < kNumUiFx; ++i) {
@@ -288,20 +288,12 @@ void OpenGlitchFXEditor::paint(juce::Graphics& g) {
 
     g.setColour(pal.accentPrimary);
     g.setFont(juce::FontOptions(13.0f, juce::Font::bold));
-    g.drawText("ALAN MARCERO", 86, 12, 160, 18, juce::Justification::centredLeft);
-
-    g.setColour(pal.textMuted);
-    g.setFont(juce::FontOptions(10.0f, juce::Font::plain));
-    g.drawText("CUSTOM AUDIO DSP", 86, 29, 160, 14, juce::Justification::centredLeft);
+    g.drawText("ALAN MARCERO", 86, 22, 160, 18, juce::Justification::centredLeft);
 
     // Center Plugin Title
     g.setColour(pal.textBright);
     g.setFont(juce::FontOptions(20.0f, juce::Font::bold));
-    g.drawText("openGlitchFX", static_cast<int>(w * 0.5f - 160.0f), 8, 320, 24, juce::Justification::centred);
-
-    g.setColour(pal.accentPrimary);
-    g.setFont(juce::FontOptions(10.0f, juce::Font::bold));
-    g.drawFittedText("32-STEP BEAT-SYNCED GLITCH PROCESSOR", static_cast<int>(w * 0.5f - 150.0f), 32, 300, 14, juce::Justification::centred, 1);
+    g.drawText("openGlitchFX", static_cast<int>(w * 0.5f - 160.0f), 16, 320, 24, juce::Justification::centred);
 
     // Live Gate Status Pill Indicator in Header
     const auto tel = processor_.getTelemetry();
@@ -393,7 +385,7 @@ void OpenGlitchFXEditor::paint(juce::Graphics& g) {
         g.fillRoundedRectangle(hdr, 4.0f);
         g.setColour(pal.accentPrimary);
         g.setFont(juce::FontOptions(10.5f, juce::Font::bold));
-        g.drawText("MASTER & TELEMETRY", hdr.toNearestInt(), juce::Justification::centred);
+        g.drawText("MASTER & METERS", hdr.toNearestInt(), juce::Justification::centred);
 
         if (!masterMeterBounds_.isEmpty()) {
             const auto mb = masterMeterBounds_;
