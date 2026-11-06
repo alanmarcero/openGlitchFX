@@ -6,9 +6,7 @@
 
 *Captured from the native v1.2.0 VST3 editor. [Capture details and provenance](docs/SCREENSHOTS.md).*
 
-**openGlitchFX** is a beat-synchronized multi-glitch VST3 audio processor by **Alan Marcero**.
-
-Unlike traditional glitch plugins that run continuously or require complex MIDI routing and automation lanes, **openGlitchFX** features an integrated **32-Step 4/4 Bar Beat-Synced Enable/Disable Sequencer**. Leave the plugin enabled on your drum bus, synth lead, or master track, and select any of the **32 spots in a 4/4 bar** (down to a single `1/32` note, the last beat of a bar, or custom rhythmic patterns) where the glitch engine engages—passing dry audio between active regions, with smoothing at transitions. Output trim still applies to the dry signal.
+Beat-synced glitch processor with 15 effects and a 32-step sequencer. Pads that are on process audio. The rest pass dry. Output trim still applies to the dry signal. Transitions are smoothed.
 
 ---
 
@@ -26,82 +24,62 @@ These generated concept images show the hardware inspiration and branding; they 
 
 ---
 
-## Core Differentiator: 32-Step 4/4 Beat-Synced Sequencer & Per-Pad Effect Routing
+## Sequencer
 
-- **32 Selectable Spots per 4/4 Bar & Automatic Contiguous Pad Merging:**
-  - Every 4/4 bar (4 quarter-note beats) is subdivided into **32 steps** (`8 steps per beat × 4 beats = 32 steps`, each representing `1/32` of a bar).
-  - **Continuous Multi-Pad Spanning (Zero `1/32` Resets):** When two or more adjacent pads are enabled with the same FX routing, **openGlitchFX** automatically combines them both **visually** (into a single unified glowing capsule block showing the combined duration such as `ALL FX (8/32 | 1 BEAT)` or `TAPE STOP (4/32 | 1/8 BAR)`) and **in the DSP engine**—the effect continues seamlessly across the entire combined block without resetting on every `1/32` subdivision!
-  - `TAPE STOP` and `REVERSE` use the full continuous pad span. Each effect continues across neighboring pads that share it, including runs across the bar line. `STUTTER` captures once per run and repeats its selected rhythmic slice; `CHOPPER` and `PITCH GLITCH` keep their intentional modulation.
-- **Per-Pad (1/32 Step) Effect Assignment (Option 3: Hybrid Right-Click Menu + Pad Brush + 3×5 Mini LED Matrix):**
-  - Each of the 32 pads stores its own **15-bit FX routing**, stored in the original ten-bit masks plus five additional routing bits, backed by **15 independent smoothed DSP gate envelopes** so different pads or combined blocks can trigger completely different effects (e.g., *Bitcrush* on Pads 25–28, *Stutter* on Pads 29–31, and *Tape Stop* only on Pad 32).
-  - **Right-Click Any Pad or Combined Block (Context Menu):**
-    - **Enable ALL 15 FX (`ALL`)** or **Disable (Dry Pass-Through)** on the clicked pad or entire combined block.
-    - **Solo Single Effect:** One-click soloing of any of the 15 FX (`Only BITCRUSH (BC)`, `Only TAPE STOP (TS)`, etc.) on that pad or combined block (automatically waking up the effect's dial to `50%` if currently at `0%`).
-    - **Toggle Multi-FX Combination:** Check/uncheck any combination of the 15 effects.
-    - **Split / Edit Single Pad Only:** Submenu to split an individual `1/32` pad out of a combined multi-pad block.
-    - **Copy FX Routing:** Copy routing to the current 8-step beat or across all 32 pads.
-  - **Left-Click `PAD BRUSH` Mode:**
-    - Use the **`PAD BRUSH:`** dropdown (`ALL ACTIVE FX` or `ONLY: BITCRUSH [BC]` .. `ONLY: SATURATION [SA]`) to left-click and drag-paint a specific effect across any pads in the bar—adjacent painted pads merge automatically!
-  - **On-Pad Visual Feedback:**
-    - Each pad or combined block displays a live routing & duration badge (`ALL FX (8/32 | 1 BEAT)`, `BC 2/32`, `TS`, `3FX`, etc.), a continuous playhead sweep across the merged block, and a **3×5 mini LED dot matrix** indicating which of the 15 effects are assigned.
-- **One-Click Musical Pattern Presets:**
-  - **ALL 32:** Continuous glitch processing across the entire bar.
-  - **LAST BEAT (25-32):** Engages only on Beat 4 of every bar for automatic end-of-bar turnarounds and fills.
-  - **LAST 1/8 (29-32):** Engages for the final 1/8 note (`4/32`) of the bar.
-  - **LAST 1/32 (Step 32):** Micro-glitch burst on only the very last `1/32` note of the bar.
-  - **BEATS 2&4:** Backbeat-synced glitching on snare beats.
-  - **OFF 1/16:** The second 1/16 note of every 1/8 note.
-  - **ALL FX / CLEAR:** Instant FX routing reset or pattern clear.
-- **Sample-Accurate DAW Sync & Anti-Click Gate Envelope:**
-  - Locks directly to the DAW host playhead (`PPQ` bar position and `BPM`) or runs on an internal BPM clock when host transport is stopped.
-  - Adjustable **DE-CLICK** smoothing (`0.5 ms` to `25 ms`) reduces clicks when transitioning between dry pass-through and active glitch steps, or when switching between different effects on adjacent pads.
-  - Automatically triggers buffer capture for time-based effects (`STUTTER`, `TAPE STOP`, `REVERSE`) on the exact sample **that specific effect's** pad assignment transitions from inactive to active.
+A 4/4 bar is 32 steps: 8 steps per beat, each 1/32 of a bar. The sequencer follows host PPQ and BPM, or the internal BPM when host sync is off or the host reports no tempo.
+
+Adjacent pads with the same FX routing draw as one block and run as one span. The effect does not restart on each 1/32 step. Badges show the span, for example `ALL FX (8/32 | 1 BEAT)` or `TAPE STOP (4/32 | 1/8 BAR)`. Tape Stop and Reverse use that full span, including across the bar line. Stutter captures once per run and repeats its slice. Chopper and Pitch Glitch keep their modulation.
+
+Each pad stores a 15-bit FX mask (the original ten bits plus five more) and its own smoothed gate, so neighboring pads can run different effects. Right-click a pad or block to:
+
+- enable all 15 effects, or disable the pad so it passes dry
+- solo one effect (`Only BITCRUSH (BC)`, `Only TAPE STOP (TS)`, and the rest). If that effect's amount is 0%, it is set to 50%
+- toggle any combination of the 15 effects
+- split one 1/32 pad out of a block
+- copy the routing to the current 8-step beat, or to all 32 pads
+
+The pad-brush menu is `ALL ACTIVE FX` or one effect from `ONLY: BITCRUSH [BC]` through `ONLY: SATURATION [SA]`. Left-click and drag to paint that choice. Adjacent painted pads merge. Each pad shows a routing badge (`ALL FX (8/32 | 1 BEAT)`, `BC 2/32`, `TS`, `3FX`) and a 3×5 grid of which effects are on.
+
+| Button | Pads |
+| --- | --- |
+| ALL 32 | All 32 pads on |
+| LAST BEAT (25-32) | Beat 4 only |
+| LAST 1/8 (29-32) | The last eighth note (4 steps) |
+| LAST 1/32 | Step 32 only |
+| BEATS 2&4 | Beats 2 and 4 |
+| OFF 1/16 | The second 1/16 of every 1/8 |
+| ALL FX | All 15 effects routed to every pad. Pad on/off stays as it is |
+| CLEAR | All pads off |
+
+De-click fade is 0.5 ms to 25 ms, used when a pad turns on or off and when adjacent pads use different effects. Stutter, Tape Stop and Reverse capture on the sample where that effect's pad goes from off to on.
 
 ---
 
-## 15 Glitch FX Modules
+## Effects
 
-Each of the **15 Glitch FX** features a dedicated **Amount Knob (`0% – 100%`)** and an independent **ON/OFF** toggle so you can dial in a single effect or stack multiple glitch processors in series:
+Each effect has an amount knob (0–100%) and its own on/off switch. At 0% that effect is silent, including on pads routed to it. Effects that are on run in series on an active pad.
 
-### Phase 1 — Core 5 Glitch FX
-1. **BITCRUSH (Bitrate & Depth Crusher):**
-   - Continuously variable knob that dials bit resolution from pristine 16-bit down to gritty 1.5-bit quantization, paired with bitrate packet-hold frame decimation and tanh saturation compensation.
-2. **DOWNSAMPLE (Sample Rate Decimator):**
-   - Variable sample-and-hold clock divider (`1x` to `59x`) for authentic early-sampler aliasing and vocal/synth crunch.
-3. **STUTTER (Beat Repeat / Buffer Stutter):**
-   - Captures audio at the start of an active step region and loops a slice with smoothed edges. In KNOB mode, slice duration ranges from a quarter note (capped at 500 ms) down to 22 ms; BUFFER SIZE can select a fixed tempo division instead.
-4. **TAPE STOP (Vinyl Brake):**
-   - Simulates pressing a finger against a spinning tape reel or turntable platter, decelerating playback speed and pitch to a low-speed floor.
-5. **RING MOD (Cybernetic Carrier Modulator):**
-   - Exponentially swept sine-based carrier oscillator (`45 Hz` to `1600 Hz`) for metallic, robotic, and sci-fi harmonic textures.
-
-### Phase 2 — 5 Additional Glitch FX
-6. **REVERSE (Backwards Grain Player):**
-   - Reads the preceding full pad span backwards with raised-cosine edge fades, supporting spans up to 12 seconds. On a cold start it passes dry audio while capturing a complete region, then fades into reverse. No short-grain retriggers between adjacent pads.
-7. **CHOPPER (Rhythmic Slicer Gate):**
-   - Tempo-scaled raised-cosine gate. Amount changes rate, depth and shape; longer joined pad spans slow the gate, and high amounts add a stereo phase offset.
-8. **PITCH GLITCH (Octave & Fifth Arpeggiator):**
-   - Dual-head crossfaded granular pitch shifter that cycles toward `+7`, `+12`, `-12`, and `+19` semitones. Full Amount reaches those intervals; lower settings reduce the shifts.
-9. **COMB RESO (Metallic Feedback Resonator):**
-   - Short-delay (`1.4 ms` to `14 ms`) high-feedback comb filter with soft-clipped feedback loop for metallic flanging and tuned tube resonances.
-10. **WAVEFOLD (Harmonic Digital Wavefolder):**
-    - Sine-based harmonic wavefolder with first-order antiderivative anti-aliasing, sample-rate-correct DC blocking and tone filtering.
-
----
-
-## Third row — Modulation, Echo & Drive
-
-11. **CHORUS [CO]:** Two modulated delay voices per channel for stereo ensemble movement.
-12. **FLANGER [FL]:** Short fractional delay with damped feedback for sweeping comb notches.
-13. **PHASER [PH]:** Six swept allpass stages with stereo phase offsets.
-14. **PING-PONG [PP]:** Tempo-synced eighth-note echoes alternating left and right. The delay keeps time through dry pads; repeats are heard on active pads.
-15. **SATURATION [SA]:** Gain-compensated tanh drive with antiderivative antialiasing and DC removal.
+1. **Bitcrush.** Bit depth from 16-bit to 1.5-bit, with packet-hold decimation and tanh compensation.
+2. **Downsample.** Sample-and-hold divider from 1× to 59×.
+3. **Stutter.** Captures at the start of an active region and loops a slice with smoothed edges. In Knob mode the slice runs from a quarter note (capped at 500 ms) down to 22 ms. Buffer Size can lock the slice to a tempo division.
+4. **Tape stop.** Playback speed and pitch decelerate to a low-speed floor.
+5. **Ring mod.** Sine carrier from 45 Hz to 1600 Hz.
+6. **Reverse.** Plays the preceding pad span backwards, up to 12 seconds, with raised-cosine edge fades. On a cold start it passes dry audio until a full region is captured. Adjacent pads do not retrigger short grains.
+7. **Chopper.** Tempo-scaled raised-cosine gate. Amount changes rate, depth and shape. Longer joined spans slow the gate. High amounts add a stereo phase offset.
+8. **Pitch glitch.** Dual-head crossfaded granular shifter cycling toward +7, +12, −12 and +19 semitones. Full amount reaches those intervals. Lower settings reduce the shifts.
+9. **Comb.** Delay from 1.4 ms to 14 ms with high, soft-clipped feedback.
+10. **Wavefold.** Sine wavefolder with first-order antiderivative antialiasing, DC blocking and a tone filter.
+11. **Chorus.** Two modulated delay voices per channel.
+12. **Flanger.** Short fractional delay with damped feedback.
+13. **Phaser.** Six swept allpass stages, with a stereo offset.
+14. **Ping-pong.** Tempo-synced eighth-note echoes alternating left and right. The delay keeps time through dry pads. Repeats are heard on active pads.
+15. **Saturation.** Gain-compensated tanh drive with antiderivative antialiasing and DC removal.
 
 The editor can be resized. New effects start at 0%, so older sessions retain their sound. [Algorithm sources and verification](docs/DSP.md) · [Release changes](CHANGELOG.md).
 
 ---
 
-## Buffer, Tape, Envelopes & MIDI (Phase 3)
+## Buffer, tape, envelopes and MIDI
 
 The panel below the FX cards adds four groups of controls.
 
