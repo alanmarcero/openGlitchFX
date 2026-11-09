@@ -4,7 +4,7 @@
 
 ![openGlitchFX native editor](assets/native-ui.png)
 
-*Captured from the native v1.2.0 VST3 editor. [Capture details and provenance](docs/SCREENSHOTS.md).*
+*Captured from the native v1.2.1 VST3 editor. [Capture details and provenance](docs/SCREENSHOTS.md).*
 
 Beat-synced glitch processor with 15 effects and a 32-step sequencer. Pads that are on process audio. The rest pass dry. Output trim still applies to the dry signal. Transitions are smoothed.
 
@@ -15,12 +15,6 @@ Beat-synced glitch processor with 15 effects and a 32-step sequencer. Pads that 
 The native editor has four selectable color themes: **Cyber Neon** (default), **Industrial Amber**, **Acid Matrix**, and **Arctic Glitch**. The theme is saved with the session and can be automated.
 
 ### Hardware inspiration
-
-These generated concept images show the hardware inspiration and branding; they are not plugin screenshots.
-
-| Studio hardware concept | Alan Marcero emblem |
-| :---: | :---: |
-| ![Studio hardware concept](assets/studio_hardware.jpg) | <img src="assets/alan_marcero_logo.jpg" width="280" alt="Alan Marcero emblem" /> |
 
 ---
 

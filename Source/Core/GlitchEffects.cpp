@@ -836,8 +836,12 @@ void PingPongEchoEffect::processSample(float amount, double bpm, float& left, fl
     damp_[0] += damping * (dL - damp_[0]);
     damp_[1] += damping * (dR - damp_[1]);
     const float feedback = 0.2f + 0.55f * amt;
-    delay_[0][static_cast<size_t>(writePos_)] = 0.5f * (left + right) + feedback * std::tanh(damp_[1]);
-    delay_[1][static_cast<size_t>(writePos_)] = feedback * std::tanh(damp_[0]);
+    auto warmSaturate = [](float v) noexcept -> float {
+        const float s = std::tanh(v);
+        return s + 0.04f * s * std::abs(s);
+    };
+    delay_[0][static_cast<size_t>(writePos_)] = 0.5f * (left + right) + feedback * warmSaturate(damp_[1]);
+    delay_[1][static_cast<size_t>(writePos_)] = feedback * warmSaturate(damp_[0]);
     writePos_ = (writePos_ + 1) % static_cast<int>(delay_[0].size());
     left = left * (1.0f - 0.4f * amt) + dL * 0.6f * amt;
     right = right * (1.0f - 0.4f * amt) + dR * 0.6f * amt;

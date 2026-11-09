@@ -293,7 +293,10 @@ void OpenGlitchFXEditor::paint(juce::Graphics& g) {
     // Center Plugin Title
     g.setColour(pal.textBright);
     g.setFont(juce::FontOptions(20.0f, juce::Font::bold));
-    g.drawText("openGlitchFX", static_cast<int>(w * 0.5f - 160.0f), 16, 320, 24, juce::Justification::centred);
+    g.drawText("openGlitchFX", static_cast<int>(w * 0.5f - 160.0f), 15, 320, 22, juce::Justification::centred);
+    g.setFont(juce::FontOptions(8.5f, juce::Font::bold));
+    g.setColour(pal.accentPrimary.withAlpha(0.70f));
+    g.drawText("15-ENGINE RACK  /  32-STEP GLITCH MATRIX", static_cast<int>(w * 0.5f - 160.0f), 37, 320, 12, juce::Justification::centred);
 
     // Live Gate Status Pill Indicator in Header
     const auto tel = processor_.getTelemetry();
