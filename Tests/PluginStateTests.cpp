@@ -98,3 +98,21 @@ TEST_CASE("The host is told to render the enabled echo tail", "[plugin][tail]") 
     amount->setValueNotifyingHost(0.0f);
     REQUIRE_THAT(processor.getTailLengthSeconds(), Catch::Matchers::WithinAbs(0, 0));
 }
+
+TEST_CASE("Editor renders native UI screenshot", "[plugin][gui]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    OpenGlitchFXProcessor processor;
+    processor.prepareToPlay(48000, 512);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+    REQUIRE(editor != nullptr);
+    const auto snapshot = editor->createComponentSnapshot(editor->getLocalBounds(), false, 2.0f);
+    REQUIRE(snapshot.isValid());
+    REQUIRE(snapshot.getWidth() == 2160);
+    REQUIRE(snapshot.getHeight() == 1960);
+    juce::File file = juce::File::getCurrentWorkingDirectory().getChildFile("assets/native-ui.png");
+    file.deleteFile();
+    juce::FileOutputStream stream(file);
+    REQUIRE(stream.openedOk());
+    juce::PNGImageFormat png;
+    REQUIRE(png.writeImageToStream(snapshot, stream));
+}
