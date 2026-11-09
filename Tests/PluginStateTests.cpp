@@ -109,7 +109,12 @@ TEST_CASE("Editor renders native UI screenshot", "[plugin][gui]") {
     REQUIRE(snapshot.isValid());
     REQUIRE(snapshot.getWidth() == 2160);
     REQUIRE(snapshot.getHeight() == 1960);
-    juce::File file = juce::File::getCurrentWorkingDirectory().getChildFile("assets/native-ui.png");
+    juce::File cwd = juce::File::getCurrentWorkingDirectory();
+    juce::File file = cwd.getChildFile("assets/native-ui.png");
+    if (!cwd.getChildFile("assets").isDirectory() && cwd.getParentDirectory().getChildFile("assets").isDirectory())
+        file = cwd.getParentDirectory().getChildFile("assets/native-ui.png");
+    else
+        file.getParentDirectory().createDirectory();
     file.deleteFile();
     juce::FileOutputStream stream(file);
     REQUIRE(stream.openedOk());
