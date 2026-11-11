@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(openGlitchFX VERSION 1.3.0 LANGUAGES C CXX)
+project(openGlitchFX VERSION 1.4.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -33,7 +33,8 @@ if(OGFX_BUILD_PLUGIN)
     juce_add_binary_data(OpenGlitchFXAssets
         SOURCES
             assets/alan_marcero_logo.jpg
-            assets/analog-cyber-faceplate.png)
+            assets/analog-cyber-faceplate.png
+            assets/glitch-cube-matrix.png)
     set_target_properties(OpenGlitchFXAssets PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
     juce_add_plugin(openGlitchFX
