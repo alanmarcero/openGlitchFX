@@ -77,6 +77,33 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
     setupPresetBtn(presetClearBtn_,      "Turn off all 32 pads.",
                    [this]() { sequencerGrid_.applyPreset(StepPatternPreset::ClearAll); });
 
+    auto setupSequencerControl = [this](juce::Label& label, juce::Slider& slider) {
+        label.setFont(juce::FontOptions(10.0f, juce::Font::bold));
+        label.setJustificationType(juce::Justification::centredRight);
+        addAndMakeVisible(label);
+        slider.setSliderStyle(juce::Slider::LinearHorizontal);
+        slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+        slider.setMouseDragSensitivity(180);
+        addAndMakeVisible(slider);
+    };
+    sequenceLengthSlider_.setRange(1.0, 32.0, 1.0);
+    sequenceLengthSlider_.setTooltip("Number of 1/32-note steps before the pattern loops.");
+    sequenceLengthValueLabel_.setJustificationType(juce::Justification::centredLeft);
+    sequenceLengthValueLabel_.setFont(juce::FontOptions(10.0f, juce::Font::bold));
+    addAndMakeVisible(sequenceLengthValueLabel_);
+    setupSequencerControl(sequenceLengthLabel_, sequenceLengthSlider_);
+
+    sequencerSwingSlider_.setRange(0.0, 100.0, 0.1);
+    sequencerSwingSlider_.setTooltip("Delay odd-numbered steps in each pair for a swung glitch rhythm.");
+    sequencerSwingValueLabel_.setJustificationType(juce::Justification::centredLeft);
+    sequencerSwingValueLabel_.setFont(juce::FontOptions(10.0f, juce::Font::bold));
+    addAndMakeVisible(sequencerSwingValueLabel_);
+    setupSequencerControl(sequencerSwingLabel_, sequencerSwingSlider_);
+
+    randomizeButton_.setTooltip("Create a repeatable-density pattern. With an FX brush selected, randomize only that FX routing.");
+    randomizeButton_.onClick = [this]() { showRandomizeMenu(); };
+    addAndMakeVisible(randomizeButton_);
+
     // 15 Glitch FX Slots (3 Rows x 5 Columns)
     using namespace openglitch::params;
     struct FxMeta {
@@ -152,6 +179,8 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
 
     themeAttach_       = std::make_unique<ComboBoxAttachment>(processor_.parameters, kTheme, themeBox_);
     hostSyncAttach_    = std::make_unique<ButtonAttachment>(processor_.parameters, kHostSync, hostSyncButton_);
+    sequenceLengthAttach_ = std::make_unique<SliderAttachment>(processor_.parameters, kSequenceLength, sequenceLengthSlider_);
+    sequencerSwingAttach_ = std::make_unique<SliderAttachment>(processor_.parameters, kSequencerSwing, sequencerSwingSlider_);
     internalBpmAttach_ = std::make_unique<SliderAttachment>(processor_.parameters, kInternalBpm, internalBpmSlider_);
     smoothAttach_      = std::make_unique<SliderAttachment>(processor_.parameters, kSmoothMs, smoothSlider_);
     masterMixAttach_   = std::make_unique<SliderAttachment>(processor_.parameters, kMasterMix, masterMixSlider_);
@@ -162,13 +191,17 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
     smoothSlider_.setDoubleClickReturnValue(true, 2.5);
     masterMixSlider_.setDoubleClickReturnValue(true, 100.0);
     masterGainSlider_.setDoubleClickReturnValue(true, 0.0);
+    sequenceLengthValueLabel_.setText(juce::String(static_cast<int>(std::round(sequenceLengthSlider_.getValue()))) + " STEPS",
+                                      juce::dontSendNotification);
+    sequencerSwingValueLabel_.setText(juce::String(sequencerSwingSlider_.getValue(), 0) + "%",
+                                      juce::dontSendNotification);
 
     processor_.parameters.addParameterListener(kTheme, this);
     applyTheme(themeBox_.getSelectedItemIndex());
 
     setResizable(true, true);
-    setResizeLimits(1080, 900, 1620, 1350);
-    setSize(1080, 980);
+    setResizeLimits(1080, 940, 1620, 1390);
+    setSize(1080, 1020);
     startTimerHz(30);
 }
 
@@ -196,9 +229,32 @@ void OpenGlitchFXEditor::applyTheme(int themeIndex) {
     smoothLabel_.setColour(juce::Label::textColourId, pal.textMuted);
     masterMixLabel_.setColour(juce::Label::textColourId, pal.textMuted);
     masterGainLabel_.setColour(juce::Label::textColourId, pal.textMuted);
+    sequenceLengthLabel_.setColour(juce::Label::textColourId, pal.textMuted);
+    sequenceLengthValueLabel_.setColour(juce::Label::textColourId, pal.accentPrimary);
+    sequencerSwingLabel_.setColour(juce::Label::textColourId, pal.textMuted);
+    sequencerSwingValueLabel_.setColour(juce::Label::textColourId, pal.accentPrimary);
+    sequenceLengthSlider_.setColour(juce::Slider::thumbColourId, pal.accentPrimary);
+    sequenceLengthSlider_.setColour(juce::Slider::trackColourId, pal.stepInactiveFill);
+    sequencerSwingSlider_.setColour(juce::Slider::thumbColourId, pal.accentSecondary);
+    sequencerSwingSlider_.setColour(juce::Slider::trackColourId, pal.stepInactiveFill);
 
     sendLookAndFeelChange();
     repaint();
+}
+
+void OpenGlitchFXEditor::showRandomizeMenu() {
+    juce::PopupMenu menu;
+    menu.addSectionHeader(sequencerGrid_.getPaintTargetFx() >= 0 ? "Randomize selected FX lane" : "Randomize the full pattern");
+    menu.addItem(1, "Light  ·  35% step density");
+    menu.addItem(2, "Medium  ·  55% step density");
+    menu.addItem(3, "Wild  ·  75% step density");
+    menu.showMenuAsync(juce::PopupMenu::Options{}.withTargetComponent(&randomizeButton_),
+                       [safeThis = juce::Component::SafePointer<OpenGlitchFXEditor>(this)](int choice) {
+        if (safeThis != nullptr && choice > 0) {
+            const auto seed = static_cast<uint32_t>(juce::Random::getSystemRandom().nextInt());
+            safeThis->sequencerGrid_.randomizePattern(seed, choice);
+        }
+    });
 }
 
 int OpenGlitchFXEditor::fxCardHeaderAt(juce::Point<float> position) const {
@@ -241,6 +297,17 @@ void OpenGlitchFXEditor::timerCallback() {
     using namespace openglitch::params;
     sequencerGrid_.setMidiTriggerMode(processor_.parameters.getRawParameterValue(kTriggerMode)->load() > 0.5f);
     internalBpmSlider_.setAlpha(hostSyncButton_.getToggleState() ? 0.45f : 1.0f);
+    sequenceLengthValueLabel_.setText(juce::String(static_cast<int>(std::round(sequenceLengthSlider_.getValue()))) + " STEPS",
+                                      juce::dontSendNotification);
+    sequencerSwingValueLabel_.setText(juce::String(sequencerSwingSlider_.getValue(), 0) + "%",
+                                      juce::dontSendNotification);
+    const int paintTargetFx = sequencerGrid_.getPaintTargetFx();
+    if (paintTargetFx >= 0 && paintTargetFx < kNumUiFx) {
+        const auto& desc = openglitch::params::kFxDescriptors[static_cast<size_t>(paintTargetFx)];
+        randomizeButton_.setTooltip(juce::String("Randomize only ") + desc.name + " routing across pads. Existing pad on/off states and other FX routes stay unchanged.");
+    } else {
+        randomizeButton_.setTooltip("Create a full pattern. Higher levels use denser pads and a wider range of FX routes.");
+    }
 
     if (const int version = processor_.getStateVersion(); version != lastStateVersion_) {
         lastStateVersion_ = version;
@@ -487,9 +554,19 @@ void OpenGlitchFXEditor::resized() {
                                  static_cast<int>(presetH));
     }
 
+    const int controlY = 230;
+    const int controlH = 28;
+    sequenceLengthLabel_.setBounds(28, controlY, 58, controlH);
+    sequenceLengthSlider_.setBounds(90, controlY, 155, controlH);
+    sequenceLengthValueLabel_.setBounds(249, controlY, 78, controlH);
+    sequencerSwingLabel_.setBounds(355, controlY, 54, controlH);
+    sequencerSwingSlider_.setBounds(414, controlY, 185, controlH);
+    sequencerSwingValueLabel_.setBounds(604, controlY, 54, controlH);
+    randomizeButton_.setBounds(770, controlY, 150, controlH);
+
     // 15 Glitch FX Cards (3 Rows x 5 Columns) + Master Strip on Right
     const float detailH = 196.0f;
-    const float fxTop = 228.0f;
+    const float fxTop = 270.0f;
     const float fxTotalH = h - fxTop - detailH - 22.0f - 8.0f;
     detailPanel_.setBounds(static_cast<int>(margin), static_cast<int>(h - 22.0f - detailH),
                            static_cast<int>(w - margin * 2.0f), static_cast<int>(detailH));

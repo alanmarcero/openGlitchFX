@@ -98,6 +98,8 @@ void OpenGlitchFXProcessor::syncParametersToCore() {
     // 2. Gate smoothing
     const float smoothMs = *parameters.getRawParameterValue(kSmoothMs);
     core_.setGateSmoothingMs(smoothMs);
+    core_.setSequenceLength(static_cast<int>(std::round(*parameters.getRawParameterValue(kSequenceLength))));
+    core_.setSequencerSwing(*parameters.getRawParameterValue(kSequencerSwing));
 
     // 3. All 15 Glitch FX
     auto syncFx = [&](GlitchFxId id, const char* amtId, const char* onId) {

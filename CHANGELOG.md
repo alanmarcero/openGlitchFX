@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.0 — 2026-11-16
+
+- Added an automatable sequencer length (1–32 steps) and swing (0–100%) control.
+- Added seeded pattern randomization at three density levels. An FX brush selection scopes randomization to that route and preserves other pad state.
+- Refreshed the native editor screenshot and documented commercial feature research.
+
 ## 1.2.1 — 2026-11-06
 
 - Card subtitles name the process. The README keeps the sequencer, effect, and install facts without the brochure wording.

@@ -70,6 +70,56 @@ TEST_CASE("BeatStepSequencer maps 4/4 bar PPQ to 32 steps accurately", "[sequenc
     REQUIRE(BeatStepSequencer::computeStepFromPpq(4.0, &phase) == 0);
 }
 
+TEST_CASE("BeatStepSequencer loops over the selected dynamic length", "[sequencer][timing]") {
+    BeatStepSequencer seq;
+    seq.setSequenceLength(16);
+    seq.prepare(48000.0);
+    seq.setSmoothingTimeMs(0.0f);
+    bool entered = false;
+
+    seq.advanceSample(120.0, true, true, 1.0, entered);
+    REQUIRE(seq.getCurrentStep() == 8);
+    seq.advanceSample(120.0, true, true, 2.0, entered);
+    REQUIRE(seq.getCurrentStep() == 0);
+
+    seq.setSequenceLength(32);
+    seq.advanceSample(120.0, true, true, 2.0, entered);
+    REQUIRE(seq.getCurrentStep() == 16);
+}
+
+TEST_CASE("BeatStepSequencer swing delays offbeat steps and leaves downbeats in place", "[sequencer][timing]") {
+    BeatStepSequencer seq;
+    seq.setSwing(100.0f);
+    seq.prepare(48000.0);
+    seq.setSmoothingTimeMs(0.0f);
+    bool entered = false;
+
+    seq.advanceSample(120.0, true, true, 0.0, entered);
+    REQUIRE(seq.getCurrentStep() == 0);
+    seq.advanceSample(120.0, true, true, 0.18, entered);
+    REQUIRE(seq.getCurrentStep() == 0);
+    seq.advanceSample(120.0, true, true, 0.19, entered);
+    REQUIRE(seq.getCurrentStep() == 1);
+    seq.advanceSample(120.0, true, true, 0.25, entered);
+    REQUIRE(seq.getCurrentStep() == 2);
+}
+
+TEST_CASE("BeatStepSequencer spans wrap at the selected dynamic length", "[sequencer][span]") {
+    BeatStepSequencer seq;
+    seq.setSequenceLength(16);
+    seq.setAllSteps(false);
+    for (int step : { 14, 15, 0, 1 }) seq.setStep(step, true);
+    seq.prepare(48000.0);
+    bool entered = false;
+    seq.advanceSample(120.0, true, true, 0.0, entered);
+
+    const auto span = seq.getMergedPadSpan(0);
+    REQUIRE(span.startStep == 14);
+    REQUIRE(span.endStep == 1);
+    REQUIRE(span.lengthSteps == 4);
+    REQUIRE_THAT(span.spanPhase, Catch::Matchers::WithinAbs(0.5f, 1e-6));
+}
+
 TEST_CASE("BeatStepSequencer presets configure expected 32-step patterns", "[sequencer]") {
     BeatStepSequencer seq;
 

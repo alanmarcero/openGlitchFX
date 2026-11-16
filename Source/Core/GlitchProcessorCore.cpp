@@ -119,6 +119,14 @@ void GlitchProcessorCore::setGateSmoothingMs(float ms) {
     sequencer_.setSmoothingTimeMs(ms);
 }
 
+void GlitchProcessorCore::setSequenceLength(int steps) {
+    sequencer_.setSequenceLength(steps);
+}
+
+void GlitchProcessorCore::setSequencerSwing(float percent) {
+    sequencer_.setSwing(percent);
+}
+
 void GlitchProcessorCore::setTriggerMode(TriggerMode mode, bool syncedStart) {
     if (mode != triggerMode_) {
         heldNotes_.fill(0);
