@@ -105,10 +105,24 @@ TEST_CASE("Editor renders native UI screenshot", "[plugin][gui]") {
     processor.prepareToPlay(48000, 512);
     std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
     REQUIRE(editor != nullptr);
+    REQUIRE(editor->getWidth() == 1080);
+    REQUIRE(editor->getHeight() == 1020);
+    auto hasVisibleLabel = [&](const juce::String& text) {
+        for (auto* child : editor->getChildren()) {
+            if (auto* label = dynamic_cast<juce::Label*>(child);
+                label != nullptr && label->getText() == text && label->isVisible() && !label->getBounds().isEmpty())
+                return true;
+        }
+        return false;
+    };
+    REQUIRE(hasVisibleLabel("LENGTH"));
+    REQUIRE(hasVisibleLabel("SWING"));
+    REQUIRE(hasVisibleLabel("32 STEPS"));
+    REQUIRE(hasVisibleLabel("0%"));
     const auto snapshot = editor->createComponentSnapshot(editor->getLocalBounds(), false, 2.0f);
     REQUIRE(snapshot.isValid());
     REQUIRE(snapshot.getWidth() == 2160);
-    REQUIRE(snapshot.getHeight() == 1960);
+    REQUIRE(snapshot.getHeight() == 2040);
     juce::File cwd = juce::File::getCurrentWorkingDirectory();
     juce::File file = cwd.getChildFile("assets/native-ui.png");
     if (!cwd.getChildFile("assets").isDirectory() && cwd.getParentDirectory().getChildFile("assets").isDirectory())
@@ -120,4 +134,101 @@ TEST_CASE("Editor renders native UI screenshot", "[plugin][gui]") {
     REQUIRE(stream.openedOk());
     juce::PNGImageFormat png;
     REQUIRE(png.writeImageToStream(snapshot, stream));
+}
+
+TEST_CASE("Sequencer length and swing are automatable and survive state restore", "[plugin][sequencer]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    OpenGlitchFXProcessor processor;
+    auto* length = processor.parameters.getParameter("sequence_length");
+    auto* swing = processor.parameters.getParameter("sequencer_swing");
+    REQUIRE(length != nullptr);
+    REQUIRE(swing != nullptr);
+    REQUIRE(length->isAutomatable());
+    REQUIRE(swing->isAutomatable());
+    REQUIRE_THAT(processor.parameters.getRawParameterValue("sequence_length")->load(),
+                 Catch::Matchers::WithinAbs(32.0f, 0.001f));
+    REQUIRE_THAT(processor.parameters.getRawParameterValue("sequencer_swing")->load(),
+                 Catch::Matchers::WithinAbs(0.0f, 0.001f));
+
+    length->setValueNotifyingHost(length->convertTo0to1(16.0f));
+    swing->setValueNotifyingHost(swing->convertTo0to1(70.0f));
+    juce::MemoryBlock saved;
+    processor.getStateInformation(saved);
+    OpenGlitchFXProcessor restored;
+    restored.setStateInformation(saved.getData(), static_cast<int>(saved.getSize()));
+
+    REQUIRE_THAT(restored.parameters.getRawParameterValue("sequence_length")->load(),
+                 Catch::Matchers::WithinAbs(16.0f, 0.001f));
+    REQUIRE_THAT(restored.parameters.getRawParameterValue("sequencer_swing")->load(),
+                 Catch::Matchers::WithinAbs(70.0f, 0.001f));
+}
+
+TEST_CASE("Pattern randomization is repeatable and selected-FX randomization preserves other routes", "[plugin][sequencer]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    OpenGlitchFXProcessor firstProcessor;
+    OpenGlitchFXProcessor secondProcessor;
+    openglitch::ui::GlitchLookAndFeel look;
+    openglitch::ui::StepSequencerComponent first(firstProcessor.parameters, look);
+    openglitch::ui::StepSequencerComponent second(secondProcessor.parameters, look);
+    for (int step = 0; step < 32; ++step) {
+        firstProcessor.parameters.getParameter(openglitch::params::stepParamId(step))->setValueNotifyingHost(1.0f);
+        secondProcessor.parameters.getParameter(openglitch::params::stepParamId(step))->setValueNotifyingHost(1.0f);
+        firstProcessor.parameters.getParameter(openglitch::params::stepFxParamId(step))->setValueNotifyingHost(1.0f);
+        secondProcessor.parameters.getParameter(openglitch::params::stepFxParamId(step))->setValueNotifyingHost(1.0f);
+        firstProcessor.parameters.getParameter(openglitch::params::stepExtraFxParamId(step))->setValueNotifyingHost(1.0f);
+        secondProcessor.parameters.getParameter(openglitch::params::stepExtraFxParamId(step))->setValueNotifyingHost(1.0f);
+    }
+
+    constexpr int selectedFx = 4;
+    const auto selectedBit = static_cast<uint16_t>(1u << selectedFx);
+    first.setPaintTargetFx(selectedFx);
+    second.setPaintTargetFx(selectedFx);
+    first.randomizePattern(71021u, 2);
+    second.randomizePattern(71021u, 2);
+
+    int selectedFxOnPads = 0;
+    int selectedFxOffPads = 0;
+    for (int step = 0; step < 32; ++step) {
+        const auto firstMask = openglitch::params::readStepFxMask(firstProcessor.parameters, step);
+        const auto secondMask = openglitch::params::readStepFxMask(secondProcessor.parameters, step);
+        REQUIRE(firstMask == secondMask);
+        REQUIRE((firstMask & static_cast<uint16_t>(~selectedBit)) ==
+                (openglitch::core::BeatStepSequencer::kAllFxMask & static_cast<uint16_t>(~selectedBit)));
+        REQUIRE(firstProcessor.parameters.getRawParameterValue(openglitch::params::stepParamId(step))->load() > 0.5f);
+        selectedFxOnPads += (firstMask & selectedBit) != 0u ? 1 : 0;
+        selectedFxOffPads += (firstMask & selectedBit) == 0u ? 1 : 0;
+    }
+    REQUIRE(selectedFxOnPads > 0);
+    REQUIRE(selectedFxOffPads > 0);
+}
+
+TEST_CASE("Full-pattern randomization is seeded, keeps routes in the selected complexity band, and leaves no silent pads", "[plugin][sequencer]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    OpenGlitchFXProcessor firstProcessor;
+    OpenGlitchFXProcessor secondProcessor;
+    openglitch::ui::GlitchLookAndFeel look;
+    openglitch::ui::StepSequencerComponent first(firstProcessor.parameters, look);
+    openglitch::ui::StepSequencerComponent second(secondProcessor.parameters, look);
+
+    first.randomizePattern(193117u, 1);
+    second.randomizePattern(193117u, 1);
+
+    int activeSteps = 0;
+    for (int step = 0; step < 32; ++step) {
+        const bool activeFirst = firstProcessor.parameters.getRawParameterValue(openglitch::params::stepParamId(step))->load() > 0.5f;
+        const bool activeSecond = secondProcessor.parameters.getRawParameterValue(openglitch::params::stepParamId(step))->load() > 0.5f;
+        const auto maskFirst = openglitch::params::readStepFxMask(firstProcessor.parameters, step);
+        const auto maskSecond = openglitch::params::readStepFxMask(secondProcessor.parameters, step);
+        REQUIRE(activeFirst == activeSecond);
+        REQUIRE(maskFirst == maskSecond);
+        if (activeFirst) {
+            ++activeSteps;
+            REQUIRE(maskFirst != 0u);
+            REQUIRE((maskFirst & static_cast<uint16_t>(~0x001fu)) == 0u);
+        } else {
+            REQUIRE(maskFirst == 0u);
+        }
+    }
+    REQUIRE(activeSteps >= 6);
+    REQUIRE(activeSteps <= 18);
 }

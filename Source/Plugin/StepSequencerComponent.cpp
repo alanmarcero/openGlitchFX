@@ -1,6 +1,7 @@
 #include "StepSequencerComponent.h"
 #include <algorithm>
 #include <bit>
+#include <random>
 
 namespace openglitch::ui {
 
@@ -174,6 +175,65 @@ void StepSequencerComponent::invertPattern() {
 void StepSequencerComponent::resetAllStepFxMasksToAll() {
     for (int i = 0; i < 32; ++i) {
         setStepFxMaskParam(i, kAllFx);
+    }
+    repaint();
+}
+
+void StepSequencerComponent::randomizePattern(uint32_t seed, int intensity) {
+    const int level = std::clamp(intensity, 1, 3);
+    const std::array<int, 3> activePercent = { 35, 55, 75 };
+    const int activeThreshold = activePercent[static_cast<size_t>(level - 1)];
+    std::mt19937 generator(seed);
+    std::uniform_int_distribution<int> roll(0, 99);
+    std::uniform_int_distribution<int> allFx(0, kNumFx - 1);
+
+    if (paintTargetFx_ >= 0) {
+        const uint16_t selectedBit = static_cast<uint16_t>(1u << paintTargetFx_);
+        for (int step = 0; step < 32; ++step) {
+            const uint16_t currentMask = getStepFxMaskParam(step);
+            const bool routeSelectedFx = roll(generator) < activeThreshold;
+            const uint16_t updatedMask = routeSelectedFx
+                ? static_cast<uint16_t>(currentMask | selectedBit)
+                : static_cast<uint16_t>(currentMask & ~selectedBit);
+            setStepFxMaskParam(step, updatedMask);
+        }
+        ensureFxAudible(paintTargetFx_);
+        repaint();
+        return;
+    }
+
+    const uint16_t maskByIntensity = level == 1 ? 0x001fu : (level == 2 ? 0x03ffu : kAllFx);
+    std::uniform_int_distribution<int> commonFx(0, level == 1 ? 4 : 9);
+    uint16_t usedFxMask = 0u;
+    int activeSteps = 0;
+    for (int step = 0; step < 32; ++step) {
+        const bool active = roll(generator) < activeThreshold;
+        setStepParam(step, active);
+        uint16_t fxMask = 0u;
+        if (active) {
+            fxMask = static_cast<uint16_t>(generator() & maskByIntensity);
+            if (fxMask == 0u) {
+                const int fallbackFx = level == 3 ? allFx(generator) : commonFx(generator);
+                fxMask = static_cast<uint16_t>(1u << fallbackFx);
+            }
+            usedFxMask |= fxMask;
+            ++activeSteps;
+        }
+        setStepFxMaskParam(step, fxMask);
+    }
+
+    if (activeSteps == 0) {
+        const int fallbackFx = level == 3 ? allFx(generator) : commonFx(generator);
+        const uint16_t fallbackMask = static_cast<uint16_t>(1u << fallbackFx);
+        setStepParam(0, true);
+        setStepFxMaskParam(0, fallbackMask);
+        usedFxMask |= fallbackMask;
+    }
+
+    for (int fx = 0; fx < kNumFx; ++fx) {
+        if ((usedFxMask & static_cast<uint16_t>(1u << fx)) != 0u) {
+            ensureFxAudible(fx);
+        }
     }
     repaint();
 }

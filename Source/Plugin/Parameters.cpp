@@ -42,6 +42,20 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout() {
         120.0f,
         juce::AudioParameterFloatAttributes().withLabel("BPM")));
 
+    layout.push_back(std::make_unique<juce::AudioParameterInt>(
+        juce::ParameterID{ kSequenceLength, 1 },
+        "Sequencer Length",
+        1,
+        32,
+        32));
+
+    layout.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{ kSequencerSwing, 1 },
+        "Sequencer Swing",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        0.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
     layout.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{ kSmoothMs, 1 },
         "Gate Smooth",

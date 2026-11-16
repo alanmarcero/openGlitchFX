@@ -4,7 +4,7 @@
 
 ![openGlitchFX native editor](assets/native-ui.png)
 
-*Captured from the native v1.2.1 VST3 editor. [Capture details and provenance](docs/SCREENSHOTS.md).*
+*Captured from the native v1.5.0 VST3 editor. [Capture details and provenance](docs/SCREENSHOTS.md).*
 
 Beat-synced glitch processor with 15 effects and a 32-step sequencer. Pads that are on process audio. The rest pass dry. Output trim still applies to the dry signal. Transitions are smoothed.
 
@@ -23,6 +23,8 @@ The native editor has four selectable color themes: **Cyber Neon** (default), **
 A 4/4 bar is 32 steps: 8 steps per beat, each 1/32 of a bar. The sequencer follows host PPQ and BPM, or the internal BPM when host sync is off or the host reports no tempo.
 
 Adjacent pads with the same FX routing draw as one block and run as one span. The effect does not restart on each 1/32 step. Badges show the span, for example `ALL FX (8/32 | 1 BEAT)` or `TAPE STOP (4/32 | 1/8 BAR)`. Tape Stop and Reverse use that full span, including across the bar line. Stutter captures once per run and repeats its slice. Chopper and Pitch Glitch keep their modulation.
+
+The **LENGTH** control sets the loop to 1–32 steps. **SWING** delays odd steps within each pair, from straight timing at 0% to a 2:1 long/short step ratio at 100%. **RANDOMIZE** offers Light (35%), Medium (55%) and Wild (75%) step density. With `ALL ACTIVE FX` selected it creates a full pattern and routes each active pad through a level-appropriate FX set. With one FX selected as the pad brush, it randomizes only that FX's routing while preserving pad on/off states and every other FX route.
 
 Each pad stores a 15-bit FX mask (the original ten bits plus five more) and its own smoothed gate, so neighboring pads can run different effects. Right-click a pad or block to:
 

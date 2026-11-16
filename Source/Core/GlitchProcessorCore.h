@@ -85,6 +85,8 @@ public:
     // Transport / Tempo Sync
     void setTransport(double bpm, bool useHostSync, bool hasValidHostPpq, double hostPpqPosition);
     void setGateSmoothingMs(float ms);
+    void setSequenceLength(int steps);
+    void setSequencerSwing(float percent);
 
     // Notes apply only in Midi trigger mode.
     void setTriggerMode(TriggerMode mode, bool syncedStart);

@@ -19,6 +19,7 @@ public:
     void applyPreset(openglitch::core::StepPatternPreset preset);
     void invertPattern();
     void resetAllStepFxMasksToAll();
+    void randomizePattern(uint32_t seed, int intensity);
 
     // Paint target mode: -1 = All FX (default), 0..14 = specific Glitch FX index
     void setPaintTargetFx(int fxIndex);

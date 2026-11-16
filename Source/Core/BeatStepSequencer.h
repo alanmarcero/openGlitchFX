@@ -59,6 +59,10 @@ public:
 
     void setSmoothingTimeMs(float ms);
     float getSmoothingTimeMs() const { return smoothingTimeMs_; }
+    void setSequenceLength(int steps);
+    int getSequenceLength() const { return sequenceLength_; }
+    void setSwing(float percent);
+    float getSwing() const { return swingPercent_; }
 
     // Contiguous Pad Merging & Span queries:
     // 1. Visual pad merging: adjacent enabled pads with identical non-zero FX masks combine into one block.
@@ -96,6 +100,7 @@ private:
     uint16_t getEffectiveStepFxMask(int stepIndex) const;
     StepSpanInfo getExternalSpan() const;
     StepSpanInfo getCircularSpan(int stepIndex, uint16_t mask, bool exactMask) const;
+    int computeSequenceStep(double ppqPosition, double* outStepPosition = nullptr) const;
 
     double sampleRate_ = 44100.0;
     double internalPpq_ = 0.0;
@@ -115,6 +120,8 @@ private:
 
     float smoothingTimeMs_ = 2.5f;
     float smoothCoeff_ = 0.99f;
+    int sequenceLength_ = kNumSteps;
+    float swingPercent_ = 0.0f;
     float envelope_ = 0.0f;
     std::array<float, kNumFxSlots> fxEnvelopes_{};
 };

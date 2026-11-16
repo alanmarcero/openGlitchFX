@@ -24,6 +24,7 @@ private:
     void timerCallback() override;
     void parameterChanged(const juce::String& parameterID, float newValue) override;
     void applyTheme(int themeIndex);
+    void showRandomizeMenu();
     int fxCardHeaderAt(juce::Point<float> position) const;
 
     OpenGlitchFXProcessor& processor_;
@@ -53,6 +54,13 @@ private:
     juce::TextButton presetInvertBtn_{ "INVERT" };
     juce::TextButton presetResetFxBtn_{ "ALL FX" };
     juce::TextButton presetClearBtn_{ "CLEAR" };
+    juce::Label sequenceLengthLabel_{ {}, "LENGTH" };
+    juce::Slider sequenceLengthSlider_;
+    juce::Label sequenceLengthValueLabel_;
+    juce::Label sequencerSwingLabel_{ {}, "SWING" };
+    juce::Slider sequencerSwingSlider_;
+    juce::Label sequencerSwingValueLabel_;
+    juce::TextButton randomizeButton_{ "RANDOMIZE" };
 
     // 15 Glitch FX Slot UI (3 rows x 5 columns)
     struct FxSlotUi {
@@ -91,6 +99,8 @@ private:
 
     std::unique_ptr<ComboBoxAttachment> themeAttach_;
     std::unique_ptr<ButtonAttachment> hostSyncAttach_;
+    std::unique_ptr<SliderAttachment> sequenceLengthAttach_;
+    std::unique_ptr<SliderAttachment> sequencerSwingAttach_;
     std::unique_ptr<SliderAttachment> internalBpmAttach_;
     std::unique_ptr<SliderAttachment> smoothAttach_;
     std::unique_ptr<SliderAttachment> masterMixAttach_;

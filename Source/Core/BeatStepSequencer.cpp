@@ -202,23 +202,23 @@ StepSpanInfo BeatStepSequencer::getCircularSpan(int stepIndex, uint16_t mask, bo
     };
     int start = stepIndex;
     int len = 1;
-    while (len < kNumSteps) {
-        const int previous = (start + kNumSteps - 1) % kNumSteps;
+    while (len < sequenceLength_) {
+        const int previous = (start + sequenceLength_ - 1) % sequenceLength_;
         if (!matches(previous)) break;
         start = previous;
         ++len;
     }
-    if (len == kNumSteps) {
+    if (len == sequenceLength_) {
         start = 0;
     } else {
-        int next = (stepIndex + 1) % kNumSteps;
-        while (len < kNumSteps && matches(next)) {
+        int next = (stepIndex + 1) % sequenceLength_;
+        while (len < sequenceLength_ && matches(next)) {
             ++len;
-            next = (next + 1) % kNumSteps;
+            next = (next + 1) % sequenceLength_;
         }
     }
-    const int end = (start + len - 1) % kNumSteps;
-    const double offset = std::fmod(currentBarPhase_ * kNumSteps - start + kNumSteps, kNumSteps);
+    const int end = (start + len - 1) % sequenceLength_;
+    const double offset = std::fmod(currentBarPhase_ * kNumSteps - start + sequenceLength_, sequenceLength_);
     const float spanPhase = offset < len ? static_cast<float>(offset / len) : 0.0f;
 
     return { start, end, len, spanPhase };
@@ -236,6 +236,42 @@ void BeatStepSequencer::updateSmoothingCoeff() {
     } else {
         smoothCoeff_ = static_cast<float>(std::exp(-1.0 / (tauSeconds * sampleRate_)));
     }
+}
+
+void BeatStepSequencer::setSequenceLength(int steps) {
+    sequenceLength_ = std::clamp(steps, 1, kNumSteps);
+}
+
+void BeatStepSequencer::setSwing(float percent) {
+    swingPercent_ = std::clamp(percent, 0.0f, 100.0f);
+}
+
+int BeatStepSequencer::computeSequenceStep(double ppqPosition, double* outStepPosition) const {
+    double stepPosition = std::fmod(ppqPosition * kNumSteps / kQuarterNotesPerBar,
+                                    static_cast<double>(sequenceLength_));
+    if (stepPosition < 0.0) {
+        stepPosition += static_cast<double>(sequenceLength_);
+    }
+
+    const int pairStart = static_cast<int>(stepPosition / 2.0) * 2;
+    double warpedPosition = stepPosition;
+    if (pairStart + 1 < sequenceLength_) {
+        const double pairOffset = stepPosition - pairStart;
+        const double firstStepLength = 1.0 + 0.5 * static_cast<double>(swingPercent_) * 0.01;
+        if (pairOffset < firstStepLength) {
+            warpedPosition = static_cast<double>(pairStart) + pairOffset / firstStepLength;
+        }
+        if (pairOffset >= firstStepLength) {
+            warpedPosition = static_cast<double>(pairStart + 1)
+                + (pairOffset - firstStepLength) / (2.0 - firstStepLength);
+        }
+    }
+
+    warpedPosition = std::clamp(warpedPosition, 0.0, static_cast<double>(sequenceLength_) - 1e-9);
+    if (outStepPosition != nullptr) {
+        *outStepPosition = warpedPosition;
+    }
+    return std::clamp(static_cast<int>(warpedPosition), 0, sequenceLength_ - 1);
 }
 
 int BeatStepSequencer::computeStepFromPpq(double ppqPosition, double* outBarPhase) {
@@ -301,7 +337,9 @@ float BeatStepSequencer::advanceSampleWithFxMask(double bpm,
     }
 
     const int previousStep = currentStep_;
-    currentStep_ = computeStepFromPpq(effectivePpq, &currentBarPhase_);
+    double currentStepPosition = 0.0;
+    currentStep_ = computeSequenceStep(effectivePpq, &currentStepPosition);
+    currentBarPhase_ = currentStepPosition / static_cast<double>(kNumSteps);
     if (externalMode_ && (!externalQuantize_ || currentStep_ != previousStep)) {
         if (externalActiveMask_ == 0u && externalPendingMask_ != 0u) {
             externalElapsedPpq_ = 0.0;
