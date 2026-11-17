@@ -87,6 +87,7 @@ public:
                                   uint16_t& fxTransitionedToActiveMask);
 
     int getCurrentStep() const { return currentStep_; }
+    double getClockPpq() const { return internalPpq_; }
     double getCurrentBarPhase() const { return currentBarPhase_; }
     bool isCurrentStepEnabled() const;
     uint16_t getCurrentStepActiveFxMask() const;

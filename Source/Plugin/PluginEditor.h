@@ -9,8 +9,7 @@
 
 class OpenGlitchFXEditor final : public juce::AudioProcessorEditor,
                                  public juce::TooltipClient,
-                                 private juce::Timer,
-                                 private juce::AudioProcessorValueTreeState::Listener {
+                                 private juce::Timer {
 public:
     explicit OpenGlitchFXEditor(OpenGlitchFXProcessor& owner);
     ~OpenGlitchFXEditor() override;
@@ -22,7 +21,6 @@ public:
 
 private:
     void timerCallback() override;
-    void parameterChanged(const juce::String& parameterID, float newValue) override;
     void applyTheme(int themeIndex);
     void showRandomizeMenu();
     int fxCardHeaderAt(juce::Point<float> position) const;
@@ -31,6 +29,7 @@ private:
     openglitch::ui::GlitchLookAndFeel lookAndFeel_;
 
     // Embedded Gemini-generated images (Logo & Backdrop Texture)
+    std::unique_ptr<juce::Drawable> sliceRegister_;
     juce::Image customLogoImage_;
     juce::Image backdropImage_;
 

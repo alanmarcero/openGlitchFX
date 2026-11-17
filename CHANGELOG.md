@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.6.0 — 2026-11-17
+
+- A segmented SVG waveform scans the header on the sequencer clock, follows host seeks and holds while transport is stopped.
+- All four dark themes now style routing menus, tooltips and text entry. Bypassed modules and the master switch display OFF.
+
 ## 1.5.0 — 2026-11-16
 
 - Added an automatable sequencer length (1–32 steps) and swing (0–100%) control.

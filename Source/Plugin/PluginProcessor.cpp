@@ -65,6 +65,7 @@ void OpenGlitchFXProcessor::syncEnvelopePointsToCore() {
 
 void OpenGlitchFXProcessor::prepareToPlay(double sampleRate, int /*samplesPerBlock*/) {
     core_.prepare(sampleRate);
+    visualBeat_.store(0.0f, std::memory_order_relaxed);
     syncParametersToCore();
 }
 
@@ -176,11 +177,13 @@ void OpenGlitchFXProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
     // Query Host Playhead for Beat Sync
     const bool useHostSync = *parameters.getRawParameterValue(openglitch::params::kHostSync) > 0.5f;
     double bpm = static_cast<double>(*parameters.getRawParameterValue(openglitch::params::kInternalBpm));
+    bool transportStopped = false;
     bool hasValidHostPpq = false;
     double hostPpq = 0.0;
 
     if (auto* playHead = getPlayHead()) {
         if (const auto pos = playHead->getPosition()) {
+            transportStopped = useHostSync && !pos->getIsPlaying();
             if (const auto hostBpm = pos->getBpm(); useHostSync && hostBpm) {
                 if (*hostBpm > 10.0) {
                     bpm = *hostBpm;
@@ -219,6 +222,10 @@ void OpenGlitchFXProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
     float* rightChannel = (totalNumInputChannels > 1) ? buffer.getWritePointer(1) : nullptr;
 
     core_.processBlock(leftChannel, rightChannel, numSamples);
+    if (!transportStopped) {
+        const double ppq = core_.getClockPpq();
+        visualBeat_.store(static_cast<float>(ppq - std::floor(ppq)), std::memory_order_relaxed);
+    }
 }
 
 double OpenGlitchFXProcessor::getTailLengthSeconds() const {

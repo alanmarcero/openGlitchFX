@@ -2,7 +2,7 @@
 
 Create beat-synced glitches with a 32-step sequencer. Choose from 15 effects and route them to any step.
 
-[Install with OpenVST Manager](https://github.com/alanmarcero/alan-m-OpenVSTManager/releases/latest) · [Download v1.5.1](https://github.com/alanmarcero/openGlitchFX/releases/tag/v1.5.1)
+[Install with OpenVST Manager](https://github.com/alanmarcero/alan-m-OpenVSTManager/releases/latest) · [Download v1.6.0](https://github.com/alanmarcero/openGlitchFX/releases/tag/v1.6.0)
 
 ![openGlitchFX editor](assets/native-ui.png)
 
@@ -47,11 +47,13 @@ Each effect has an on/off switch and Amount control. An effect at 0% is silent. 
 
 ## Themes and compatibility
 
+An eight-slice waveform in the header jumps one slice every 1/32 note. Host Sync follows the DAW’s beat, including tempo changes and loop jumps, and holds the last slice when stopped. When the host provides no clock or Host Sync is off, the rack uses its internal BPM.
+
 Choose Cyber Neon, Industrial Amber, Acid Matrix, or Arctic Glitch. The theme and drawn envelopes save with the session. The theme also supports host automation.
 
 The VST3 plugin follows host tempo and MIDI. It supports macOS 11 or later on Apple Silicon and Intel, and Windows x64. Packages include VST3 only.
 
-Install with [OpenVST Manager](https://github.com/alanmarcero/alan-m-OpenVSTManager/releases/latest) or download the [v1.5.1 release](https://github.com/alanmarcero/openGlitchFX/releases/tag/v1.5.1). Rescan your DAW after installation. See [release changes](CHANGELOG.md).
+Install with [OpenVST Manager](https://github.com/alanmarcero/alan-m-OpenVSTManager/releases/latest) or download the [v1.6.0 release](https://github.com/alanmarcero/openGlitchFX/releases/tag/v1.6.0). Rescan your DAW after installation. See [release changes](CHANGELOG.md).
 
 ## License
 

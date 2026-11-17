@@ -13,8 +13,11 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
     backdropImage_ = juce::ImageCache::getFromMemory(BinaryData::analogcyberfaceplate_png,
                                                      BinaryData::analogcyberfaceplate_pngSize);
 
+    sliceRegister_ = juce::Drawable::createFromImageData(BinaryData::sliceregister_svg, BinaryData::sliceregister_svgSize);
+
     // Header Look Selector
     themeBox_.addItemList({ "Cyber Neon", "Industrial Amber", "Acid Matrix", "Arctic Glitch" }, 1);
+    themeBox_.setTooltip("Choose a dark colour scheme for the rack, menus and envelopes.");
     themeBox_.setJustificationType(juce::Justification::centred);
     themeBox_.onChange = [this]() { applyTheme(themeBox_.getSelectedItemIndex()); };
     addAndMakeVisible(themeBox_);
@@ -196,7 +199,6 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
     sequencerSwingValueLabel_.setText(juce::String(sequencerSwingSlider_.getValue(), 0) + "%",
                                       juce::dontSendNotification);
 
-    processor_.parameters.addParameterListener(kTheme, this);
     applyTheme(themeBox_.getSelectedItemIndex());
 
     setResizable(true, true);
@@ -206,17 +208,8 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
 }
 
 OpenGlitchFXEditor::~OpenGlitchFXEditor() {
-    processor_.parameters.removeParameterListener(openglitch::params::kTheme, this);
     stopTimer();
     setLookAndFeel(nullptr);
-}
-
-void OpenGlitchFXEditor::parameterChanged(const juce::String& parameterID, float newValue) {
-    if (parameterID == openglitch::params::kTheme) {
-        juce::MessageManager::callAsync([this, idx = static_cast<int>(newValue)]() {
-            applyTheme(idx);
-        });
-    }
 }
 
 void OpenGlitchFXEditor::applyTheme(int themeIndex) {
@@ -244,6 +237,7 @@ void OpenGlitchFXEditor::applyTheme(int themeIndex) {
 
 void OpenGlitchFXEditor::showRandomizeMenu() {
     juce::PopupMenu menu;
+    menu.setLookAndFeel(&lookAndFeel_);
     menu.addSectionHeader(sequencerGrid_.getPaintTargetFx() >= 0 ? "Randomize selected FX lane" : "Randomize the full pattern");
     menu.addItem(1, "Light  ·  35% step density");
     menu.addItem(2, "Medium  ·  55% step density");
@@ -260,7 +254,7 @@ void OpenGlitchFXEditor::showRandomizeMenu() {
 int OpenGlitchFXEditor::fxCardHeaderAt(juce::Point<float> position) const {
     const auto hit = std::ranges::find_if(fxSlots_, [&](const FxSlotUi& slot) {
         const auto& r = slot.cardBounds;
-        return juce::Rectangle<float>(r.getX(), r.getY(), r.getWidth(), 34.0f).contains(position);
+        return juce::Rectangle<float>(r.getX(), r.getY(), r.getWidth(), 36.0f).contains(position);
     });
     return hit == fxSlots_.end() ? -1 : static_cast<int>(std::distance(fxSlots_.begin(), hit));
 }
@@ -286,6 +280,8 @@ juce::String OpenGlitchFXEditor::getTooltip() {
 }
 
 void OpenGlitchFXEditor::timerCallback() {
+    const auto theme = static_cast<int>(processor_.parameters.getRawParameterValue(openglitch::params::kTheme)->load());
+    if (theme != static_cast<int>(lookAndFeel_.getTheme())) applyTheme(theme);
     const auto tel = processor_.getTelemetry();
     if (tel.clipOut) {
         clipHold_ = 1.0f;
@@ -356,6 +352,22 @@ void OpenGlitchFXEditor::paint(juce::Graphics& g) {
     g.setColour(pal.accentPrimary);
     g.setFont(juce::FontOptions(13.0f, juce::Font::bold));
     g.drawText("ALAN MARCERO", 86, 22, 160, 18, juce::Justification::centredLeft);
+
+    if (sliceRegister_ != nullptr) {
+        const juce::Rectangle<float> trace(393.0f, 12.0f, 128.0f, 32.0f);
+        g.setColour(pal.bgBottom);
+        g.fillRoundedRectangle(trace.expanded(4.0f), 4.0f);
+        sliceRegister_->drawWithin(g, trace, juce::RectanglePlacement::centred, 0.48f);
+        const auto phase = processor_.getVisualBeat() * 8.0f;
+        const int slice = juce::jlimit(0, 7, static_cast<int>(phase));
+        const auto cell = trace.withTrimmedLeft(16.0f * static_cast<float>(slice)).withWidth(16.0f);
+        juce::Graphics::ScopedSaveState save(g);
+        g.reduceClipRegion(cell.toNearestInt());
+        g.setColour(pal.accentPrimary.withAlpha(0.23f));
+        g.fillRect(cell);
+        const float jump = 3.5f * (1.0f - (phase - std::floor(phase)));
+        sliceRegister_->drawWithin(g, trace.translated(0.0f, -jump), juce::RectanglePlacement::centred, 1.0f);
+    }
 
     // Center Plugin Title
     g.setColour(pal.textBright);
