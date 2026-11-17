@@ -37,6 +37,7 @@ public:
     Theme getTheme() const { return currentTheme_; }
     const ThemePalette& getPalette() const { return palette_; }
 
+    void getIdealPopupMenuItemSize(const juce::String&, bool, int, int&, int&) override;
     void drawRotarySlider(juce::Graphics& g,
                           int x, int y, int width, int height,
                           float sliderPosProportional,

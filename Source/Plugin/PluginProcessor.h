@@ -35,6 +35,7 @@ public:
     void getStateInformation(juce::MemoryBlock& destData) override;
     void setStateInformation(const void* data, int sizeInBytes) override;
 
+    float getVisualBeat() const { return visualBeat_.load(std::memory_order_relaxed); }
     openglitch::core::MeterTelemetry getTelemetry() const { return core_.getTelemetry(); }
 
     // The session saves envelope points in the state tree.
@@ -51,6 +52,7 @@ private:
     void syncEnvelopePointsToCore();
 
     openglitch::core::GlitchProcessorCore core_;
+    std::atomic<float> visualBeat_{ 0.0f };
     std::atomic<int> stateVersion_{ 0 };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(OpenGlitchFXProcessor)

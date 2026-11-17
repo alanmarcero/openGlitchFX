@@ -105,10 +105,23 @@ void GlitchLookAndFeel::setTheme(Theme theme) {
     setColour(juce::ComboBox::outlineColourId, palette_.cardBorder);
     setColour(juce::PopupMenu::backgroundColourId, palette_.bgTop);
     setColour(juce::PopupMenu::textColourId, palette_.textBright);
-    setColour(juce::PopupMenu::highlightedBackgroundColourId, palette_.accentPrimary.withAlpha(0.3f));
+    setColour(juce::PopupMenu::highlightedBackgroundColourId, palette_.bgTop.interpolatedWith(palette_.accentPrimary, 0.28f));
+    setColour(juce::PopupMenu::highlightedTextColourId, palette_.textBright);
+    setColour(juce::TooltipWindow::backgroundColourId, palette_.bgTop);
+    setColour(juce::TooltipWindow::textColourId, palette_.textBright);
+    setColour(juce::TooltipWindow::outlineColourId, palette_.cardBorder);
+    setColour(juce::TextEditor::backgroundColourId, palette_.bgBottom);
+    setColour(juce::TextEditor::textColourId, palette_.textBright);
+    setColour(juce::TextEditor::focusedOutlineColourId, palette_.accentPrimary);
     setColour(juce::TextButton::buttonColourId, palette_.headerPlate);
     setColour(juce::TextButton::textColourOffId, palette_.textBright);
     setColour(juce::TextButton::textColourOnId, palette_.accentPrimary);
+}
+
+void GlitchLookAndFeel::getIdealPopupMenuItemSize(const juce::String& text, bool separator, int height,
+                                                  int& idealWidth, int& idealHeight) {
+    LookAndFeel_V4::getIdealPopupMenuItemSize(text, separator, height, idealWidth, idealHeight);
+    if (!separator) idealHeight = std::max(idealHeight, 36);
 }
 
 void GlitchLookAndFeel::drawRotarySlider(juce::Graphics& g,
@@ -229,7 +242,7 @@ void GlitchLookAndFeel::drawToggleButton(juce::Graphics& g,
     g.setColour(bg);
     g.fillRoundedRectangle(bounds, 4.0f);
 
-    g.setColour(on ? palette_.accentPrimary : palette_.cardBorder);
+    g.setColour(on || button.hasKeyboardFocus(false) ? palette_.accentPrimary : palette_.cardBorder);
     g.drawRoundedRectangle(bounds, 4.0f, on ? 1.5f : 1.0f);
 
     // LED Indicator Dot on left
@@ -248,7 +261,10 @@ void GlitchLookAndFeel::drawToggleButton(juce::Graphics& g,
     g.setColour(on ? palette_.textBright : palette_.textMuted);
     g.setFont(juce::FontOptions(14.0f, juce::Font::bold));
     auto textRect = bounds.withTrimmedLeft(18.0f);
-    g.drawText(button.getButtonText(), textRect.toNearestInt(), juce::Justification::centred);
+    auto text = button.getButtonText();
+    if (!on && text == "ON") text = "OFF";
+    if (!on && text == "MASTER ON") text = "MASTER OFF";
+    g.drawText(text, textRect.toNearestInt(), juce::Justification::centred);
 }
 
 void GlitchLookAndFeel::drawButtonBackground(juce::Graphics& g,
@@ -257,7 +273,7 @@ void GlitchLookAndFeel::drawButtonBackground(juce::Graphics& g,
                                              bool shouldDrawButtonAsHighlighted,
                                              bool shouldDrawButtonAsDown) {
     const auto bounds = button.getLocalBounds().toFloat().reduced(1.5f);
-    juce::Colour bg = palette_.headerPlate;
+    juce::Colour bg = button.getToggleState() ? palette_.bgTop.interpolatedWith(palette_.accentPrimary, 0.26f) : palette_.headerPlate;
     if (shouldDrawButtonAsDown) {
         bg = palette_.accentPrimary.withAlpha(0.35f);
     } else if (shouldDrawButtonAsHighlighted) {
@@ -267,7 +283,7 @@ void GlitchLookAndFeel::drawButtonBackground(juce::Graphics& g,
     g.setColour(bg);
     g.fillRoundedRectangle(bounds, 3.5f);
 
-    g.setColour(shouldDrawButtonAsHighlighted ? palette_.accentPrimary : palette_.cardBorder);
+    g.setColour(shouldDrawButtonAsHighlighted || button.getToggleState() || button.hasKeyboardFocus(false) ? palette_.accentPrimary : palette_.cardBorder);
     g.drawRoundedRectangle(bounds, 3.5f, 1.0f);
 }
 
@@ -279,18 +295,18 @@ void GlitchLookAndFeel::drawButtonText(juce::Graphics& g,
     const auto colourId = on ? juce::TextButton::textColourOnId : juce::TextButton::textColourOffId;
     g.setColour(button.findColour(colourId));
     g.setFont(juce::FontOptions(14.0f, juce::Font::bold));
-    g.drawText(button.getButtonText(), button.getLocalBounds(), juce::Justification::centred);
+    g.drawFittedText(button.getButtonText(), button.getLocalBounds().reduced(3, 0), juce::Justification::centred, 1, 0.82f);
 }
 
 void GlitchLookAndFeel::drawComboBox(juce::Graphics& g,
                                      int width, int height,
                                      bool /*isButtonDown*/,
                                      int /*buttonX*/, int /*buttonY*/, int /*buttonW*/, int /*buttonH*/,
-                                     juce::ComboBox& /*box*/) {
+                                     juce::ComboBox& box) {
     const auto bounds = juce::Rectangle<float>(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height)).reduced(1.0f);
     g.setColour(palette_.headerPlate);
     g.fillRoundedRectangle(bounds, 4.0f);
-    g.setColour(palette_.cardBorder);
+    g.setColour(box.hasKeyboardFocus(true) ? palette_.accentPrimary : palette_.cardBorder);
     g.drawRoundedRectangle(bounds, 4.0f, 1.0f);
 
     // Arrow triangle

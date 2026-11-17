@@ -99,6 +99,47 @@ TEST_CASE("The host is told to render the enabled echo tail", "[plugin][tail]") 
     REQUIRE_THAT(processor.getTailLengthSeconds(), Catch::Matchers::WithinAbs(0, 0));
 }
 
+TEST_CASE("Slice register follows the transport and internal sequencer", "[plugin][gui]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    struct Host final : juce::AudioPlayHead {
+        PositionInfo info;
+        juce::Optional<PositionInfo> getPosition() const override { return info; }
+    } host;
+    OpenGlitchFXProcessor processor;
+    processor.setPlayHead(&host);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+    juce::MidiBuffer midi;
+    juce::AudioBuffer<float> block(2, 256);
+    auto image = [&] { return editor->createComponentSnapshot({393, 12, 128, 32}); };
+    auto differences = [](const juce::Image& a, const juce::Image& b) {
+        int count = 0;
+        for (int y = 0; y < a.getHeight(); ++y)
+            for (int x = 0; x < a.getWidth(); ++x)
+                if (a.getPixelAt(x, y) != b.getPixelAt(x, y)) ++count;
+        return count;
+    };
+    for (double rate : {48000.0, 96000.0}) {
+        processor.prepareToPlay(rate, 256);
+        processor.setPlayHead(&host);
+        auto advance = [&] { block.clear(); processor.processBlock(block, midi); };
+        host.info.setIsPlaying(true); host.info.setPpqPosition(-2.0); host.info.setBpm(90);
+        advance();
+        const auto first = image();
+        REQUIRE_THAT(processor.getVisualBeat(), Catch::Matchers::WithinAbs(255.0 * 1.5 / rate, 0.00001));
+        host.info.setPpqPosition(13.75); host.info.setBpm(180); advance();
+        REQUIRE_THAT(processor.getVisualBeat(), Catch::Matchers::WithinAbs(.75 + 255.0 * 3.0 / rate, 0.00001));
+        const auto seek = image();
+        REQUIRE(differences(first, seek) > 250);
+        host.info.setIsPlaying(false); host.info.setPpqPosition(18.0); advance();
+        REQUIRE(differences(seek, image()) == 0);
+        processor.setPlayHead(nullptr); advance();
+        const auto phase = processor.getVisualBeat();
+        advance();
+        const double bpm = processor.parameters.getRawParameterValue(openglitch::params::kInternalBpm)->load();
+        REQUIRE_THAT(processor.getVisualBeat(), Catch::Matchers::WithinAbs(phase + 256.0 * bpm / (60.0 * rate), 0.00001));
+    }
+}
+
 TEST_CASE("Editor renders native UI screenshot", "[plugin][gui]") {
     juce::ScopedJuceInitialiser_GUI gui;
     OpenGlitchFXProcessor processor;
@@ -119,6 +160,50 @@ TEST_CASE("Editor renders native UI screenshot", "[plugin][gui]") {
     REQUIRE(hasVisibleLabel("SWING"));
     REQUIRE(hasVisibleLabel("32 STEPS"));
     REQUIRE(hasVisibleLabel("0%"));
+    editor->setVisible(true);
+    int targets = 0;
+    auto check = [&](auto&& self, juce::Component& parent) -> void {
+        for (auto* c : parent.getChildren()) {
+            if (!c->isVisible()) continue;
+            if (dynamic_cast<juce::Button*>(c) || dynamic_cast<juce::ComboBox*>(c)) {
+                const auto area = editor->getLocalArea(c, c->getLocalBounds());
+                CAPTURE(c->getName().toStdString(), area.toString().toStdString());
+                REQUIRE(area.getHeight() >= 36);
+                REQUIRE(area.getWidth() >= 44);
+                REQUIRE(editor->getLocalBounds().contains(area));
+                auto* hit = editor->getComponentAt(area.getCentre());
+                REQUIRE((hit == c || c->isParentOf(hit)));
+                ++targets;
+            }
+            self(self, *c);
+        }
+    };
+    for (const auto size : {juce::Point<int>(1300, 1050), juce::Point<int>(1440, 1120)}) {
+        editor->setSize(size.x, size.y);
+        check(check, *editor);
+    }
+    REQUIRE(targets >= 90);
+    juce::ComboBox* themes = nullptr;
+    for (auto* c : editor->getChildren())
+        if (auto* box = dynamic_cast<juce::ComboBox*>(c); box && box->getItemText(0) == "Cyber Neon")
+            themes = box;
+    REQUIRE(themes != nullptr);
+    for (int i = 0; i < 4; ++i) {
+        themes->setSelectedId(i + 1, juce::sendNotificationSync);
+        auto& look = editor->getLookAndFeel();
+        REQUIRE(look.findColour(juce::PopupMenu::backgroundColourId).getBrightness() < 0.42f);
+        REQUIRE(look.findColour(juce::TooltipWindow::textColourId).getBrightness() > 0.72f);
+        int width = 0, height = 0;
+        look.getIdealPopupMenuItemSize("Pad routing", false, 0, width, height);
+        REQUIRE(height >= 36);
+        if (auto* directory = std::getenv("OPENGLITCH_THEME_CAPTURES")) {
+            const auto file = juce::File(directory).getChildFile("theme-" + juce::String(i + 1) + ".png");
+            juce::FileOutputStream stream(file); REQUIRE(stream.openedOk());
+            stream.setPosition(0); stream.truncate();
+            REQUIRE(juce::PNGImageFormat{}.writeImageToStream(editor->createComponentSnapshot(editor->getLocalBounds()), stream));
+        }
+    }
+    themes->setSelectedId(1, juce::sendNotificationSync);
     const auto snapshot = editor->createComponentSnapshot(editor->getLocalBounds(), false, 2.0f);
     REQUIRE(snapshot.isValid());
     REQUIRE(snapshot.getWidth() == 2880);

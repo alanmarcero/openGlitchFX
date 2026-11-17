@@ -115,6 +115,7 @@ public:
 
     void processBlock(float* leftChannel, float* rightChannel, int numSamples);
 
+    double getClockPpq() const { return sequencer_.getClockPpq(); }
     MeterTelemetry getTelemetry() const { return telemetry_; }
 
 private:

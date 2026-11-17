@@ -1,9 +1,9 @@
 # Native UI screenshot
 
-![openGlitchFX 1.5.1 editor](../assets/native-ui.png)
+![openGlitchFX 1.6.0 editor](../assets/native-ui.png)
 
-`assets/native-ui.png` was captured on macOS on 2026-11-17 from the Release **v1.5.1 editor**. It shows the default state, including the length, swing and randomization controls. The native 1440 × 1120 editor is rendered at 2× scale (2880 × 2240). Controls, labels, colors and version text come from the plugin editor.
+Captured on macOS from the v1.6.0 Release editor in Cyber Neon. The eight-slice waveform appears between the step indicator and the rack title. The 1440 × 1120 editor was rendered at 2× scale (2880 × 2240).
 
-- Build: Release, macOS, JUCE 8.0.9.
-- Validation: CTest, 48/48 tests passed.
-- Screenshot SHA-256: `0933b99adeeffa8666de1f1cadec8af889fb16640fe6c3971122f25c9be62897`
+The native GUI test also checks the default and minimum sizes, all four theme menus, and how the waveform responds to transport changes at 48 and 96 kHz. All 49 local CTest cases passed.
+
+Screenshot SHA-256: `a6e931db981dd6687bfd8633fc7a5f99f1c21ad6ffd562b52ccd230293524936`.

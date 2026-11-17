@@ -336,6 +336,7 @@ void StepSequencerComponent::showStepContextMenu(int step) {
     const bool isMergedGroup = stepOn && (run.length() > 1);
 
     juce::PopupMenu menu;
+    menu.setLookAndFeel(&getLookAndFeel());
     if (isMergedGroup) {
         menu.addSectionHeader(juce::String::formatted("COMBINED BLOCK: PADS %02d-%02d (%d/32)  |  PAD %02d",
                                                       run.startStep + 1, run.endStep + 1, run.length(), step + 1));
@@ -376,6 +377,7 @@ void StepSequencerComponent::showStepContextMenu(int step) {
 
     if (isMergedGroup) {
         juce::PopupMenu splitSubMenu;
+        splitSubMenu.setLookAndFeel(&getLookAndFeel());
         splitSubMenu.addItem(400, juce::String::formatted("Disable Only Pad %02d (Split Block)", step + 1));
         for (int fx = 0; fx < kNumFx; ++fx) {
             const auto& desc = openglitch::params::kFxDescriptors[static_cast<size_t>(fx)];
@@ -393,7 +395,7 @@ void StepSequencerComponent::showStepContextMenu(int step) {
     const int applyStart = isMergedGroup ? run.startStep : step;
     const int applyEnd   = isMergedGroup ? run.endStep   : step;
 
-    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this),
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this).withDeletionCheck(*this),
                        [this, step, stepOn, mask, applyStart, applyEnd](int result) {
         if (result == 0) return;
 
