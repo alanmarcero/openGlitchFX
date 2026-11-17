@@ -36,21 +36,21 @@ private:
 
     // Header Controls
     juce::ComboBox themeBox_;
-    juce::Label themeLabel_{ {}, "LOOK:" };
+    juce::Label themeLabel_{ {}, "THEME:" };
     juce::ToggleButton hostSyncButton_{ "HOST SYNC" };
     juce::Slider internalBpmSlider_;
     juce::Label internalBpmLabel_{ {}, "BPM" };
 
     // 32-Step Beat Sequencer, Paint Brush Selector & Pattern Quick-Select Buttons
     openglitch::ui::StepSequencerComponent sequencerGrid_;
-    juce::Label paintBrushLabel_{ {}, "PAD BRUSH:" };
+    juce::Label paintBrushLabel_{ {}, "STEP BRUSH:" };
     juce::ComboBox paintBrushBox_;
-    juce::TextButton presetAllBtn_{ "ALL 32" };
+    juce::TextButton presetAllBtn_{ "ALL STEPS" };
     juce::TextButton presetLastBeatBtn_{ "LAST BEAT" };
     juce::TextButton presetLast4StepsBtn_{ "LAST 1/8" };
     juce::TextButton presetLast32ndBtn_{ "LAST 1/32" };
-    juce::TextButton presetBackbeatBtn_{ "BEATS 2&4" };
-    juce::TextButton preset16thBtn_{ "OFF 1/16" };
+    juce::TextButton presetBackbeatBtn_{ "BEATS 2 & 4" };
+    juce::TextButton preset16thBtn_{ "16TH OFFBEATS" };
     juce::TextButton presetInvertBtn_{ "INVERT" };
     juce::TextButton presetResetFxBtn_{ "ALL FX" };
     juce::TextButton presetClearBtn_{ "CLEAR" };

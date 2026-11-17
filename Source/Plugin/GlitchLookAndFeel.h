@@ -55,6 +55,11 @@ public:
                               bool shouldDrawButtonAsHighlighted,
                               bool shouldDrawButtonAsDown) override;
 
+    void drawButtonText(juce::Graphics& g,
+                        juce::TextButton& button,
+                        bool shouldDrawButtonAsHighlighted,
+                        bool shouldDrawButtonAsDown) override;
+
     void drawComboBox(juce::Graphics& g,
                       int width, int height,
                       bool isButtonDown,

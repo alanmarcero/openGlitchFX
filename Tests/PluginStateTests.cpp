@@ -105,8 +105,8 @@ TEST_CASE("Editor renders native UI screenshot", "[plugin][gui]") {
     processor.prepareToPlay(48000, 512);
     std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
     REQUIRE(editor != nullptr);
-    REQUIRE(editor->getWidth() == 1080);
-    REQUIRE(editor->getHeight() == 1020);
+    REQUIRE(editor->getWidth() == 1440);
+    REQUIRE(editor->getHeight() == 1120);
     auto hasVisibleLabel = [&](const juce::String& text) {
         for (auto* child : editor->getChildren()) {
             if (auto* label = dynamic_cast<juce::Label*>(child);
@@ -121,8 +121,8 @@ TEST_CASE("Editor renders native UI screenshot", "[plugin][gui]") {
     REQUIRE(hasVisibleLabel("0%"));
     const auto snapshot = editor->createComponentSnapshot(editor->getLocalBounds(), false, 2.0f);
     REQUIRE(snapshot.isValid());
-    REQUIRE(snapshot.getWidth() == 2160);
-    REQUIRE(snapshot.getHeight() == 2040);
+    REQUIRE(snapshot.getWidth() == 2880);
+    REQUIRE(snapshot.getHeight() == 2240);
     juce::File cwd = juce::File::getCurrentWorkingDirectory();
     juce::File file = cwd.getChildFile("assets/native-ui.png");
     if (!cwd.getChildFile("assets").isDirectory() && cwd.getParentDirectory().getChildFile("assets").isDirectory())
