@@ -1,173 +1,58 @@
 # openGlitchFX
 
-[Install with OpenVST Manager](https://github.com/alanmarcero/alan-m-OpenVSTManager/releases/latest)
+Create beat-synced glitches with a 32-step sequencer. Choose from 15 effects and route them to any step.
 
-![openGlitchFX native editor](assets/native-ui.png)
+[Install with OpenVST Manager](https://github.com/alanmarcero/alan-m-OpenVSTManager/releases/latest) · [Download v1.5.1](https://github.com/alanmarcero/openGlitchFX/releases/tag/v1.5.1)
 
-*Captured from the native v1.5.1 VST3 editor. [Capture details and provenance](docs/SCREENSHOTS.md).*
+![openGlitchFX editor](assets/native-ui.png)
 
-Beat-synced glitch processor with 15 effects and a 32-step sequencer. Pads that are on process audio. The rest pass dry. Output trim still applies to the dry signal. Transitions are smoothed.
-
----
-
-## Interface and themes
-
-The native editor has four selectable color themes: **Cyber Neon** (default), **Industrial Amber**, **Acid Matrix**, and **Arctic Glitch**. The theme is saved with the session and can be automated.
-
-### Hardware inspiration
-
----
+*Native editor capture. [See capture details](docs/SCREENSHOTS.md).*
 
 ## Sequencer
 
-A 4/4 bar is 32 steps: 8 steps per beat, each 1/32 of a bar. The sequencer follows host PPQ and BPM, or the internal BPM when host sync is off or the host reports no tempo.
+The 32-step pattern spans one 4/4 bar. Each step lasts one 32nd note. Set the loop length from 1 to 32 steps. The sequencer follows host tempo, or uses the internal clock when host sync is off or unavailable.
 
-Adjacent pads with the same FX routing draw as one block and run as one span. The effect does not restart on each 1/32 step. Badges show the span, for example `ALL FX (8/32 | 1 BEAT)` or `TAPE STOP (4/32 | 1/8 BAR)`. Tape Stop and Reverse use that full span, including across the bar line. Stutter captures once per run and repeats its slice. Chopper and Pitch Glitch keep their modulation.
+Set Swing to delay offbeat steps. Randomize with Light (35%), Medium (55%), or Wild (75%) density. Use preset buttons for ALL STEPS, LAST BEAT, LAST 1/8, LAST 1/32, BEATS 2 & 4, 16TH OFFBEATS, and CLEAR. ALL FX routes every effect through steps that are already on.
 
-The **LENGTH** control sets the loop to 1–32 steps. **SWING** delays odd steps within each pair, from straight timing at 0% to a 2:1 long/short step ratio at 100%. **RANDOMIZE** offers Light (35%), Medium (55%) and Wild (75%) step density. With `ALL ACTIVE FX` selected it creates a full pattern and routes each active pad through a level-appropriate FX set. With one FX selected as the pad brush, it randomizes only that FX's routing while preserving pad on/off states and every other FX route.
-
-Each pad stores a 15-bit FX mask (the original ten bits plus five more) and its own smoothed gate, so neighboring pads can run different effects. Right-click a pad or block to:
-
-- enable all 15 effects, or disable the pad so it passes dry
-- solo one effect (`Only BITCRUSH (BC)`, `Only TAPE STOP (TS)`, and the rest). If that effect's amount is 0%, it is set to 50%
-- toggle any combination of the 15 effects
-- split one 1/32 pad out of a block
-- copy the routing to the current 8-step beat, or to all 32 pads
-
-The pad-brush menu is `ALL ACTIVE FX` or one effect from `ONLY: BITCRUSH [BC]` through `ONLY: SATURATION [SA]`. Left-click and drag to paint that choice. Adjacent painted pads merge. Each pad shows a routing badge (`ALL FX (8/32 | 1 BEAT)`, `BC 2/32`, `TS`, `3FX`) and a 3×5 grid of which effects are on.
-
-| Button | Pads |
-| --- | --- |
-| ALL STEPS | All 32 pads on |
-| LAST BEAT (25-32) | Beat 4 only |
-| LAST 1/8 (29-32) | The last eighth note (4 steps) |
-| LAST 1/32 | Step 32 only |
-| BEATS 2 & 4 | Beats 2 and 4 |
-| 16TH OFFBEATS | The second 1/16 of every 1/8 |
-| ALL FX | All 15 effects routed to every pad. Pad on/off stays as it is |
-| CLEAR | All pads off |
-
-De-click fade is 0.5 ms to 25 ms, used when a pad turns on or off and when adjacent pads use different effects. Stutter, Tape Stop and Reverse capture on the sample where that effect's pad goes from off to on.
-
----
+Each step can pass audio dry or route one or more effects. Drag across steps to paint an effect choice. Right-click a step to enable all effects, solo one, or toggle a combination. You can also split a step or copy its routing to the current beat or all 32 steps. Adjacent steps with matching routing form a longer effect span.
 
 ## Effects
 
-Each effect has an amount knob (0–100%) and its own on/off switch. At 0% that effect is silent, including on pads routed to it. Effects that are on run in series on an active pad.
+Each effect has an on/off switch and Amount control. An effect at 0% is silent. Effects run in series on active steps.
 
-1. **Bitcrush.** Bit depth from 16-bit to 1.5-bit, with packet-hold decimation and tanh compensation.
-2. **Downsample.** Sample-and-hold divider from 1× to 59×.
-3. **Stutter.** Captures at the start of an active region and loops a slice with smoothed edges. In Knob mode the slice runs from a quarter note (capped at 500 ms) down to 22 ms. Buffer Size can lock the slice to a tempo division.
-4. **Tape stop.** Playback speed and pitch decelerate to a low-speed floor.
-5. **Ring mod.** Sine carrier from 45 Hz to 1600 Hz.
-6. **Reverse.** Plays the preceding pad span backwards, up to 12 seconds, with raised-cosine edge fades. On a cold start it passes dry audio until a full region is captured. Adjacent pads do not retrigger short grains.
-7. **Chopper.** Tempo-scaled raised-cosine gate. Amount changes rate, depth and shape. Longer joined spans slow the gate. High amounts add a stereo phase offset.
-8. **Pitch glitch.** Dual-head crossfaded granular shifter cycling toward +7, +12, −12 and +19 semitones. Full amount reaches those intervals. Lower settings reduce the shifts.
-9. **Comb.** Delay from 1.4 ms to 14 ms with high, soft-clipped feedback.
-10. **Wavefold.** Sine wavefolder with first-order antiderivative antialiasing, DC blocking and a tone filter.
-11. **Chorus.** Two modulated delay voices per channel.
-12. **Flanger.** Short fractional delay with damped feedback.
-13. **Phaser.** Six swept allpass stages, with a stereo offset.
-14. **Ping-pong.** Tempo-synced eighth-note echoes alternating left and right. The delay keeps time through dry pads. Repeats are heard on active pads.
-15. **Saturation.** Gain-compensated tanh drive with antiderivative antialiasing and DC removal.
+- **Bitcrush:** Reduce bit depth.
+- **Downsample:** Reduce sample rate.
+- **Stutter:** Capture and repeat a slice of audio.
+- **Tape Stop:** Slow down or build up playback speed.
+- **Ring Mod:** Add a metallic tone.
+- **Reverse:** Play recent audio backward.
+- **Chopper:** Gate audio in a rhythm.
+- **Pitch Glitch:** Shift pitch.
+- **Comb:** Add a short ringing tone.
+- **Wavefold:** Add a rough, buzzy tone.
+- **Chorus:** Widen sound with moving copies.
+- **Flanger:** Add a moving short delay.
+- **Phaser:** Add a moving filter sweep.
+- **Ping-Pong:** Add tempo-synced eighth-note echoes between channels.
+- **Saturation:** Add drive and density.
 
-The editor can be resized. New effects start at 0%, so older sessions retain their sound. [Algorithm sources and verification](docs/DSP.md) · [Release changes](CHANGELOG.md).
+## Performance controls
 
----
+- **Stutter:** Select KNOB to use Amount for slice size. Or choose a tempo division from 1/4 to 1/64 note. Set Reverse to Off, All, or Alternate. Adjust gate length, pitch change, and slice advance.
+- **Tape Stop:** Choose Start or Stop, Smooth or Stepped motion, and a pad span or note length from 1/32 note to one bar. Slip adds wow and flutter. The low-pass filter removes highs as the effect slows. Fade lowers the volume.
+- **Envelopes:** Draw Volume, Pan, Filter, and Pitch shapes. Click to add points, drag to move them, and double-click or right-click to delete them. Reset a shape to its default. Set each shape to span joined steps or loop to a note length. Pitch changes Stutter pitch by up to one octave. Filter moves its cutoff down by up to eight octaves.
+- **Filter and trigger:** Add a low-pass or high-pass filter to the wet signal. Set cutoff and resonance. Choose Sequencer or MIDI trigger. In MIDI mode, notes 60–74 trigger individual effects, and other notes trigger all effects. MIDI Start can run freely or wait for the next step.
+- **Dry and wet:** Choose Insert to replace the dry signal on active steps. Choose Parallel to mix the effect with the dry signal.
+- **Transitions:** Set the fade between steps from 0.5 to 25 ms. Output trim also affects dry audio.
 
-## Buffer, tape, envelopes and MIDI
+## Themes and compatibility
 
-The panel below the FX cards adds four groups of controls.
+Choose Cyber Neon, Industrial Amber, Acid Matrix, or Arctic Glitch. The theme and drawn envelopes save with the session. The theme also supports host automation.
 
-- **BUFFER (STUTTER options):**
-  - **SIZE:** `KNOB` lets the STUTTER amount set the slice. `1/4` to `1/64` locks the slice to the tempo.
-  - **REVERSE:** `OFF`, `ALL` repeats, or `ALTERNATE` repeats.
-  - **GATE:** The audible part of each repeat (`5%` to `100%`).
-  - **PITCH / REPEAT:** Pitch change per repeat (`-12` to `+12` semitones).
-  - **ADVANCE:** Each repeat starts half a slice later, so the stutter moves forward through the audio.
-- **TAPE (TAPE STOP options):**
-  - **DIRECTION:** `STOP` slows the tape toward its low-speed floor. `START` ramps from that floor to normal speed.
-  - **CURVE:** `SMOOTH` ramp or `STEPPED` (8 speed steps).
-  - **LENGTH:** `PAD SPAN` or a fixed note length (`1/32` to `1 BAR`).
-  - **SLIP:** Wow and flutter. **LPF:** Highs roll off as the tape slows. **FADE:** Volume drops as the tape slows.
-- **ENVELOPES:** Four drawn envelopes (`VOLUME`, `PAN`, `FILTER`, `PITCH`) shape the wet signal.
-  - Click to add a point, drag to move it, double-click or right-click to delete it. `RESET` restores the default shape.
-  - **LENGTH:** `PAD SPAN` runs the envelope once across each block of joined pads. A note value loops it in time with the song.
-  - `PITCH` changes the STUTTER playback pitch by up to one octave. `FILTER` moves the cutoff down by up to 8 octaves.
-  - The session saves the drawn points.
-- **FILTER & TRIGGER:**
-  - **FILTER:** Low-pass or high-pass state-variable filter on the wet signal, with `CUTOFF` and `RESONANCE`.
-  - **TRIGGER:** `SEQUENCER` uses the 32 pads. `MIDI` ignores the pads: notes `60`-`74` trigger one FX each (BITCRUSH to SATURATION), and any other note triggers all FX.
-  - **MIDI START:** `FREE` starts on the note. `SYNCED` waits for the next `1/32` step.
-  - **DRY/WET:** `INSERT` replaces the dry signal on active pads. `PARALLEL` keeps the dry signal and adds the glitch on top.
+The VST3 plugin follows host tempo and MIDI. It supports macOS 11 or later on Apple Silicon and Intel, and Windows x64. Packages include VST3 only.
 
-Hover over any control for a tooltip.
-
----
-
-## Project Structure
-
-```
-openGlitchFX/
-├── .github/
-│   └── workflows/
-│       └── build.yml                  # macOS Universal + Windows MSVC CI, CTest & pluginval
-├── assets/
-│   ├── alan_marcero_logo.jpg          # Custom Alan Marcero emblem (embedded in plugin & README)
-│   ├── analog-cyber-faceplate.png      # Generated machined-metal texture (embedded in BinaryData)
-│   ├── native-ui.png                  # Released VST3 editor capture
-│   └── studio_hardware.jpg            # Studio hardware macro concept shot
-├── Source/
-│   ├── Core/                          # Pure C++20 DSP engine (zero GUI dependencies)
-│   │   ├── BeatStepSequencer.h/.cpp   # 32-step 4/4 bar PPQ sync & anti-click gate envelope
-│   │   ├── GlitchEffects.h/.cpp       # All 15 DSP glitch effect processors + wet filter
-│   │   ├── ModEnvelope.h/.cpp         # Drawn n-point modulation envelopes
-│   │   └── GlitchProcessorCore.h/.cpp # Master glitch chain & telemetry
-│   └── Plugin/                        # JUCE 8 VST3 Plugin & GUI
-│       ├── Parameters.h/.cpp          # APVTS layout (32 steps + 15 FX + master controls)
-│       ├── GlitchLookAndFeel.h/.cpp   # 4 selectable themes & custom rotary/button rendering
-│       ├── StepSequencerComponent.h/.cpp # Interactive 32-step 4/4 beat grid UI
-│       ├── DetailPanelComponent.h/.cpp   # Buffer, tape, envelope, filter & trigger controls
-│       ├── EnvelopeEditorComponent.h/.cpp # Breakpoint envelope editor
-│       ├── PluginProcessor.h/.cpp     # JUCE AudioProcessor & playhead integration
-│       └── PluginEditor.h/.cpp        # 15-FX 3x5 matrix + 32-step sequencer editor
-├── Tests/                             # Catch2 unit test suite
-│   ├── BeatSequencerTests.cpp
-│   ├── GlitchCoreTests.cpp
-│   └── PluginStateTests.cpp
-├── CMakeLists.txt
-├── LICENSE
-└── README.md
-```
-
----
-
-## Install
-
-1. Download and install [OpenVST Manager](https://github.com/alanmarcero/alan-m-OpenVSTManager/releases/latest) for macOS or Windows.
-2. Open the manager and refresh the catalog.
-3. Choose **openGlitchFX**, select **VST3**, and install.
-4. Rescan plugins in your DAW. If you chose a custom install folder, add it to the DAW's search paths.
-
-Manual downloads: [v1.5.1 release](https://github.com/alanmarcero/openGlitchFX/releases/tag/v1.5.1). Packages contain **VST3 only** for macOS 11+ (universal Apple Silicon/Intel) and Windows x64. Extract and copy the entire `openGlitchFX.vst3` bundle to `~/Library/Audio/Plug-Ins/VST3/` on macOS or `C:\Program Files\Common Files\VST3\` on Windows, then rescan your DAW. macOS builds are signed ad hoc.
-
-## Building & Testing
-
-### Prerequisites
-
-CMake 3.22+, Git, and a C++20 compiler (Xcode command-line tools on macOS or Visual Studio 2022 C++ tools on Windows). The first configure downloads JUCE 8.0.9 and Catch2 3.9.1.
-
-### Build Commands
-```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --config Release --parallel
-ctest --test-dir build -C Release --output-on-failure
-```
-
-Outputs are in `build/openGlitchFX_artefacts/Release/VST3/`. Add `-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0` when configuring a universal macOS build; use `-A x64` with the Visual Studio generator on Windows. CI builds and validates the VST3 on macOS and Windows.
-
----
+Install with [OpenVST Manager](https://github.com/alanmarcero/alan-m-OpenVSTManager/releases/latest) or download the [v1.5.1 release](https://github.com/alanmarcero/openGlitchFX/releases/tag/v1.5.1). Rescan your DAW after installation. See [release changes](CHANGELOG.md).
 
 ## License
 
-MIT License. Copyright (c) 2026 Alan Marcero.
+openGlitchFX uses the MIT license. See [LICENSE](LICENSE).
