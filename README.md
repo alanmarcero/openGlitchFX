@@ -4,7 +4,7 @@
 
 ![openGlitchFX native editor](assets/native-ui.png)
 
-*Captured from the native v1.5.0 VST3 editor. [Capture details and provenance](docs/SCREENSHOTS.md).*
+*Captured from the native v1.5.1 VST3 editor. [Capture details and provenance](docs/SCREENSHOTS.md).*
 
 Beat-synced glitch processor with 15 effects and a 32-step sequencer. Pads that are on process audio. The rest pass dry. Output trim still applies to the dry signal. Transitions are smoothed.
 
@@ -38,12 +38,12 @@ The pad-brush menu is `ALL ACTIVE FX` or one effect from `ONLY: BITCRUSH [BC]` t
 
 | Button | Pads |
 | --- | --- |
-| ALL 32 | All 32 pads on |
+| ALL STEPS | All 32 pads on |
 | LAST BEAT (25-32) | Beat 4 only |
 | LAST 1/8 (29-32) | The last eighth note (4 steps) |
 | LAST 1/32 | Step 32 only |
-| BEATS 2&4 | Beats 2 and 4 |
-| OFF 1/16 | The second 1/16 of every 1/8 |
+| BEATS 2 & 4 | Beats 2 and 4 |
+| 16TH OFFBEATS | The second 1/16 of every 1/8 |
 | ALL FX | All 15 effects routed to every pad. Pad on/off stays as it is |
 | CLEAR | All pads off |
 
@@ -149,7 +149,7 @@ openGlitchFX/
 3. Choose **openGlitchFX**, select **VST3**, and install.
 4. Rescan plugins in your DAW. If you chose a custom install folder, add it to the DAW's search paths.
 
-Manual downloads: [v1.2.1 release](https://github.com/alanmarcero/openGlitchFX/releases/tag/v1.2.1). Packages contain **VST3 only** for macOS 11+ (universal Apple Silicon/Intel) and Windows x64. Extract and copy the entire `openGlitchFX.vst3` bundle to `~/Library/Audio/Plug-Ins/VST3/` on macOS or `C:\Program Files\Common Files\VST3\` on Windows, then rescan your DAW. macOS builds are signed ad hoc.
+Manual downloads: [v1.5.1 release](https://github.com/alanmarcero/openGlitchFX/releases/tag/v1.5.1). Packages contain **VST3 only** for macOS 11+ (universal Apple Silicon/Intel) and Windows x64. Extract and copy the entire `openGlitchFX.vst3` bundle to `~/Library/Audio/Plug-Ins/VST3/` on macOS or `C:\Program Files\Common Files\VST3\` on Windows, then rescan your DAW. macOS builds are signed ad hoc.
 
 ## Building & Testing
 

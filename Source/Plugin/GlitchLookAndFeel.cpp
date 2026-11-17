@@ -68,21 +68,21 @@ ThemePalette makePalette(Theme t) {
         case Theme::CyberNeon:
         default:
             return {
-                juce::Colour(0xff1b2529), // bgTop
-                juce::Colour(0xff0b1115), // bgBottom
-                juce::Colour(0xef172126), // cardBg
-                juce::Colour(0xff3e5158), // cardBorder
-                juce::Colour(0xff83d4d0), // cardActiveBorder
-                juce::Colour(0xff273337), // headerPlate
-                juce::Colour(0xff83d4d0), // accentPrimary (Electric Cyan)
-                juce::Colour(0xffd7ac7b), // accentSecondary (Neon Magenta)
-                juce::Colour(0xff83d4d0), // stepActiveFill
-                juce::Colour(0xff1c2a30), // stepInactiveFill
-                juce::Colour(0xffeee1b5), // stepPlayheadOutline
-                juce::Colour(0xff536369), // knobBodyTop
-                juce::Colour(0xff172126), // knobBodyBottom
-                juce::Colour(0xffedf6ff), // textBright
-                juce::Colour(0xffafbdc2)  // textMuted
+                juce::Colour(0xff152026), // bgTop
+                juce::Colour(0xff0d1317), // bgBottom
+                juce::Colour(0xef152026), // cardBg
+                juce::Colour(0xff283842), // cardBorder
+                juce::Colour(0xff48f0c8), // cardActiveBorder
+                juce::Colour(0xff152026), // headerPlate
+                juce::Colour(0xff48f0c8), // accentPrimary
+                juce::Colour(0xffffbe3b), // accentSecondary
+                juce::Colour(0xff48f0c8), // stepActiveFill
+                juce::Colour(0xff152026), // stepInactiveFill
+                juce::Colour(0xffe6f0f5), // stepPlayheadOutline
+                juce::Colour(0xff283842), // knobBodyTop
+                juce::Colour(0xff0d1317), // knobBodyBottom
+                juce::Colour(0xffe6f0f5), // textBright
+                juce::Colour(0xff869ca8)  // textMuted
             };
     }
 }
@@ -246,7 +246,7 @@ void GlitchLookAndFeel::drawToggleButton(juce::Graphics& g,
     g.fillEllipse(dotX - dotR, dotY - dotR, dotR * 2.0f, dotR * 2.0f);
 
     g.setColour(on ? palette_.textBright : palette_.textMuted);
-    g.setFont(juce::FontOptions(10.5f, juce::Font::bold));
+    g.setFont(juce::FontOptions(14.0f, juce::Font::bold));
     auto textRect = bounds.withTrimmedLeft(18.0f);
     g.drawText(button.getButtonText(), textRect.toNearestInt(), juce::Justification::centred);
 }
@@ -269,6 +269,17 @@ void GlitchLookAndFeel::drawButtonBackground(juce::Graphics& g,
 
     g.setColour(shouldDrawButtonAsHighlighted ? palette_.accentPrimary : palette_.cardBorder);
     g.drawRoundedRectangle(bounds, 3.5f, 1.0f);
+}
+
+void GlitchLookAndFeel::drawButtonText(juce::Graphics& g,
+                                       juce::TextButton& button,
+                                       bool,
+                                       bool) {
+    const bool on = button.getToggleState();
+    const auto colourId = on ? juce::TextButton::textColourOnId : juce::TextButton::textColourOffId;
+    g.setColour(button.findColour(colourId));
+    g.setFont(juce::FontOptions(14.0f, juce::Font::bold));
+    g.drawText(button.getButtonText(), button.getLocalBounds(), juce::Justification::centred);
 }
 
 void GlitchLookAndFeel::drawComboBox(juce::Graphics& g,

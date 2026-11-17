@@ -9,7 +9,7 @@ namespace {
 
 constexpr float kCardHeaderH = 30.0f;
 constexpr float kCaptionH = 12.0f;
-constexpr float kControlH = 22.0f;
+constexpr float kControlH = 36.0f;
 constexpr float kRowGap = 6.0f;
 constexpr float kColGap = 6.0f;
 

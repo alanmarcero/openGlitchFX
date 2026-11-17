@@ -19,7 +19,7 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
     themeBox_.onChange = [this]() { applyTheme(themeBox_.getSelectedItemIndex()); };
     addAndMakeVisible(themeBox_);
 
-    themeLabel_.setFont(juce::FontOptions(11.0f, juce::Font::bold));
+    themeLabel_.setFont(juce::FontOptions(14.0f, juce::Font::bold));
     themeLabel_.setJustificationType(juce::Justification::centredRight);
     addAndMakeVisible(themeLabel_);
 
@@ -34,7 +34,7 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
     // 32-Step Beat Sequencer Grid, Paint-Brush FX Selector & Quick Pattern Buttons
     addAndMakeVisible(sequencerGrid_);
 
-    paintBrushLabel_.setFont(juce::FontOptions(10.0f, juce::Font::bold));
+    paintBrushLabel_.setFont(juce::FontOptions(14.0f, juce::Font::bold));
     paintBrushLabel_.setJustificationType(juce::Justification::centredRight);
     addAndMakeVisible(paintBrushLabel_);
 
@@ -78,7 +78,7 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
                    [this]() { sequencerGrid_.applyPreset(StepPatternPreset::ClearAll); });
 
     auto setupSequencerControl = [this](juce::Label& label, juce::Slider& slider) {
-        label.setFont(juce::FontOptions(10.0f, juce::Font::bold));
+        label.setFont(juce::FontOptions(14.0f, juce::Font::bold));
         label.setJustificationType(juce::Justification::centredRight);
         addAndMakeVisible(label);
         slider.setSliderStyle(juce::Slider::LinearHorizontal);
@@ -89,14 +89,14 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
     sequenceLengthSlider_.setRange(1.0, 32.0, 1.0);
     sequenceLengthSlider_.setTooltip("Number of 1/32-note steps before the pattern loops.");
     sequenceLengthValueLabel_.setJustificationType(juce::Justification::centredLeft);
-    sequenceLengthValueLabel_.setFont(juce::FontOptions(10.0f, juce::Font::bold));
+    sequenceLengthValueLabel_.setFont(juce::FontOptions(14.0f, juce::Font::bold));
     addAndMakeVisible(sequenceLengthValueLabel_);
     setupSequencerControl(sequenceLengthLabel_, sequenceLengthSlider_);
 
     sequencerSwingSlider_.setRange(0.0, 100.0, 0.1);
     sequencerSwingSlider_.setTooltip("Delay odd-numbered steps in each pair for a swung glitch rhythm.");
     sequencerSwingValueLabel_.setJustificationType(juce::Justification::centredLeft);
-    sequencerSwingValueLabel_.setFont(juce::FontOptions(10.0f, juce::Font::bold));
+    sequencerSwingValueLabel_.setFont(juce::FontOptions(14.0f, juce::Font::bold));
     addAndMakeVisible(sequencerSwingValueLabel_);
     setupSequencerControl(sequencerSwingLabel_, sequencerSwingSlider_);
 
@@ -162,7 +162,7 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
         addAndMakeVisible(s);
 
         l.setJustificationType(juce::Justification::centred);
-        l.setFont(juce::FontOptions(9.5f, juce::Font::bold));
+        l.setFont(juce::FontOptions(14.0f, juce::Font::bold));
         addAndMakeVisible(l);
     };
 
@@ -200,8 +200,8 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
     applyTheme(themeBox_.getSelectedItemIndex());
 
     setResizable(true, true);
-    setResizeLimits(1080, 940, 1620, 1390);
-    setSize(1080, 1020);
+    setResizeLimits(1300, 1050, 1620, 1390);
+    setSize(1440, 1120);
     startTimerHz(30);
 }
 
@@ -327,7 +327,7 @@ void OpenGlitchFXEditor::paint(juce::Graphics& g) {
     g.fillRect(0.0f, 0.0f, w, h);
 
     if (backdropImage_.isValid()) {
-        g.setOpacity(0.62f);
+        g.setOpacity(0.12f);
         g.drawImage(backdropImage_, juce::Rectangle<float>(0.0f, 0.0f, w, h),
                     juce::RectanglePlacement::stretchToFit);
         g.setOpacity(1.0f);
@@ -526,26 +526,26 @@ void OpenGlitchFXEditor::resized() {
     const float margin = 28.0f;
 
     // Header Controls (Right Side)
-    hostSyncButton_.setBounds(static_cast<int>(w - 395.0f), 16, 95, 26);
-    internalBpmSlider_.setBounds(static_cast<int>(w - 294.0f), 16, 82, 26);
-    themeLabel_.setBounds(static_cast<int>(w - 208.0f), 16, 44, 26);
-    themeBox_.setBounds(static_cast<int>(w - 160.0f), 16, 128, 26);
+    hostSyncButton_.setBounds(static_cast<int>(w - 510.0f), 12, 116, 36);
+    internalBpmSlider_.setBounds(static_cast<int>(w - 390.0f), 12, 96, 36);
+    themeLabel_.setBounds(static_cast<int>(w - 286.0f), 12, 62, 36);
+    themeBox_.setBounds(static_cast<int>(w - 216.0f), 12, 184, 36);
 
     // 32-Step Beat Sequencer Section
     sequencerGrid_.setBounds(static_cast<int>(margin), 68, static_cast<int>(w - margin * 2.0f), 120);
 
     // Paint Brush Selector + 9 Quick Pattern Preset Buttons below Sequencer
     const float presetY = 194.0f;
-    const float presetH = 24.0f;
-    paintBrushLabel_.setBounds(static_cast<int>(margin), static_cast<int>(presetY), 72, static_cast<int>(presetH));
-    paintBrushBox_.setBounds(static_cast<int>(margin + 75.0f), static_cast<int>(presetY), 188, static_cast<int>(presetH));
+    const float presetH = 36.0f;
+    paintBrushLabel_.setBounds(static_cast<int>(margin), static_cast<int>(presetY), 100, static_cast<int>(presetH));
+    paintBrushBox_.setBounds(static_cast<int>(margin + 104.0f), static_cast<int>(presetY), 190, static_cast<int>(presetH));
 
     juce::Button* presetBtns[9] = {
         &presetAllBtn_, &presetLastBeatBtn_, &presetLast4StepsBtn_, &presetLast32ndBtn_,
         &presetBackbeatBtn_, &preset16thBtn_, &presetInvertBtn_, &presetResetFxBtn_, &presetClearBtn_
     };
-    const float btnsStartX = margin + 270.0f;
-    const float gap = 4.5f;
+    const float btnsStartX = margin + 300.0f;
+    const float gap = 5.5f;
     const float btnW = (w - margin - btnsStartX - gap * 8.0f) / 9.0f;
     for (int i = 0; i < 9; ++i) {
         presetBtns[i]->setBounds(static_cast<int>(btnsStartX + static_cast<float>(i) * (btnW + gap)),
@@ -554,8 +554,8 @@ void OpenGlitchFXEditor::resized() {
                                  static_cast<int>(presetH));
     }
 
-    const int controlY = 230;
-    const int controlH = 28;
+    const int controlY = 238;
+    const int controlH = 36;
     sequenceLengthLabel_.setBounds(28, controlY, 58, controlH);
     sequenceLengthSlider_.setBounds(90, controlY, 155, controlH);
     sequenceLengthValueLabel_.setBounds(249, controlY, 78, controlH);
@@ -565,8 +565,8 @@ void OpenGlitchFXEditor::resized() {
     randomizeButton_.setBounds(770, controlY, 150, controlH);
 
     // 15 Glitch FX Cards (3 Rows x 5 Columns) + Master Strip on Right
-    const float detailH = 196.0f;
-    const float fxTop = 270.0f;
+    const float detailH = 220.0f;
+    const float fxTop = 284.0f;
     const float fxTotalH = h - fxTop - detailH - 22.0f - 8.0f;
     detailPanel_.setBounds(static_cast<int>(margin), static_cast<int>(h - 22.0f - detailH),
                            static_cast<int>(w - margin * 2.0f), static_cast<int>(detailH));
@@ -591,9 +591,9 @@ void OpenGlitchFXEditor::resized() {
 
         auto inner = slot.cardBounds.reduced(8.0f);
         inner.removeFromTop(30.0f);
-        auto btnArea = inner.removeFromBottom(24.0f);
+        auto btnArea = inner.removeFromBottom(36.0f);
         slot.knob.setBounds(inner.toNearestInt());
-        slot.enableBtn.setBounds(btnArea.reduced(14.0f, 0.0f).toNearestInt());
+        slot.enableBtn.setBounds(btnArea.reduced(8.0f, 0.0f).toNearestInt());
     }
 
     // Master Card on the far right spanning all rows
@@ -604,8 +604,8 @@ void OpenGlitchFXEditor::resized() {
     masterMeterBounds_ = mInner.removeFromTop(56.0f);
     mInner.removeFromTop(4.0f);
 
-    auto powerArea = mInner.removeFromBottom(28.0f);
-    masterPowerButton_.setBounds(powerArea.reduced(10.0f, 0.0f).toNearestInt());
+    auto powerArea = mInner.removeFromBottom(36.0f);
+    masterPowerButton_.setBounds(powerArea.toNearestInt());
     mInner.removeFromBottom(4.0f);
 
     // The gap keeps DE-CLICK clear of the value boxes.
