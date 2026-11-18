@@ -4,7 +4,7 @@ Create beat-synced glitches with a 32-step sequencer. Choose from 15 effects and
 
 [Install with OpenVST Manager](https://github.com/alanmarcero/alan-m-OpenVSTManager/releases/latest) · [Download v1.7.0](https://github.com/alanmarcero/openGlitchFX/releases/tag/v1.7.0)
 
-![openGlitchFX editor](assets/native-ui.png)
+![openGlitchFX editor](docs/screenshots/preview.png)
 
 *Native editor capture. [See capture details](docs/SCREENSHOTS.md).*
 

@@ -99,7 +99,7 @@ jobs:
           merge-multiple: true
       - uses: softprops/action-gh-release@v2
         with:
-          body: '![Editor](https://raw.githubusercontent.com/alanmarcero/openGlitchFX/${{ github.ref_name }}/assets/native-ui.png)'
+          body: '![Editor](https://raw.githubusercontent.com/alanmarcero/openGlitchFX/${{ github.ref_name }}/docs/screenshots/preview.png)'
           files: openGlitchFX-VST3-*.zip
           fail_on_unmatched_files: true
           generate_release_notes: true
