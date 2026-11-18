@@ -59,6 +59,12 @@ private:
     juce::Label sequencerSwingLabel_{ {}, "SWING" };
     juce::Slider sequencerSwingSlider_;
     juce::Label sequencerSwingValueLabel_;
+    juce::Label patternRateLabel_{ {}, "RATE" };
+    juce::ComboBox patternRateBox_;
+    juce::Label patternChanceLabel_{ {}, "CHANCE" };
+    juce::Slider patternChanceSlider_;
+    juce::Label patternChanceValueLabel_;
+    juce::ToggleButton keepSubButton_{ "KEEP SUB" };
     juce::TextButton randomizeButton_{ "RANDOMIZE" };
 
     // 15 Glitch FX Slot UI (3 rows x 5 columns)
@@ -100,6 +106,9 @@ private:
     std::unique_ptr<ButtonAttachment> hostSyncAttach_;
     std::unique_ptr<SliderAttachment> sequenceLengthAttach_;
     std::unique_ptr<SliderAttachment> sequencerSwingAttach_;
+    std::unique_ptr<ComboBoxAttachment> patternRateAttach_;
+    std::unique_ptr<SliderAttachment> patternChanceAttach_;
+    std::unique_ptr<ButtonAttachment> keepSubAttach_;
     std::unique_ptr<SliderAttachment> internalBpmAttach_;
     std::unique_ptr<SliderAttachment> smoothAttach_;
     std::unique_ptr<SliderAttachment> masterMixAttach_;

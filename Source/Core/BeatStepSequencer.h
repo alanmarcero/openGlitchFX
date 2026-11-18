@@ -63,6 +63,10 @@ public:
     int getSequenceLength() const { return sequenceLength_; }
     void setSwing(float percent);
     float getSwing() const { return swingPercent_; }
+    void setPatternRate(float multiplier);
+    float getPatternRate() const { return patternRate_; }
+    void setPatternChance(float percent);
+    float getPatternChance() const { return patternChance_; }
 
     // Contiguous Pad Merging & Span queries:
     // 1. Visual pad merging: adjacent enabled pads with identical non-zero FX masks combine into one block.
@@ -123,6 +127,8 @@ private:
     float smoothCoeff_ = 0.99f;
     int sequenceLength_ = kNumSteps;
     float swingPercent_ = 0.0f;
+    float patternRate_ = 1.0f;
+    float patternChance_ = 100.0f;
     float envelope_ = 0.0f;
     std::array<float, kNumFxSlots> fxEnvelopes_{};
 };

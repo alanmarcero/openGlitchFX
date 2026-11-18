@@ -61,6 +61,8 @@ void GlitchProcessorCore::reset() {
     sequencer_.setExternalFxMask(0u);
     currentMasterMix_ = masterMix_;
     currentMasterGainLinear_ = masterGainLinear_;
+    keepSubLp_ = {};
+    wetSubHp_ = {};
     hasProcessedAudio_ = false;
 }
 
@@ -125,6 +127,14 @@ void GlitchProcessorCore::setSequenceLength(int steps) {
 
 void GlitchProcessorCore::setSequencerSwing(float percent) {
     sequencer_.setSwing(percent);
+}
+
+void GlitchProcessorCore::setPatternRate(float multiplier) {
+    sequencer_.setPatternRate(multiplier);
+}
+
+void GlitchProcessorCore::setPatternChance(float percent) {
+    sequencer_.setPatternChance(percent);
 }
 
 void GlitchProcessorCore::setTriggerMode(TriggerMode mode, bool syncedStart) {
@@ -431,6 +441,16 @@ void GlitchProcessorCore::processBlock(float* leftChannel, float* rightChannel, 
             const float pan = 2.0f * modulation(EnvTarget::Pan, 0.5f) - 1.0f;
             wetL *= volume * std::min(1.0f, 1.0f - pan);
             wetR *= volume * std::min(1.0f, 1.0f + pan);
+
+            if (keepSubEnabled_) {
+                const float subAlpha = static_cast<float>(1.0 - std::exp(-2.0 * 3.141592653589793 * 95.0 / sampleRate_));
+                keepSubLp_[0] += subAlpha * (dryL - keepSubLp_[0]);
+                keepSubLp_[1] += subAlpha * (dryR - keepSubLp_[1]);
+                wetSubHp_[0] += subAlpha * (wetL - wetSubHp_[0]);
+                wetSubHp_[1] += subAlpha * (wetR - wetSubHp_[1]);
+                wetL = keepSubLp_[0] + (wetL - wetSubHp_[0]);
+                wetR = keepSubLp_[1] + (wetR - wetSubHp_[1]);
+            }
 
             const float dryGain = (mixMode_ == MixMode::Parallel) ? 1.0f : (1.0f - effectiveWet);
             outL = (dryL * dryGain + wetL * effectiveWet) * currentMasterGainLinear_;

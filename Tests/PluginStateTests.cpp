@@ -246,6 +246,25 @@ TEST_CASE("Sequencer length and swing are automatable and survive state restore"
                  Catch::Matchers::WithinAbs(16.0f, 0.001f));
     REQUIRE_THAT(restored.parameters.getRawParameterValue("sequencer_swing")->load(),
                  Catch::Matchers::WithinAbs(70.0f, 0.001f));
+
+    auto* patternRate = processor.parameters.getParameter("pattern_rate");
+    auto* patternChance = processor.parameters.getParameter("pattern_chance");
+    auto* keepSub = processor.parameters.getParameter("keep_sub");
+    REQUIRE(patternRate != nullptr);
+    REQUIRE(patternChance != nullptr);
+    REQUIRE(keepSub != nullptr);
+    patternRate->setValueNotifyingHost(patternRate->convertTo0to1(2.0f));
+    patternChance->setValueNotifyingHost(patternChance->convertTo0to1(65.0f));
+    keepSub->setValueNotifyingHost(1.0f);
+    juce::MemoryBlock savedEnhancements;
+    processor.getStateInformation(savedEnhancements);
+    OpenGlitchFXProcessor restoredEnhancements;
+    restoredEnhancements.setStateInformation(savedEnhancements.getData(), static_cast<int>(savedEnhancements.getSize()));
+    REQUIRE_THAT(restoredEnhancements.parameters.getRawParameterValue("pattern_rate")->load(),
+                 Catch::Matchers::WithinAbs(2.0f, 0.001f));
+    REQUIRE_THAT(restoredEnhancements.parameters.getRawParameterValue("pattern_chance")->load(),
+                 Catch::Matchers::WithinAbs(65.0f, 0.001f));
+    REQUIRE(restoredEnhancements.parameters.getRawParameterValue("keep_sub")->load() > 0.5f);
 }
 
 TEST_CASE("Pattern randomization is repeatable and selected-FX randomization preserves other routes", "[plugin][sequencer]") {

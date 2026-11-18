@@ -87,6 +87,9 @@ public:
     void setGateSmoothingMs(float ms);
     void setSequenceLength(int steps);
     void setSequencerSwing(float percent);
+    void setPatternRate(float multiplier);
+    void setPatternChance(float percent);
+    void setKeepSubEnabled(bool enabled) { keepSubEnabled_ = enabled; }
 
     // Notes apply only in Midi trigger mode.
     void setTriggerMode(TriggerMode mode, bool syncedStart);
@@ -186,6 +189,9 @@ private:
     float masterGainLinear_ = 1.0f;
     float currentMasterGainLinear_ = 1.0f;
     bool masterBypassed_ = false;
+    bool keepSubEnabled_ = false;
+    std::array<float, 2> keepSubLp_{};
+    std::array<float, 2> wetSubHp_{};
     bool hasProcessedAudio_ = false;
 
     MeterTelemetry telemetry_{};

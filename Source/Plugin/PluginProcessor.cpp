@@ -101,6 +101,11 @@ void OpenGlitchFXProcessor::syncParametersToCore() {
     core_.setGateSmoothingMs(smoothMs);
     core_.setSequenceLength(static_cast<int>(std::round(*parameters.getRawParameterValue(kSequenceLength))));
     core_.setSequencerSwing(*parameters.getRawParameterValue(kSequencerSwing));
+    constexpr float kRates[] = { 0.5f, 1.0f, 2.0f };
+    const int rateIdx = std::clamp(static_cast<int>(std::round(*parameters.getRawParameterValue(kPatternRate))), 0, 2);
+    core_.setPatternRate(kRates[rateIdx]);
+    core_.setPatternChance(*parameters.getRawParameterValue(kPatternChance));
+    core_.setKeepSubEnabled(*parameters.getRawParameterValue(kKeepSub) > 0.5f);
 
     // 3. All 15 Glitch FX
     auto syncFx = [&](GlitchFxId id, const char* amtId, const char* onId) {
