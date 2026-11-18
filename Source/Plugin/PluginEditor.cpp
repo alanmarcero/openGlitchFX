@@ -103,6 +103,23 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
     addAndMakeVisible(sequencerSwingValueLabel_);
     setupSequencerControl(sequencerSwingLabel_, sequencerSwingSlider_);
 
+    patternRateLabel_.setFont(juce::FontOptions(14.0f, juce::Font::bold));
+    patternRateLabel_.setJustificationType(juce::Justification::centredRight);
+    addAndMakeVisible(patternRateLabel_);
+    patternRateBox_.addItemList({ "1/2x", "1x", "2x" }, 1);
+    patternRateBox_.setTooltip("Global sequencer speed multiplier relative to host tempo (1/2x, 1x, or 2x).");
+    addAndMakeVisible(patternRateBox_);
+
+    patternChanceSlider_.setRange(0.0, 100.0, 1.0);
+    patternChanceSlider_.setTooltip("Deterministic step probability gate across bars (100% = every bar fires).");
+    patternChanceValueLabel_.setJustificationType(juce::Justification::centredLeft);
+    patternChanceValueLabel_.setFont(juce::FontOptions(14.0f, juce::Font::bold));
+    addAndMakeVisible(patternChanceValueLabel_);
+    setupSequencerControl(patternChanceLabel_, patternChanceSlider_);
+
+    keepSubButton_.setTooltip("Preserve clean sub-bass below 95 Hz while glitching mids and highs.");
+    addAndMakeVisible(keepSubButton_);
+
     randomizeButton_.setTooltip("Create a repeatable-density pattern. With an FX brush selected, randomize only that FX routing.");
     randomizeButton_.onClick = [this]() { showRandomizeMenu(); };
     addAndMakeVisible(randomizeButton_);
@@ -184,6 +201,9 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
     hostSyncAttach_    = std::make_unique<ButtonAttachment>(processor_.parameters, kHostSync, hostSyncButton_);
     sequenceLengthAttach_ = std::make_unique<SliderAttachment>(processor_.parameters, kSequenceLength, sequenceLengthSlider_);
     sequencerSwingAttach_ = std::make_unique<SliderAttachment>(processor_.parameters, kSequencerSwing, sequencerSwingSlider_);
+    patternRateAttach_    = std::make_unique<ComboBoxAttachment>(processor_.parameters, kPatternRate, patternRateBox_);
+    patternChanceAttach_  = std::make_unique<SliderAttachment>(processor_.parameters, kPatternChance, patternChanceSlider_);
+    keepSubAttach_        = std::make_unique<ButtonAttachment>(processor_.parameters, kKeepSub, keepSubButton_);
     internalBpmAttach_ = std::make_unique<SliderAttachment>(processor_.parameters, kInternalBpm, internalBpmSlider_);
     smoothAttach_      = std::make_unique<SliderAttachment>(processor_.parameters, kSmoothMs, smoothSlider_);
     masterMixAttach_   = std::make_unique<SliderAttachment>(processor_.parameters, kMasterMix, masterMixSlider_);
@@ -198,6 +218,11 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
                                       juce::dontSendNotification);
     sequencerSwingValueLabel_.setText(juce::String(sequencerSwingSlider_.getValue(), 0) + "%",
                                       juce::dontSendNotification);
+    patternChanceValueLabel_.setText(juce::String(patternChanceSlider_.getValue(), 0) + "%",
+                                     juce::dontSendNotification);
+    patternChanceValueLabel_.setText(juce::String(patternChanceSlider_.getValue(), 0) + "%",
+                                     juce::dontSendNotification);
+    patternChanceSlider_.setDoubleClickReturnValue(true, 100.0);
 
     applyTheme(themeBox_.getSelectedItemIndex());
 
@@ -226,10 +251,15 @@ void OpenGlitchFXEditor::applyTheme(int themeIndex) {
     sequenceLengthValueLabel_.setColour(juce::Label::textColourId, pal.accentPrimary);
     sequencerSwingLabel_.setColour(juce::Label::textColourId, pal.textMuted);
     sequencerSwingValueLabel_.setColour(juce::Label::textColourId, pal.accentPrimary);
+    patternRateLabel_.setColour(juce::Label::textColourId, pal.textMuted);
+    patternChanceLabel_.setColour(juce::Label::textColourId, pal.textMuted);
+    patternChanceValueLabel_.setColour(juce::Label::textColourId, pal.accentPrimary);
     sequenceLengthSlider_.setColour(juce::Slider::thumbColourId, pal.accentPrimary);
     sequenceLengthSlider_.setColour(juce::Slider::trackColourId, pal.stepInactiveFill);
     sequencerSwingSlider_.setColour(juce::Slider::thumbColourId, pal.accentSecondary);
     sequencerSwingSlider_.setColour(juce::Slider::trackColourId, pal.stepInactiveFill);
+    patternChanceSlider_.setColour(juce::Slider::thumbColourId, pal.accentPrimary);
+    patternChanceSlider_.setColour(juce::Slider::trackColourId, pal.stepInactiveFill);
 
     sendLookAndFeelChange();
     repaint();
@@ -297,6 +327,11 @@ void OpenGlitchFXEditor::timerCallback() {
                                       juce::dontSendNotification);
     sequencerSwingValueLabel_.setText(juce::String(sequencerSwingSlider_.getValue(), 0) + "%",
                                       juce::dontSendNotification);
+    patternChanceValueLabel_.setText(juce::String(patternChanceSlider_.getValue(), 0) + "%",
+                                     juce::dontSendNotification);
+    patternChanceValueLabel_.setText(juce::String(patternChanceSlider_.getValue(), 0) + "%",
+                                     juce::dontSendNotification);
+    patternChanceSlider_.setDoubleClickReturnValue(true, 100.0);
     const int paintTargetFx = sequencerGrid_.getPaintTargetFx();
     if (paintTargetFx >= 0 && paintTargetFx < kNumUiFx) {
         const auto& desc = openglitch::params::kFxDescriptors[static_cast<size_t>(paintTargetFx)];
@@ -569,12 +604,18 @@ void OpenGlitchFXEditor::resized() {
     const int controlY = 238;
     const int controlH = 36;
     sequenceLengthLabel_.setBounds(28, controlY, 58, controlH);
-    sequenceLengthSlider_.setBounds(90, controlY, 155, controlH);
-    sequenceLengthValueLabel_.setBounds(249, controlY, 78, controlH);
-    sequencerSwingLabel_.setBounds(355, controlY, 54, controlH);
-    sequencerSwingSlider_.setBounds(414, controlY, 185, controlH);
-    sequencerSwingValueLabel_.setBounds(604, controlY, 54, controlH);
-    randomizeButton_.setBounds(770, controlY, 150, controlH);
+    sequenceLengthSlider_.setBounds(90, controlY, 130, controlH);
+    sequenceLengthValueLabel_.setBounds(224, controlY, 72, controlH);
+    sequencerSwingLabel_.setBounds(302, controlY, 50, controlH);
+    sequencerSwingSlider_.setBounds(356, controlY, 130, controlH);
+    sequencerSwingValueLabel_.setBounds(490, controlY, 44, controlH);
+    patternRateLabel_.setBounds(540, controlY, 44, controlH);
+    patternRateBox_.setBounds(588, controlY, 80, controlH);
+    patternChanceLabel_.setBounds(676, controlY, 60, controlH);
+    patternChanceSlider_.setBounds(740, controlY, 120, controlH);
+    patternChanceValueLabel_.setBounds(864, controlY, 44, controlH);
+    keepSubButton_.setBounds(916, controlY, 114, controlH);
+    randomizeButton_.setBounds(1038, controlY, 136, controlH);
 
     // 15 Glitch FX Cards (3 Rows x 5 Columns) + Master Strip on Right
     const float detailH = 220.0f;
@@ -621,15 +662,16 @@ void OpenGlitchFXEditor::resized() {
     mInner.removeFromBottom(4.0f);
 
     // The gap keeps DE-CLICK clear of the value boxes.
-    auto topKnobs = mInner.removeFromTop(mInner.getHeight() * 0.5f);
+    auto topKnobs = mInner.removeFromTop(148.0f);
     auto s1 = topKnobs.removeFromLeft(topKnobs.getWidth() * 0.5f);
     auto s2 = topKnobs;
-    masterMixLabel_.setBounds(s1.removeFromTop(13.0f).toNearestInt());
-    masterMixSlider_.setBounds(s1.toNearestInt());
-    masterGainLabel_.setBounds(s2.removeFromTop(13.0f).toNearestInt());
-    masterGainSlider_.setBounds(s2.toNearestInt());
+    masterMixLabel_.setBounds(s1.removeFromTop(16.0f).toNearestInt());
+    masterMixSlider_.setBounds(s1.reduced(2.0f, 4.0f).toNearestInt());
+    masterGainLabel_.setBounds(s2.removeFromTop(16.0f).toNearestInt());
+    masterGainSlider_.setBounds(s2.reduced(2.0f, 4.0f).toNearestInt());
 
-    auto s3 = mInner.withTrimmedTop(6.0f);
-    smoothLabel_.setBounds(s3.removeFromTop(13.0f).toNearestInt());
-    smoothSlider_.setBounds(s3.toNearestInt());
+    mInner.removeFromTop(18.0f);
+    auto s3 = mInner.removeFromTop(148.0f);
+    smoothLabel_.setBounds(s3.removeFromTop(16.0f).toNearestInt());
+    smoothSlider_.setBounds(s3.reduced(20.0f, 4.0f).toNearestInt());
 }

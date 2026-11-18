@@ -2,7 +2,7 @@
 
 Create beat-synced glitches with a 32-step sequencer. Choose from 15 effects and route them to any step.
 
-[Install with OpenVST Manager](https://github.com/alanmarcero/alan-m-OpenVSTManager/releases/latest) · [Download v1.6.0](https://github.com/alanmarcero/openGlitchFX/releases/tag/v1.6.0)
+[Install with OpenVST Manager](https://github.com/alanmarcero/alan-m-OpenVSTManager/releases/latest) · [Download v1.7.0](https://github.com/alanmarcero/openGlitchFX/releases/tag/v1.7.0)
 
 ![openGlitchFX editor](assets/native-ui.png)
 
@@ -53,7 +53,7 @@ Choose Cyber Neon, Industrial Amber, Acid Matrix, or Arctic Glitch. The theme an
 
 The VST3 plugin follows host tempo and MIDI. It supports macOS 11 or later on Apple Silicon and Intel, and Windows x64. Packages include VST3 only.
 
-Install with [OpenVST Manager](https://github.com/alanmarcero/alan-m-OpenVSTManager/releases/latest) or download the [v1.6.0 release](https://github.com/alanmarcero/openGlitchFX/releases/tag/v1.6.0). Rescan your DAW after installation. See [release changes](CHANGELOG.md).
+Install with [OpenVST Manager](https://github.com/alanmarcero/alan-m-OpenVSTManager/releases/latest) or download the [v1.7.0 release](https://github.com/alanmarcero/openGlitchFX/releases/tag/v1.7.0). Rescan your DAW after installation. See [release changes](CHANGELOG.md).
 
 ## License
 

@@ -12,7 +12,10 @@ inline constexpr const char* kInternalBpm   = "internal_bpm";
 inline constexpr const char* kSmoothMs      = "smooth_ms";
 inline constexpr const char* kSequenceLength = "sequence_length";
 inline constexpr const char* kSequencerSwing = "sequencer_swing";
-inline constexpr const char* kMasterMix     = "master_mix";
+inline constexpr const char* kPatternRate    = "pattern_rate";
+inline constexpr const char* kPatternChance  = "pattern_chance";
+inline constexpr const char* kKeepSub        = "keep_sub";
+inline constexpr const char* kMasterMix      = "master_mix";
 inline constexpr const char* kMasterGain    = "master_gain";
 inline constexpr const char* kMasterPower   = "master_power";
 

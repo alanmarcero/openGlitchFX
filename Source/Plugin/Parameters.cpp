@@ -182,6 +182,24 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout() {
     addFxParam(kPingPongAmt, kPingPongOn, "Ping-Pong", 0.0f, 2);
     addFxParam(kSaturationAmt, kSaturationOn, "Saturation", 0.0f, 2);
 
+    layout.push_back(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID{ kPatternRate, 2 },
+        "Pattern Rate",
+        juce::StringArray{ "1/2x", "1x", "2x" },
+        1));
+
+    layout.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{ kPatternChance, 2 },
+        "Pattern Chance",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 1.0f),
+        100.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    layout.push_back(std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID{ kKeepSub, 2 },
+        "Keep Sub Bass",
+        false));
+
     return { layout.begin(), layout.end() };
 }
 

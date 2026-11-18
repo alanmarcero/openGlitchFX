@@ -246,6 +246,14 @@ void BeatStepSequencer::setSwing(float percent) {
     swingPercent_ = std::clamp(percent, 0.0f, 100.0f);
 }
 
+void BeatStepSequencer::setPatternRate(float multiplier) {
+    patternRate_ = std::clamp(multiplier, 0.25f, 4.0f);
+}
+
+void BeatStepSequencer::setPatternChance(float percent) {
+    patternChance_ = std::clamp(percent, 0.0f, 100.0f);
+}
+
 int BeatStepSequencer::computeSequenceStep(double ppqPosition, double* outStepPosition) const {
     double stepPosition = std::fmod(ppqPosition * kNumSteps / kQuarterNotesPerBar,
                                     static_cast<double>(sequenceLength_));
@@ -338,7 +346,8 @@ float BeatStepSequencer::advanceSampleWithFxMask(double bpm,
 
     const int previousStep = currentStep_;
     double currentStepPosition = 0.0;
-    currentStep_ = computeSequenceStep(effectivePpq, &currentStepPosition);
+    const double scaledPpq = effectivePpq * static_cast<double>(patternRate_);
+    currentStep_ = computeSequenceStep(scaledPpq, &currentStepPosition);
     currentBarPhase_ = currentStepPosition / static_cast<double>(kNumSteps);
     if (externalMode_ && (!externalQuantize_ || currentStep_ != previousStep)) {
         if (externalActiveMask_ == 0u && externalPendingMask_ != 0u) {
@@ -347,7 +356,17 @@ float BeatStepSequencer::advanceSampleWithFxMask(double bpm,
         externalActiveMask_ = externalPendingMask_;
     }
     externalElapsedPpq_ += (safeBpm / 60.0) / sampleRate_;
-    const uint16_t activeFxMaskNow = getCurrentStepActiveFxMask();
+    uint16_t activeFxMaskNow = getCurrentStepActiveFxMask();
+    if (!externalMode_ && activeFxMaskNow != 0u && patternChance_ < 99.9f) {
+        const double totalSteps = scaledPpq * kNumSteps / kQuarterNotesPerBar;
+        const auto barIdx = static_cast<uint32_t>(std::max(0.0, std::floor(totalSteps / std::max(1, sequenceLength_))));
+        uint32_t hash = (barIdx * 2654435761u) ^ (static_cast<uint32_t>(currentStep_ + 1) * 0x9e3779b9u);
+        hash ^= hash >> 16; hash *= 0x7feb352du; hash ^= hash >> 15;
+        const float roll = static_cast<float>(hash % 10000u) * 0.01f;
+        if (roll >= patternChance_) {
+            activeFxMaskNow = 0u;
+        }
+    }
     const bool activeNow = (activeFxMaskNow != 0u);
 
     // CRITICAL: When moving between two adjacent enabled pads that share an effect,
