@@ -795,9 +795,9 @@ void PhaserEffect::processSample(float amount, float& left, float& right) {
         const double sweep = 0.5 + 0.5 * std::sin(2.0 * std::numbers::pi * (phase_ + 0.15 * ch));
         const double frequency = 180.0 * std::pow(16.0, sweep);
         float value = input[ch] + 0.35f * amt * std::tanh(feedback_[ch]);
+        const double gBase = std::tan(std::numbers::pi * std::min(sampleRate_ * 0.4, frequency) / sampleRate_);
         for (size_t stage = 0; stage < state_[ch].size(); ++stage) {
-            const double cutoff = std::min(sampleRate_ * 0.4, frequency * (0.7 + 0.12 * stage));
-            const double g = std::tan(std::numbers::pi * cutoff / sampleRate_);
+            const double g = gBase * (0.7 + 0.12 * stage);
             const float coefficient = static_cast<float>((g - 1.0) / (g + 1.0));
             const float filtered = coefficient * value + state_[ch][stage];
             state_[ch][stage] = value - coefficient * filtered;
@@ -812,6 +812,8 @@ void PhaserEffect::processSample(float amount, float& left, float& right) {
 
 void PingPongEchoEffect::prepare(double sampleRate) {
     sampleRate_ = std::max(1000.0, sampleRate);
+    smoothing_ = 1.0 - std::exp(-1.0 / (0.02 * sampleRate_));
+    damping_ = static_cast<float>(1.0 - std::exp(-2.0 * std::numbers::pi * 4500.0 / sampleRate_));
     for (auto& channel : delay_) channel.assign(static_cast<size_t>(sampleRate_ * 1.5) + 8, 0.0f);
     reset();
 }
@@ -828,13 +830,11 @@ void PingPongEchoEffect::processSample(float amount, double bpm, float& left, fl
     if (amt <= 1e-4f || delay_[0].empty()) return;
     const double target = sampleRate_ * 30.0 / std::clamp(bpm, 20.0, 300.0);
     if (delaySamples_ == 0.0) delaySamples_ = target;
-    const double smoothing = 1.0 - std::exp(-1.0 / (0.02 * sampleRate_));
-    delaySamples_ += smoothing * (target - delaySamples_);
+    delaySamples_ += smoothing_ * (target - delaySamples_);
     const float dL = readHermiteCircular(delay_[0], writePos_ - delaySamples_);
     const float dR = readHermiteCircular(delay_[1], writePos_ - delaySamples_);
-    const float damping = static_cast<float>(1.0 - std::exp(-2.0 * std::numbers::pi * 4500.0 / sampleRate_));
-    damp_[0] += damping * (dL - damp_[0]);
-    damp_[1] += damping * (dR - damp_[1]);
+    damp_[0] += damping_ * (dL - damp_[0]);
+    damp_[1] += damping_ * (dR - damp_[1]);
     const float feedback = 0.2f + 0.55f * amt;
     auto warmSaturate = [](float v) noexcept -> float {
         const float s = std::tanh(v);
@@ -890,6 +890,7 @@ void WetFilter::prepare(double sampleRate) {
 void WetFilter::reset() {
     ic1_.fill(0.0f);
     ic2_.fill(0.0f);
+    cachedCutoffHz_ = -1.0f;
 }
 
 void WetFilter::processSample(FilterMode mode, float cutoffHz, float resonance01, float& left, float& right) {
@@ -897,13 +898,22 @@ void WetFilter::processSample(FilterMode mode, float cutoffHz, float resonance01
         return;
     }
 
-    const double nyquistSafe = sampleRate_ * 0.45;
-    const double fc = std::clamp(static_cast<double>(cutoffHz), 20.0, nyquistSafe);
-    const auto g = static_cast<float>(std::tan(std::numbers::pi * fc / sampleRate_));
-    const float k = 2.0f - 1.9f * std::clamp(resonance01, 0.0f, 1.0f);
-    const float a1 = 1.0f / (1.0f + g * (g + k));
-    const float a2 = g * a1;
-    const float a3 = g * a2;
+    if (std::abs(cutoffHz - cachedCutoffHz_) > 1e-3f || std::abs(resonance01 - cachedResonance_) > 1e-5f) {
+        cachedCutoffHz_ = cutoffHz;
+        cachedResonance_ = resonance01;
+        const double nyquistSafe = sampleRate_ * 0.45;
+        const double fc = std::clamp(static_cast<double>(cutoffHz), 20.0, nyquistSafe);
+        const auto g = static_cast<float>(std::tan(std::numbers::pi * fc / sampleRate_));
+        cachedK_ = 2.0f - 1.9f * std::clamp(resonance01, 0.0f, 1.0f);
+        cachedA1_ = 1.0f / (1.0f + g * (g + cachedK_));
+        cachedA2_ = g * cachedA1_;
+        cachedA3_ = g * cachedA2_;
+    }
+
+    const float k = cachedK_;
+    const float a1 = cachedA1_;
+    const float a2 = cachedA2_;
+    const float a3 = cachedA3_;
 
     auto tick = [&](size_t ch, float v0) noexcept {
         const float v3 = v0 - ic2_[ch];
