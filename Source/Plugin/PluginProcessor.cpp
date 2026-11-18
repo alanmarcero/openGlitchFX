@@ -40,6 +40,11 @@ OpenGlitchFXProcessor::OpenGlitchFXProcessor()
         const auto target = static_cast<EnvTarget>(env);
         setEnvelopePoints(target, openglitch::core::ModEnvelope::defaultPoints(target));
     }
+    for (int i = 0; i < 32; ++i) {
+        stepParams_[static_cast<size_t>(i)] = parameters.getRawParameterValue(openglitch::params::stepParamId(i));
+        stepFxParams_[static_cast<size_t>(i)] = parameters.getRawParameterValue(openglitch::params::stepFxParamId(i));
+        stepExtraFxParams_[static_cast<size_t>(i)] = parameters.getRawParameterValue(openglitch::params::stepExtraFxParamId(i));
+    }
 }
 
 std::vector<openglitch::core::EnvelopePoint> OpenGlitchFXProcessor::getEnvelopePoints(openglitch::core::EnvTarget target) const {
@@ -90,10 +95,18 @@ void OpenGlitchFXProcessor::syncParametersToCore() {
 
     // 1. 32-Step Beat Sequencer Pattern + Per-Pad 15-FX Routing Bitmask
     for (int i = 0; i < 32; ++i) {
-        if (auto* raw = parameters.getRawParameterValue(stepParamId(i))) {
-            core_.setStep(i, raw->load() > 0.5f);
+        const auto idx = static_cast<size_t>(i);
+        if (stepParams_[idx] != nullptr) {
+            core_.setStep(i, stepParams_[idx]->load() > 0.5f);
         }
-        core_.setStepFxMask(i, readStepFxMask(parameters, i));
+        uint16_t mask = 0u;
+        if (stepFxParams_[idx] != nullptr) {
+            mask |= static_cast<uint16_t>(std::lround(stepFxParams_[idx]->load())) & 0x3FFu;
+        }
+        if (stepExtraFxParams_[idx] != nullptr) {
+            mask |= static_cast<uint16_t>((static_cast<uint32_t>(std::lround(stepExtraFxParams_[idx]->load())) & 0x1Fu) << 10u);
+        }
+        core_.setStepFxMask(i, mask);
     }
 
     // 2. Gate smoothing

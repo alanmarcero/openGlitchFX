@@ -54,6 +54,9 @@ private:
     openglitch::core::GlitchProcessorCore core_;
     std::atomic<float> visualBeat_{ 0.0f };
     std::atomic<int> stateVersion_{ 0 };
+    std::array<std::atomic<float>*, 32> stepParams_{};
+    std::array<std::atomic<float>*, 32> stepFxParams_{};
+    std::array<std::atomic<float>*, 32> stepExtraFxParams_{};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(OpenGlitchFXProcessor)
 };

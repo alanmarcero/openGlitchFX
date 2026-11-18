@@ -246,6 +246,8 @@ public:
     void processSample(float amount, double bpm, float& left, float& right);
 private:
     double sampleRate_ = 44100.0;
+    double smoothing_ = 0.001;
+    float damping_ = 0.5f;
     double delaySamples_ = 0.0;
     int writePos_ = 0;
     std::array<std::vector<float>, 2> delay_;
@@ -277,6 +279,12 @@ private:
     double sampleRate_ = 44100.0;
     std::array<float, 2> ic1_{};
     std::array<float, 2> ic2_{};
+    float cachedCutoffHz_ = -1.0f;
+    float cachedResonance_ = -1.0f;
+    float cachedK_ = 2.0f;
+    float cachedA1_ = 1.0f;
+    float cachedA2_ = 0.0f;
+    float cachedA3_ = 0.0f;
 };
 
 } // namespace openglitch::core

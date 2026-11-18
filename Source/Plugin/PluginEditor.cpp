@@ -329,9 +329,6 @@ void OpenGlitchFXEditor::timerCallback() {
                                       juce::dontSendNotification);
     patternChanceValueLabel_.setText(juce::String(patternChanceSlider_.getValue(), 0) + "%",
                                      juce::dontSendNotification);
-    patternChanceValueLabel_.setText(juce::String(patternChanceSlider_.getValue(), 0) + "%",
-                                     juce::dontSendNotification);
-    patternChanceSlider_.setDoubleClickReturnValue(true, 100.0);
     const int paintTargetFx = sequencerGrid_.getPaintTargetFx();
     if (paintTargetFx >= 0 && paintTargetFx < kNumUiFx) {
         const auto& desc = openglitch::params::kFxDescriptors[static_cast<size_t>(paintTargetFx)];
@@ -345,7 +342,9 @@ void OpenGlitchFXEditor::timerCallback() {
         detailPanel_.refreshFromState();
     }
     detailPanel_.setTelemetry(tel);
-    repaint();
+    repaint(masterMeterBounds_.expanded(4.0f).toNearestInt());
+    repaint(240, 12, 140, 34);
+    repaint(385, 6, 144, 46);
 }
 
 void OpenGlitchFXEditor::paint(juce::Graphics& g) {

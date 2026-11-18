@@ -301,8 +301,12 @@ void GlitchProcessorCore::processBlock(float* leftChannel, float* rightChannel, 
         lastGate = stepGate;
 
         auto advanceSilentEcho = [&] {
+            if (!fxEnabled_[static_cast<size_t>(GlitchFxId::PingPong)]
+                || fxAmount_[static_cast<size_t>(GlitchFxId::PingPong)] <= 1e-4f) {
+                return;
+            }
             float l = 0.0f, r = 0.0f;
-            pingPong_.processSample(std::max(0.001f, fxAmount_[static_cast<size_t>(GlitchFxId::PingPong)]), bpm_, l, r);
+            pingPong_.processSample(fxAmount_[static_cast<size_t>(GlitchFxId::PingPong)], bpm_, l, r);
         };
         if (masterBypassed_) {
             advanceSilentEcho();
@@ -433,9 +437,11 @@ void GlitchProcessorCore::processBlock(float* leftChannel, float* rightChannel, 
             });
 
             // 4. Filter, volume and pan
-            const float filterMod = modulation(EnvTarget::Filter, 1.0f);
-            const float cutoff = filterCutoffHz_ * std::exp2(8.0f * (filterMod - 1.0f));
-            wetFilter_.processSample(filterMode_, cutoff, filterResonance_, wetL, wetR);
+            if (filterMode_ != FilterMode::Off) {
+                const float filterMod = modulation(EnvTarget::Filter, 1.0f);
+                const float cutoff = filterCutoffHz_ * std::exp2(8.0f * (filterMod - 1.0f));
+                wetFilter_.processSample(filterMode_, cutoff, filterResonance_, wetL, wetR);
+            }
 
             const float volume = modulation(EnvTarget::Volume, 1.0f);
             const float pan = 2.0f * modulation(EnvTarget::Pan, 0.5f) - 1.0f;
