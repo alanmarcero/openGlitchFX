@@ -18,6 +18,8 @@ public:
     void setActive(bool active);
 
     std::function<void(const std::vector<openglitch::core::EnvelopePoint>&)> onPointsChanged;
+    std::function<void()> onEditBegan;
+    std::function<void()> onEditEnded;
 
     void paint(juce::Graphics& g) override;
     void mouseDown(const juce::MouseEvent& event) override;
@@ -30,6 +32,8 @@ private:
     juce::Point<float> toScreen(const openglitch::core::EnvelopePoint& p) const;
     openglitch::core::EnvelopePoint fromScreen(juce::Point<float> pos) const;
     int hitTestPoint(juce::Point<float> pos) const;
+    void beginEdit();
+    void endEdit();
     void removePoint(int index);
 
     const GlitchLookAndFeel& lnf_;
@@ -40,6 +44,7 @@ private:
     float playhead_ = 0.0f;
     bool playheadVisible_ = false;
     bool active_ = false;
+    bool editing_ = false;
     int dragIndex_ = -1;
 };
 

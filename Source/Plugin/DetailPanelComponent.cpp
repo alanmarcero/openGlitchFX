@@ -88,6 +88,8 @@ DetailPanelComponent::DetailPanelComponent(OpenGlitchFXProcessor& processor, con
     envTabs_[2].setTooltip("Filter cutoff. The top is the CUTOFF setting, the bottom is 8 octaves lower. Needs FILTER on.");
     envTabs_[3].setTooltip("Stutter playback pitch, up to one octave either way. The centre line is no change. Needs STUTTER.");
 
+    envEditor_.onEditBegan = [this] { processor_.getUndo().beginGesture("Envelope"); };
+    envEditor_.onEditEnded = [this] { processor_.getUndo().endGesture(); };
     envEditor_.onPointsChanged = [this](const std::vector<openglitch::core::EnvelopePoint>& points) {
         processor_.setEnvelopePoints(static_cast<EnvTarget>(selectedEnv_), points);
     };
@@ -107,7 +109,9 @@ DetailPanelComponent::DetailPanelComponent(OpenGlitchFXProcessor& processor, con
     envResetButton_.setTooltip("Restore this envelope's default shape.");
     envResetButton_.onClick = [this]() {
         const auto target = static_cast<EnvTarget>(selectedEnv_);
-        processor_.setEnvelopePoints(target, ModEnvelope::defaultPoints(target));
+        processor_.getUndo().perform("Envelope", [&] {
+            processor_.setEnvelopePoints(target, ModEnvelope::defaultPoints(target));
+        });
         envEditor_.setPoints(processor_.getEnvelopePoints(target));
     };
     addAndMakeVisible(envResetButton_);

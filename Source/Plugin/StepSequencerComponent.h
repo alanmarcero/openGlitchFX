@@ -3,6 +3,7 @@
 #include "GlitchLookAndFeel.h"
 #include "Parameters.h"
 #include "../Core/BeatStepSequencer.h"
+#include "../suite/ParameterUndo.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -11,7 +12,9 @@ namespace openglitch::ui {
 class StepSequencerComponent final : public juce::Component, public juce::TooltipClient {
 public:
     StepSequencerComponent(juce::AudioProcessorValueTreeState& apvts,
-                           const GlitchLookAndFeel& lnf);
+                           const GlitchLookAndFeel& lnf,
+                           openglitch::suite::ParameterUndo& undo);
+    ~StepSequencerComponent() override;
 
     void setPlayheadState(int currentStep, float barPhase, bool isStepActive, float gateEnvelope);
     void setMidiTriggerMode(bool midiMode);
@@ -31,6 +34,7 @@ public:
     void mouseExit(const juce::MouseEvent& event) override;
     void mouseDown(const juce::MouseEvent& event) override;
     void mouseDrag(const juce::MouseEvent& event) override;
+    void mouseUp(const juce::MouseEvent& event) override;
     juce::String getTooltip() override;
 
 private:
@@ -59,6 +63,8 @@ private:
 
     juce::AudioProcessorValueTreeState& apvts_;
     const GlitchLookAndFeel& lnf_;
+    openglitch::suite::ParameterUndo& undo_;
+    bool gestureOpen_ = false;
 
     int currentStep_ = 0;
     int hoveredStep_ = -1;

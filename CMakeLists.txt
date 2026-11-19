@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(openGlitchFX VERSION 1.7.1 LANGUAGES C CXX)
+project(openGlitchFX VERSION 1.8.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -38,19 +38,29 @@ if(OGFX_BUILD_PLUGIN)
             assets/slice-register.svg)
     set_target_properties(OpenGlitchFXAssets PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
+    set(OGFX_FORMATS VST3)
+    if(APPLE)
+        list(APPEND OGFX_FORMATS AU)
+    endif()
+    # Standalone needs the platform audio device headers. Windows and macOS CI
+    # have them; this Linux test image may not, so the app target stays off here.
+    if(APPLE OR WIN32)
+        list(APPEND OGFX_FORMATS Standalone)
+    endif()
+
     juce_add_plugin(openGlitchFX
         COMPANY_NAME "Alan Marcero"
         BUNDLE_ID "com.alanmarcero.openglitchfx"
         PRODUCT_NAME "openGlitchFX"
         PLUGIN_MANUFACTURER_CODE Amrc
         PLUGIN_CODE Ogfx
-        FORMATS VST3
+        FORMATS ${OGFX_FORMATS}
         VST3_CATEGORIES Fx Distortion Modulation
         IS_SYNTH FALSE
         NEEDS_MIDI_INPUT TRUE
         NEEDS_MIDI_OUTPUT FALSE
         IS_MIDI_EFFECT FALSE
-        EDITOR_WANTS_KEYBOARD_FOCUS FALSE
+        EDITOR_WANTS_KEYBOARD_FOCUS TRUE
         COPY_PLUGIN_AFTER_BUILD FALSE)
 
     target_sources(openGlitchFX PRIVATE
@@ -59,8 +69,13 @@ if(OGFX_BUILD_PLUGIN)
         Source/Plugin/StepSequencerComponent.cpp
         Source/Plugin/EnvelopeEditorComponent.cpp
         Source/Plugin/DetailPanelComponent.cpp
+        Source/Plugin/FactoryPatterns.cpp
         Source/Plugin/PluginProcessor.cpp
-        Source/Plugin/PluginEditor.cpp)
+        Source/Plugin/PluginEditor.cpp
+        Source/suite/ParameterUndo.cpp
+        Source/suite/AbCompare.cpp
+        Source/suite/PresetLibrary.cpp
+        Source/suite/SuiteBar.cpp)
 
     target_include_directories(openGlitchFX PRIVATE
         Source/Core
@@ -101,7 +116,7 @@ if(OGFX_BUILD_TESTS)
     include(Catch)
     catch_discover_tests(openglitch_tests)
     if(OGFX_BUILD_PLUGIN)
-        add_executable(openglitch_plugin_tests Tests/PluginStateTests.cpp)
+        add_executable(openglitch_plugin_tests Tests/PluginStateTests.cpp Tests/SuiteTests.cpp)
         target_include_directories(openglitch_plugin_tests PRIVATE $<TARGET_PROPERTY:openGlitchFX,INCLUDE_DIRECTORIES>)
         target_compile_definitions(openglitch_plugin_tests PRIVATE $<TARGET_PROPERTY:openGlitchFX,COMPILE_DEFINITIONS>)
         target_link_libraries(openglitch_plugin_tests PRIVATE openGlitchFX Catch2::Catch2WithMain)
