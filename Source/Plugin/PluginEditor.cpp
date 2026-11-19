@@ -4,7 +4,7 @@
 OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
     : AudioProcessorEditor(&owner),
       processor_(owner),
-      sequencerGrid_(owner.parameters, lookAndFeel_),
+      sequencerGrid_(owner.parameters, lookAndFeel_, owner.getUndo()),
       detailPanel_(owner, lookAndFeel_) {
     setLookAndFeel(&lookAndFeel_);
 
@@ -61,24 +61,29 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
     };
 
     using openglitch::core::StepPatternPreset;
+    auto editPattern = [this](const juce::String& name, auto action) {
+        return [this, name, edit = std::move(action)] {
+            processor_.getUndo().perform(name, edit);
+        };
+    };
     setupPresetBtn(presetAllBtn_,        "Turn on all 32 pads. Uses the pad brush FX if one is selected.",
-                   [this]() { sequencerGrid_.applyPreset(StepPatternPreset::AllOn); });
+                   editPattern("Pattern", [this] { sequencerGrid_.applyPreset(StepPatternPreset::AllOn); }));
     setupPresetBtn(presetLastBeatBtn_,   "Pads 25-32: beat 4 of every bar. Uses the pad brush FX if one is selected.",
-                   [this]() { sequencerGrid_.applyPreset(StepPatternPreset::LastBeat); });
+                   editPattern("Pattern", [this] { sequencerGrid_.applyPreset(StepPatternPreset::LastBeat); }));
     setupPresetBtn(presetLast4StepsBtn_, "Pads 29-32: the last 1/8 note of the bar. Uses the pad brush FX if one is selected.",
-                   [this]() { sequencerGrid_.applyPreset(StepPatternPreset::LastFourSteps); });
+                   editPattern("Pattern", [this] { sequencerGrid_.applyPreset(StepPatternPreset::LastFourSteps); }));
     setupPresetBtn(presetLast32ndBtn_,   "Pad 32 only: the last 1/32 note of the bar. Uses the pad brush FX if one is selected.",
-                   [this]() { sequencerGrid_.applyPreset(StepPatternPreset::Last32nd); });
+                   editPattern("Pattern", [this] { sequencerGrid_.applyPreset(StepPatternPreset::Last32nd); }));
     setupPresetBtn(presetBackbeatBtn_,   "Pads 9-16 and 25-32: beats 2 and 4. Uses the pad brush FX if one is selected.",
-                   [this]() { sequencerGrid_.applyPreset(StepPatternPreset::Backbeat2And4); });
+                   editPattern("Pattern", [this] { sequencerGrid_.applyPreset(StepPatternPreset::Backbeat2And4); }));
     setupPresetBtn(preset16thBtn_,       "The second 1/16 note of every 1/8 note. Uses the pad brush FX if one is selected.",
-                   [this]() { sequencerGrid_.applyPreset(StepPatternPreset::Stutter16ths); });
+                   editPattern("Pattern", [this] { sequencerGrid_.applyPreset(StepPatternPreset::Stutter16ths); }));
     setupPresetBtn(presetInvertBtn_,     "Swap on and off for every pad.",
-                   [this]() { sequencerGrid_.invertPattern(); });
+                   editPattern("Pattern", [this] { sequencerGrid_.invertPattern(); }));
     setupPresetBtn(presetResetFxBtn_,    "Route all 15 FX to every pad. Pad on/off stays the same.",
-                   [this]() { sequencerGrid_.resetAllStepFxMasksToAll(); });
+                   editPattern("Pattern", [this] { sequencerGrid_.resetAllStepFxMasksToAll(); }));
     setupPresetBtn(presetClearBtn_,      "Turn off all 32 pads.",
-                   [this]() { sequencerGrid_.applyPreset(StepPatternPreset::ClearAll); });
+                   editPattern("Pattern", [this] { sequencerGrid_.applyPreset(StepPatternPreset::ClearAll); }));
 
     auto setupSequencerControl = [this](juce::Label& label, juce::Slider& slider) {
         label.setFont(juce::FontOptions(14.0f, juce::Font::bold));
@@ -226,6 +231,28 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
 
     applyTheme(themeBox_.getSelectedItemIndex());
 
+    openglitch::suite::SuiteBar::Hooks hooks;
+    hooks.undo = [this] { processor_.getUndo().undo(); };
+    hooks.redo = [this] { processor_.getUndo().redo(); };
+    hooks.abIsA = [this] { return processor_.abIsA(); };
+    hooks.selectA = [this] { processor_.selectAbSlot(true); };
+    hooks.selectB = [this] { processor_.selectAbSlot(false); };
+    hooks.copyAtoB = [this] { processor_.copyAbAtoB(); };
+    hooks.copyBtoA = [this] { processor_.copyAbBtoA(); };
+    hooks.loadFactory = [this](int index) { processor_.loadFactoryProgram(index); };
+    hooks.loadUser = [this](const juce::String& name) { processor_.loadUserPreset(name); };
+    hooks.saveUser = [this](const juce::String& name, juce::String& error) { return processor_.saveUserPreset(name, error); };
+    hooks.renameUser = [this](const juce::String& from, const juce::String& to, juce::String& error) {
+        return processor_.renameUserPreset(from, to, error);
+    };
+    hooks.deleteUser = [this](const juce::String& name, juce::String& error) { return processor_.deleteUserPreset(name, error); };
+    hooks.currentLabel = [this] { return processor_.currentPresetLabel(); };
+    hooks.currentIsFactory = [this] { return processor_.currentPresetIsFactory(); };
+    hooks.currentFactoryIndex = [this] { return processor_.getCurrentProgram(); };
+    suiteBar_ = std::make_unique<openglitch::suite::SuiteBar>(processor_.getPresets(), std::move(hooks));
+    addAndMakeVisible(*suiteBar_);
+
+    setWantsKeyboardFocus(true);
     setResizable(true, true);
     setResizeLimits(1300, 1050, 1620, 1390);
     setSize(1440, 1120);
@@ -276,7 +303,9 @@ void OpenGlitchFXEditor::showRandomizeMenu() {
                        [safeThis = juce::Component::SafePointer<OpenGlitchFXEditor>(this)](int choice) {
         if (safeThis != nullptr && choice > 0) {
             const auto seed = static_cast<uint32_t>(juce::Random::getSystemRandom().nextInt());
-            safeThis->sequencerGrid_.randomizePattern(seed, choice);
+            safeThis->processor_.getUndo().perform("Randomize", [&] {
+                safeThis->sequencerGrid_.randomizePattern(seed, choice);
+            });
         }
     });
 }
@@ -342,6 +371,17 @@ void OpenGlitchFXEditor::timerCallback() {
         detailPanel_.refreshFromState();
     }
     detailPanel_.setTelemetry(tel);
+    if (suiteBar_ != nullptr) {
+        const auto token = juce::String(processor_.abIsA() ? 1 : 0)
+            + processor_.currentPresetLabel()
+            + juce::String(processor_.getUndo().canUndo() ? 1 : 0)
+            + juce::String(processor_.getUndo().canRedo() ? 1 : 0)
+            + juce::String(processor_.currentPresetIsFactory() ? 1 : 0);
+        if (token != suiteToken_) {
+            suiteToken_ = token;
+            suiteBar_->refresh();
+        }
+    }
     repaint(masterMeterBounds_.expanded(4.0f).toNearestInt());
     repaint(240, 12, 140, 34);
     repaint(385, 6, 144, 46);
@@ -566,10 +606,29 @@ void OpenGlitchFXEditor::paint(juce::Graphics& g) {
     g.drawText("v" JucePlugin_VersionString, static_cast<int>(w - 180.0f), static_cast<int>(h - 20.0f), 150, 16, juce::Justification::centredRight);
 }
 
+bool OpenGlitchFXEditor::keyPressed(const juce::KeyPress& key) {
+    const auto code = juce::CharacterFunctions::toUpperCase(static_cast<juce::juce_wchar>(key.getKeyCode()));
+    if (key.getModifiers().isCommandDown() && code == 'Z') {
+        if (key.getModifiers().isShiftDown()) {
+            processor_.getUndo().redo();
+        } else {
+            processor_.getUndo().undo();
+        }
+        if (suiteBar_ != nullptr) {
+            suiteBar_->refresh();
+        }
+        return true;
+    }
+    return juce::AudioProcessorEditor::keyPressed(key);
+}
+
 void OpenGlitchFXEditor::resized() {
     const float w = static_cast<float>(getWidth());
     const float h = static_cast<float>(getHeight());
     const float margin = 28.0f;
+    if (suiteBar_ != nullptr) {
+        suiteBar_->setBounds(static_cast<int>(margin), 62, static_cast<int>(w - margin * 2.0f), 40);
+    }
 
     // Header Controls (Right Side)
     hostSyncButton_.setBounds(static_cast<int>(w - 510.0f), 12, 116, 36);
@@ -578,10 +637,10 @@ void OpenGlitchFXEditor::resized() {
     themeBox_.setBounds(static_cast<int>(w - 216.0f), 12, 184, 36);
 
     // 32-Step Beat Sequencer Section
-    sequencerGrid_.setBounds(static_cast<int>(margin), 68, static_cast<int>(w - margin * 2.0f), 120);
+    sequencerGrid_.setBounds(static_cast<int>(margin), 106, static_cast<int>(w - margin * 2.0f), 112);
 
     // Paint Brush Selector + 9 Quick Pattern Preset Buttons below Sequencer
-    const float presetY = 194.0f;
+    const float presetY = 222.0f;
     const float presetH = 36.0f;
     paintBrushLabel_.setBounds(static_cast<int>(margin), static_cast<int>(presetY), 100, static_cast<int>(presetH));
     paintBrushBox_.setBounds(static_cast<int>(margin + 104.0f), static_cast<int>(presetY), 190, static_cast<int>(presetH));
@@ -600,7 +659,7 @@ void OpenGlitchFXEditor::resized() {
                                  static_cast<int>(presetH));
     }
 
-    const int controlY = 238;
+    const int controlY = 262;
     const int controlH = 36;
     sequenceLengthLabel_.setBounds(28, controlY, 58, controlH);
     sequenceLengthSlider_.setBounds(90, controlY, 130, controlH);
@@ -618,7 +677,7 @@ void OpenGlitchFXEditor::resized() {
 
     // 15 Glitch FX Cards (3 Rows x 5 Columns) + Master Strip on Right
     const float detailH = 220.0f;
-    const float fxTop = 284.0f;
+    const float fxTop = 306.0f;
     const float fxTotalH = h - fxTop - detailH - 22.0f - 8.0f;
     detailPanel_.setBounds(static_cast<int>(margin), static_cast<int>(h - 22.0f - detailH),
                            static_cast<int>(w - margin * 2.0f), static_cast<int>(detailH));

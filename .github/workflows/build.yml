@@ -32,25 +32,40 @@ jobs:
         run: ctest --test-dir build --output-on-failure
 
       - name: Sign ad hoc
-        run: codesign --force --deep --sign - "$BUNDLE"
+        run: |
+          codesign --force --deep --sign - "$BUNDLE"
+          codesign --force --deep --sign - "build/openGlitchFX_artefacts/Release/AU/openGlitchFX.component"
+          codesign --force --deep --sign - "build/openGlitchFX_artefacts/Release/Standalone/openGlitchFX.app"
 
       - name: Validate with pluginval
         run: |
           curl -sSL -o pluginval.zip https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_macOS.zip
           unzip -q pluginval.zip
           ./pluginval.app/Contents/MacOS/pluginval --strictness-level 5 --validate "$BUNDLE"
+          ./pluginval.app/Contents/MacOS/pluginval --strictness-level 5 --validate "build/openGlitchFX_artefacts/Release/AU/openGlitchFX.component"
 
       - name: Package
         run: |
-          mkdir -p dist
-          ditto "$BUNDLE" "dist/$(basename "$BUNDLE")"
-          python3 scripts/package_notices.py dist
-          ditto -c -k dist openGlitchFX-VST3-macOS.zip
+          package() {
+            local bundle="$1"
+            local zip="$2"
+            rm -rf dist
+            mkdir -p dist
+            ditto "$bundle" "dist/$(basename "$bundle")"
+            python3 scripts/package_notices.py dist
+            ditto -c -k dist "$zip"
+          }
+          package "$BUNDLE" openGlitchFX-VST3-macOS.zip
+          package "build/openGlitchFX_artefacts/Release/AU/openGlitchFX.component" openGlitchFX-AU-macOS.zip
+          package "build/openGlitchFX_artefacts/Release/Standalone/openGlitchFX.app" openGlitchFX-Standalone-macOS.zip
 
       - uses: actions/upload-artifact@v4
         with:
           name: openGlitchFX-VST3-macOS
-          path: openGlitchFX-VST3-macOS.zip
+          path: |
+            openGlitchFX-VST3-macOS.zip
+            openGlitchFX-AU-macOS.zip
+            openGlitchFX-Standalone-macOS.zip
 
   windows:
     runs-on: windows-latest
@@ -81,11 +96,22 @@ jobs:
           python scripts/package_notices.py dist
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Compress-Archive -Path dist/* -DestinationPath openGlitchFX-VST3-Windows.zip
+          Remove-Item -Recurse -Force dist
+          New-Item -ItemType Directory -Path dist | Out-Null
+          Copy-Item "build/openGlitchFX_artefacts/Release/Standalone/openGlitchFX.exe" dist/
+          if (Test-Path "build/openGlitchFX_artefacts/Release/Standalone/*.dll") {
+            Copy-Item "build/openGlitchFX_artefacts/Release/Standalone/*.dll" dist/
+          }
+          python scripts/package_notices.py dist
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Compress-Archive -Path dist/* -DestinationPath openGlitchFX-Standalone-Windows.zip
 
       - uses: actions/upload-artifact@v4
         with:
           name: openGlitchFX-VST3-Windows
-          path: openGlitchFX-VST3-Windows.zip
+          path: |
+            openGlitchFX-VST3-Windows.zip
+            openGlitchFX-Standalone-Windows.zip
 
   release:
     if: ${{ always() && startsWith(github.ref, 'refs/tags/v') && needs.windows.result == 'success' && (needs.macos.result == 'skipped' || needs.macos.result == 'success') }}
@@ -97,9 +123,16 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           merge-multiple: true
+      - name: Require the existing VST3 archive and the standalone archive
+        run: |
+          ls openGlitchFX-VST3-*.zip
+          ls openGlitchFX-Standalone-*.zip
       - uses: softprops/action-gh-release@v2
         with:
           body: '![Editor](https://raw.githubusercontent.com/alanmarcero/openGlitchFX/${{ github.ref_name }}/docs/screenshots/preview.png)'
-          files: openGlitchFX-VST3-*.zip
-          fail_on_unmatched_files: true
+          files: |
+            openGlitchFX-VST3-*.zip
+            openGlitchFX-AU-*.zip
+            openGlitchFX-Standalone-*.zip
+          fail_on_unmatched_files: false
           generate_release_notes: true

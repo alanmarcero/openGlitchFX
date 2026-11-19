@@ -11,8 +11,16 @@ constexpr uint16_t kAllFx = openglitch::core::BeatStepSequencer::kAllFxMask;
 } // namespace
 
 StepSequencerComponent::StepSequencerComponent(juce::AudioProcessorValueTreeState& apvts,
-                                               const GlitchLookAndFeel& lnf)
-    : apvts_(apvts), lnf_(lnf) {
+                                               const GlitchLookAndFeel& lnf,
+                                               openglitch::suite::ParameterUndo& undo)
+    : apvts_(apvts), lnf_(lnf), undo_(undo) {
+}
+
+StepSequencerComponent::~StepSequencerComponent() {
+    if (gestureOpen_) {
+        gestureOpen_ = false;
+        undo_.endGesture();
+    }
 }
 
 void StepSequencerComponent::setPlayheadState(int currentStep, float barPhase, bool isStepActive, float gateEnvelope) {
@@ -398,7 +406,7 @@ void StepSequencerComponent::showStepContextMenu(int step) {
     menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this).withDeletionCheck(*this),
                        [this, step, stepOn, mask, applyStart, applyEnd](int result) {
         if (result == 0) return;
-
+        undo_.perform("Edit steps", [&] {
         auto applyToRange = [&](uint16_t newMask, bool newState) {
             for (int s = applyStart; s <= applyEnd; ++s) {
                 setStepFxMaskParam(s, newMask);
@@ -456,6 +464,7 @@ void StepSequencerComponent::showStepContextMenu(int step) {
                 setStepFxMaskParam(i, mask);
             }
         }
+        });
         repaint();
     });
 }
@@ -484,7 +493,16 @@ void StepSequencerComponent::mouseDown(const juce::MouseEvent& event) {
         return;
     }
 
+    undo_.beginGesture("Edit steps");
+    gestureOpen_ = true;
     applyPaintBrushToStep(step, true);
+}
+
+void StepSequencerComponent::mouseUp(const juce::MouseEvent&) {
+    if (gestureOpen_) {
+        gestureOpen_ = false;
+        undo_.endGesture();
+    }
 }
 
 void StepSequencerComponent::mouseDrag(const juce::MouseEvent& event) {

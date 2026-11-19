@@ -4,8 +4,10 @@
 #include "GlitchLookAndFeel.h"
 #include "PluginProcessor.h"
 #include "StepSequencerComponent.h"
+#include "../suite/SuiteBar.h"
 #include <array>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <memory>
 
 class OpenGlitchFXEditor final : public juce::AudioProcessorEditor,
                                  public juce::TooltipClient,
@@ -17,6 +19,7 @@ public:
     void paint(juce::Graphics& g) override;
     void resized() override;
     void mouseDown(const juce::MouseEvent& event) override;
+    bool keyPressed(const juce::KeyPress& key) override;
     juce::String getTooltip() override;
 
 private:
@@ -96,6 +99,8 @@ private:
     openglitch::ui::DetailPanelComponent detailPanel_;
     int lastStateVersion_ = -1;
     juce::TooltipWindow tooltipWindow_{ this, 500 };
+    std::unique_ptr<openglitch::suite::SuiteBar> suiteBar_;
+    juce::String suiteToken_;
 
     // Attachments
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;

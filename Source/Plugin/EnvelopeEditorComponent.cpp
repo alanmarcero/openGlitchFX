@@ -76,7 +76,26 @@ void EnvelopeEditorComponent::removePoint(int index) {
     repaint();
 }
 
+void EnvelopeEditorComponent::beginEdit() {
+    if (!editing_) {
+        editing_ = true;
+        if (onEditBegan) {
+            onEditBegan();
+        }
+    }
+}
+
+void EnvelopeEditorComponent::endEdit() {
+    if (editing_) {
+        editing_ = false;
+        if (onEditEnded) {
+            onEditEnded();
+        }
+    }
+}
+
 void EnvelopeEditorComponent::mouseDown(const juce::MouseEvent& event) {
+    beginEdit();
     const int hit = hitTestPoint(event.position);
     if (event.mods.isPopupMenu()) {
         removePoint(hit);
@@ -117,6 +136,7 @@ void EnvelopeEditorComponent::mouseDrag(const juce::MouseEvent& event) {
 
 void EnvelopeEditorComponent::mouseUp(const juce::MouseEvent& /*event*/) {
     dragIndex_ = -1;
+    endEdit();
 }
 
 void EnvelopeEditorComponent::mouseDoubleClick(const juce::MouseEvent& event) {

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.8.0 — 2026-11-19
+
+- Added 36 factory patterns. A new plugin opens on Club Stutter instead of an empty grid. The same list is in the editor and the DAW program list.
+- Added undo and redo for knob moves, pad edits, and randomize, with editor buttons and Cmd/Ctrl+Z.
+- Added A/B compare and user presets saved under Documents/Alan Marcero/openGlitchFX/Presets. Factory patterns stay read-only.
+- The build also produces Audio Unit and Standalone. Existing VST3 zip names are unchanged.
+
 ## 1.6.0 — 2026-11-17
 
 - A segmented SVG waveform scans the header on the sequencer clock, follows host seeks and holds while transport is stopped.

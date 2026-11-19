@@ -2,7 +2,7 @@
 
 Create beat-synced glitches with a 32-step sequencer. Choose from 15 effects and route them to any step.
 
-[Install with OpenVST Manager](https://github.com/alanmarcero/alan-m-OpenVSTManager/releases/latest) · [Download v1.7.0](https://github.com/alanmarcero/openGlitchFX/releases/tag/v1.7.0)
+[Install with OpenVST Manager](https://github.com/alanmarcero/alan-m-OpenVSTManager/releases/latest) · [Download v1.8.0](https://github.com/alanmarcero/openGlitchFX/releases/tag/v1.8.0)
 
 ![openGlitchFX editor](docs/screenshots/preview.png)
 
@@ -12,7 +12,11 @@ Create beat-synced glitches with a 32-step sequencer. Choose from 15 effects and
 
 The 32-step pattern spans one 4/4 bar. Each step lasts one 32nd note. Set the loop length from 1 to 32 steps. The sequencer follows host tempo, or uses the internal clock when host sync is off or unavailable.
 
-Set Swing to delay offbeat steps. Randomize with Light (35%), Medium (55%), or Wild (75%) density. Use preset buttons for ALL STEPS, LAST BEAT, LAST 1/8, LAST 1/32, BEATS 2 & 4, 16TH OFFBEATS, and CLEAR. ALL FX routes every effect through steps that are already on.
+Set Swing to delay offbeat steps. Randomize with Light (35%), Medium (55%), or Wild (75%) density. Randomize can be undone. Use preset buttons for ALL STEPS, LAST BEAT, LAST 1/8, LAST 1/32, BEATS 2 & 4, 16TH OFFBEATS, and CLEAR. ALL FX routes every effect through steps that are already on.
+
+The plugin opens on Club Stutter. The preset menu and the DAW program list hold 36 factory patterns: builds, fills, stutters, tape stops, gates, half-time, risers, and drop chops. Factory patterns stay read-only. Save, rename, and delete your own in Documents/Alan Marcero/openGlitchFX/Presets. Search the list and mark favorites.
+
+Undo and redo cover knob moves, pad edits, and randomize. Use the UNDO and REDO buttons, or Cmd/Ctrl+Z and Shift+Cmd/Ctrl+Z. A and B are two full copies of the sound. A>B and B>A copy one slot onto the other.
 
 Each step can pass audio dry or route one or more effects. Drag across steps to paint an effect choice. Right-click a step to enable all effects, solo one, or toggle a combination. You can also split a step or copy its routing to the current beat or all 32 steps. Adjacent steps with matching routing form a longer effect span.
 
@@ -51,9 +55,9 @@ An eight-slice waveform in the header jumps one slice every 1/32 note. Host Sync
 
 Choose Cyber Neon, Industrial Amber, Acid Matrix, or Arctic Glitch. The theme and drawn envelopes save with the session. The theme also supports host automation.
 
-The VST3 plugin follows host tempo and MIDI. It supports macOS 11 or later on Apple Silicon and Intel, and Windows x64. Packages include VST3 only.
+The plugin follows host tempo and MIDI. It builds as VST3, Audio Unit, and Standalone. It supports macOS 11 or later on Apple Silicon and Intel, and Windows x64. The VST3 zip names are unchanged. AU and Standalone are extra zips.
 
-Install with [OpenVST Manager](https://github.com/alanmarcero/alan-m-OpenVSTManager/releases/latest) or download the [v1.7.0 release](https://github.com/alanmarcero/openGlitchFX/releases/tag/v1.7.0). Rescan your DAW after installation. See [release changes](CHANGELOG.md).
+Install with [OpenVST Manager](https://github.com/alanmarcero/alan-m-OpenVSTManager/releases/latest) or download the [v1.8.0 release](https://github.com/alanmarcero/openGlitchFX/releases/tag/v1.8.0). Rescan your DAW after installation. See [release changes](CHANGELOG.md).
 
 ## License
 

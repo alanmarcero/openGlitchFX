@@ -79,7 +79,7 @@ TEST_CASE("Pad brush paints and wakes every effect including the third row", "[p
     juce::ScopedJuceInitialiser_GUI gui;
     OpenGlitchFXProcessor processor;
     openglitch::ui::GlitchLookAndFeel look;
-    openglitch::ui::StepSequencerComponent grid(processor.parameters, look);
+    openglitch::ui::StepSequencerComponent grid(processor.parameters, look, processor.getUndo());
     for (int fx = 0; fx < 15; ++fx) {
         INFO("FX slot " << fx);
         grid.setPaintTargetFx(fx);
@@ -92,6 +92,7 @@ TEST_CASE("Pad brush paints and wakes every effect including the third row", "[p
 TEST_CASE("The host is told to render the enabled echo tail", "[plugin][tail]") {
     juce::ScopedJuceInitialiser_GUI gui;
     OpenGlitchFXProcessor processor;
+    processor.parameters.getParameter(openglitch::params::kPingPongOn)->setValueNotifyingHost(1.0f);
     auto* amount = processor.parameters.getParameter(openglitch::params::kPingPongAmt);
     amount->setValueNotifyingHost(1.0f);
     REQUIRE(processor.getTailLengthSeconds() >= 39.0);
@@ -219,6 +220,12 @@ TEST_CASE("Editor renders native UI screenshot", "[plugin][gui]") {
     REQUIRE(stream.openedOk());
     juce::PNGImageFormat png;
     REQUIRE(png.writeImageToStream(snapshot, stream));
+    const auto artifact = juce::File("/opt/cursor/artifacts/ui.png");
+    artifact.getParentDirectory().createDirectory();
+    artifact.deleteFile();
+    juce::FileOutputStream artifactStream(artifact);
+    REQUIRE(artifactStream.openedOk());
+    REQUIRE(png.writeImageToStream(snapshot, artifactStream));
 }
 
 TEST_CASE("Sequencer length and swing are automatable and survive state restore", "[plugin][sequencer]") {
@@ -272,8 +279,8 @@ TEST_CASE("Pattern randomization is repeatable and selected-FX randomization pre
     OpenGlitchFXProcessor firstProcessor;
     OpenGlitchFXProcessor secondProcessor;
     openglitch::ui::GlitchLookAndFeel look;
-    openglitch::ui::StepSequencerComponent first(firstProcessor.parameters, look);
-    openglitch::ui::StepSequencerComponent second(secondProcessor.parameters, look);
+    openglitch::ui::StepSequencerComponent first(firstProcessor.parameters, look, firstProcessor.getUndo());
+    openglitch::ui::StepSequencerComponent second(secondProcessor.parameters, look, secondProcessor.getUndo());
     for (int step = 0; step < 32; ++step) {
         firstProcessor.parameters.getParameter(openglitch::params::stepParamId(step))->setValueNotifyingHost(1.0f);
         secondProcessor.parameters.getParameter(openglitch::params::stepParamId(step))->setValueNotifyingHost(1.0f);
@@ -311,8 +318,8 @@ TEST_CASE("Full-pattern randomization is seeded, keeps routes in the selected co
     OpenGlitchFXProcessor firstProcessor;
     OpenGlitchFXProcessor secondProcessor;
     openglitch::ui::GlitchLookAndFeel look;
-    openglitch::ui::StepSequencerComponent first(firstProcessor.parameters, look);
-    openglitch::ui::StepSequencerComponent second(secondProcessor.parameters, look);
+    openglitch::ui::StepSequencerComponent first(firstProcessor.parameters, look, firstProcessor.getUndo());
+    openglitch::ui::StepSequencerComponent second(secondProcessor.parameters, look, secondProcessor.getUndo());
 
     first.randomizePattern(193117u, 1);
     second.randomizePattern(193117u, 1);

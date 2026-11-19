@@ -1,4 +1,5 @@
 #include "PluginProcessor.h"
+#include "FactoryPatterns.h"
 #include "PluginEditor.h"
 #include <cmath>
 
@@ -30,11 +31,26 @@ std::vector<openglitch::core::EnvelopePoint> decodePoints(const juce::String& te
 
 } // namespace
 
+namespace {
+std::vector<openglitch::suite::FactoryPresetInfo> factoryPresetInfos() {
+    std::vector<openglitch::suite::FactoryPresetInfo> infos;
+    infos.reserve(static_cast<size_t>(openglitch::patterns::count()));
+    for (int i = 0; i < openglitch::patterns::count(); ++i) {
+        infos.push_back({ openglitch::patterns::name(i), openglitch::patterns::group(i) });
+    }
+    return infos;
+}
+} // namespace
+
 OpenGlitchFXProcessor::OpenGlitchFXProcessor()
     : AudioProcessor(BusesProperties()
                      .withInput("Input", juce::AudioChannelSet::stereo(), true)
                      .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
-      parameters(*this, nullptr, juce::Identifier("OpenGlitchFXParameters"), openglitch::params::createParameterLayout()) {
+      parameters(*this, nullptr, juce::Identifier("OpenGlitchFXParameters"), openglitch::params::createParameterLayout()),
+      undo_(*this,
+            [this] { return captureExtra(); },
+            [this](const juce::ValueTree& extra) { applyExtra(extra); }),
+      presets_("openGlitchFX", factoryPresetInfos()) {
     using openglitch::core::EnvTarget;
     for (int env = 0; env < static_cast<int>(EnvTarget::Count); ++env) {
         const auto target = static_cast<EnvTarget>(env);
@@ -45,6 +61,10 @@ OpenGlitchFXProcessor::OpenGlitchFXProcessor()
         stepFxParams_[static_cast<size_t>(i)] = parameters.getRawParameterValue(openglitch::params::stepFxParamId(i));
         stepExtraFxParams_[static_cast<size_t>(i)] = parameters.getRawParameterValue(openglitch::params::stepExtraFxParamId(i));
     }
+    undo_.suspend();
+    applyFactory(openglitch::patterns::defaultIndex());
+    ab_.reset(musicalState());
+    undo_.resume();
 }
 
 std::vector<openglitch::core::EnvelopePoint> OpenGlitchFXProcessor::getEnvelopePoints(openglitch::core::EnvTarget target) const {
@@ -58,6 +78,7 @@ void OpenGlitchFXProcessor::setEnvelopePoints(openglitch::core::EnvTarget target
     auto node = parameters.state.getOrCreateChildWithName(kEnvelopesNode, nullptr);
     node.setProperty(envelopePropertyId(target), encodePoints(points), nullptr);
     core_.setEnvelopePoints(target, points);
+    undo_.markDirty();
 }
 
 void OpenGlitchFXProcessor::syncEnvelopePointsToCore() {
@@ -256,8 +277,176 @@ juce::AudioProcessorEditor* OpenGlitchFXProcessor::createEditor() {
     return new OpenGlitchFXEditor(*this);
 }
 
+int OpenGlitchFXProcessor::getNumPrograms() {
+    return openglitch::patterns::count();
+}
+
+int OpenGlitchFXProcessor::getCurrentProgram() {
+    return juce::jlimit(0, std::max(0, getNumPrograms() - 1), currentProgram_);
+}
+
+void OpenGlitchFXProcessor::setCurrentProgram(int index) {
+    if (!juce::isPositiveAndBelow(index, getNumPrograms())) {
+        return;
+    }
+    // A host often repeats the current program after restoring a session.
+    // Applying it again would replace the saved sound with the factory pattern.
+    if (programApplied_ && index == currentProgram_) {
+        return;
+    }
+    loadFactoryProgram(index);
+}
+
+const juce::String OpenGlitchFXProcessor::getProgramName(int index) {
+    return openglitch::patterns::name(index);
+}
+
+void OpenGlitchFXProcessor::changeProgramName(int, const juce::String&) {}
+
+void OpenGlitchFXProcessor::applyFactory(int index) {
+    openglitch::patterns::apply(parameters, index);
+    resetEnvelopes();
+    currentProgram_ = index;
+    programApplied_ = true;
+    presetIsFactory_ = true;
+    presetLabel_ = openglitch::patterns::name(index);
+    syncParametersToCore();
+    ++stateVersion_;
+}
+
+void OpenGlitchFXProcessor::resetEnvelopes() {
+    using openglitch::core::EnvTarget;
+    for (int env = 0; env < static_cast<int>(EnvTarget::Count); ++env) {
+        const auto target = static_cast<EnvTarget>(env);
+        setEnvelopePoints(target, openglitch::core::ModEnvelope::defaultPoints(target));
+    }
+}
+
+void OpenGlitchFXProcessor::loadFactoryProgram(int index) {
+    if (!juce::isPositiveAndBelow(index, openglitch::patterns::count())) {
+        return;
+    }
+    undo_.perform("Program", [this, index] { applyFactory(index); });
+}
+
+void OpenGlitchFXProcessor::loadUserPreset(const juce::String& name) {
+    const auto tree = presets_.loadUser(name);
+    if (!tree.isValid()) {
+        return;
+    }
+    undo_.perform("Preset", [this, tree, name] {
+        restoreMusicalState(tree);
+        presetIsFactory_ = false;
+        presetLabel_ = name.trim();
+        programApplied_ = true;
+    });
+}
+
+bool OpenGlitchFXProcessor::saveUserPreset(const juce::String& name, juce::String& error) {
+    const auto saved = presets_.saveUser(name, musicalState(), error);
+    if (saved) {
+        presetIsFactory_ = false;
+        presetLabel_ = name.trim();
+    }
+    return saved;
+}
+
+bool OpenGlitchFXProcessor::renameUserPreset(const juce::String& from, const juce::String& to, juce::String& error) {
+    const auto renamed = presets_.renameUser(from, to, error);
+    if (renamed && presetLabel_ == from.trim()) {
+        presetLabel_ = to.trim();
+    }
+    return renamed;
+}
+
+bool OpenGlitchFXProcessor::deleteUserPreset(const juce::String& name, juce::String& error) {
+    return presets_.deleteUser(name, error);
+}
+
+juce::ValueTree OpenGlitchFXProcessor::musicalState() {
+    auto tree = parameters.copyState();
+    tree.removeChild(tree.getChildWithName("SUITE_AB"), nullptr);
+    for (const char* property : { "suiteProgram", "abActive", "presetLabel", "presetFactory" }) {
+        tree.removeProperty(property, nullptr);
+    }
+    return tree;
+}
+
+juce::ValueTree OpenGlitchFXProcessor::captureExtra() const {
+    juce::ValueTree extra("SUITE_EXTRA");
+    extra.appendChild(parameters.state.getChildWithName(kEnvelopesNode).createCopy(), nullptr);
+    extra.setProperty("program", currentProgram_, nullptr);
+    extra.setProperty("applied", programApplied_, nullptr);
+    extra.setProperty("factory", presetIsFactory_, nullptr);
+    extra.setProperty("label", presetLabel_, nullptr);
+    return extra;
+}
+
+void OpenGlitchFXProcessor::applyExtra(const juce::ValueTree& extra) {
+    if (const auto envelopes = extra.getChildWithName(kEnvelopesNode); envelopes.isValid()) {
+        auto existing = parameters.state.getChildWithName(kEnvelopesNode);
+        if (existing.isValid()) {
+            parameters.state.removeChild(existing, nullptr);
+        }
+        parameters.state.appendChild(envelopes.createCopy(), nullptr);
+        syncEnvelopePointsToCore();
+    }
+    currentProgram_ = static_cast<int>(extra.getProperty("program", currentProgram_));
+    programApplied_ = static_cast<bool>(extra.getProperty("applied", programApplied_));
+    presetIsFactory_ = static_cast<bool>(extra.getProperty("factory", presetIsFactory_));
+    presetLabel_ = extra.getProperty("label", presetLabel_).toString();
+    ++stateVersion_;
+}
+
+void OpenGlitchFXProcessor::restoreMusicalState(const juce::ValueTree& state) {
+    if (!state.isValid()) {
+        return;
+    }
+    undo_.suspend();
+    auto restored = state.createCopy();
+    restored.removeChild(restored.getChildWithName("SUITE_AB"), nullptr);
+    parameters.replaceState(restored);
+    syncParametersToCore();
+    syncEnvelopePointsToCore();
+    ++stateVersion_;
+    undo_.resume();
+}
+
+void OpenGlitchFXProcessor::selectAbSlot(bool slotA) {
+    if (slotA == ab_.isA()) {
+        return;
+    }
+    restoreMusicalState(ab_.toggle(musicalState()));
+}
+
+void OpenGlitchFXProcessor::copyAbAtoB() {
+    if (const auto loaded = ab_.copyAtoB(musicalState()); loaded.isValid()) {
+        restoreMusicalState(loaded);
+    }
+}
+
+void OpenGlitchFXProcessor::copyAbBtoA() {
+    if (const auto loaded = ab_.copyBtoA(musicalState()); loaded.isValid()) {
+        restoreMusicalState(loaded);
+    }
+}
+
 void OpenGlitchFXProcessor::getStateInformation(juce::MemoryBlock& destData) {
-    if (auto xmlState = parameters.copyState().createXml()) {
+    ab_.rememberActive(musicalState());
+    auto tree = musicalState();
+    tree.setProperty("suiteProgram", currentProgram_, nullptr);
+    tree.setProperty("abActive", ab_.isA() ? "A" : "B", nullptr);
+    tree.setProperty("presetLabel", presetLabel_, nullptr);
+    tree.setProperty("presetFactory", presetIsFactory_, nullptr);
+    juce::ValueTree slots("SUITE_AB");
+    auto slotA = ab_.slotA().createCopy();
+    slotA.setProperty("slot", "A", nullptr);
+    auto slotB = ab_.slotB().createCopy();
+    slotB.setProperty("slot", "B", nullptr);
+    slots.appendChild(slotA, nullptr);
+    slots.appendChild(slotB, nullptr);
+    tree.appendChild(slots, nullptr);
+    if (auto xmlState = tree.createXml()) {
         copyXmlToBinary(*xmlState, destData);
     }
 }
@@ -279,10 +468,33 @@ void OpenGlitchFXProcessor::setStateInformation(const void* data, int sizeInByte
                     restored.appendChild(value, nullptr);
                 }
             }
+            const auto slots = restored.getChildWithName("SUITE_AB");
+            const bool hadProgram = restored.hasProperty("suiteProgram");
+            const int savedProgram = static_cast<int>(restored.getProperty("suiteProgram", 0));
+            const auto savedLabel = restored.getProperty("presetLabel").toString();
+            const bool savedFactory = restored.hasProperty("presetFactory")
+                ? static_cast<bool>(restored.getProperty("presetFactory"))
+                : false;
+            const bool savedA = restored.getProperty("abActive", "A").toString() != "B";
+            restored.removeChild(restored.getChildWithName("SUITE_AB"), nullptr);
+            for (const char* property : { "suiteProgram", "abActive", "presetLabel", "presetFactory" }) {
+                restored.removeProperty(property, nullptr);
+            }
+            undo_.suspend();
             parameters.replaceState(restored);
             syncParametersToCore();
             syncEnvelopePointsToCore();
             ++stateVersion_;
+            undo_.resume();
+            currentProgram_ = juce::jlimit(0, std::max(0, getNumPrograms() - 1), savedProgram);
+            programApplied_ = true;
+            presetIsFactory_ = hadProgram && savedFactory;
+            presetLabel_ = savedLabel.isNotEmpty() ? savedLabel : (presetIsFactory_ ? getProgramName(currentProgram_) : juce::String("Session"));
+            if (slots.isValid() && slots.getNumChildren() >= 2) {
+                ab_.setSlots(slots.getChild(0).createCopy(), slots.getChild(1).createCopy(), savedA);
+            } else {
+                ab_.reset(musicalState());
+            }
         }
     }
 }
