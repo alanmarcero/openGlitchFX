@@ -120,6 +120,17 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Write release notes
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_REPO: ${{ github.repository }}
+        run: python3 scripts/release_notes.py --tag "$RELEASE_TAG" --repo "$RELEASE_REPO" > "$RUNNER_TEMP/release_body.md"
+
       - uses: actions/download-artifact@v4
         with:
           merge-multiple: true
@@ -129,10 +140,10 @@ jobs:
           ls openGlitchFX-Standalone-*.zip
       - uses: softprops/action-gh-release@v2
         with:
-          body: '![Editor](https://raw.githubusercontent.com/alanmarcero/openGlitchFX/${{ github.ref_name }}/docs/screenshots/preview.png)'
+          body_path: ${{ runner.temp }}/release_body.md
           files: |
             openGlitchFX-VST3-*.zip
             openGlitchFX-AU-*.zip
             openGlitchFX-Standalone-*.zip
           fail_on_unmatched_files: false
-          generate_release_notes: true
+          generate_release_notes: false
