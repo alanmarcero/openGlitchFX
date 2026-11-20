@@ -1,6 +1,7 @@
 #include "GlitchProcessorCore.h"
 #include <algorithm>
 #include <cmath>
+#include <numbers>
 
 namespace openglitch::core {
 
@@ -33,6 +34,14 @@ void GlitchProcessorCore::prepare(double sampleRate) {
     saturation_.prepare(sampleRate_);
     wetFilter_.prepare(sampleRate_);
 
+    constexpr double kLr4Damp = 1.4142135623730951;
+    const double gSub = std::tan(std::numbers::pi * std::min(95.0, sampleRate_ * 0.25) / sampleRate_);
+    subLr4A1_ = static_cast<float>(1.0 / (1.0 + gSub * (gSub + kLr4Damp)));
+    subLr4A2_ = static_cast<float>(gSub) * subLr4A1_;
+    subLr4A3_ = static_cast<float>(gSub) * subLr4A2_;
+    rmsAlpha_ = static_cast<float>(1.0 - std::exp(-1.0 / (0.008 * sampleRate_)));
+    gainAlpha_ = static_cast<float>(1.0 - std::exp(-1.0 / (0.004 * sampleRate_)));
+
     reset();
 }
 
@@ -61,8 +70,16 @@ void GlitchProcessorCore::reset() {
     sequencer_.setExternalFxMask(0u);
     currentMasterMix_ = masterMix_;
     currentMasterGainLinear_ = masterGainLinear_;
-    keepSubLp_ = {};
-    wetSubHp_ = {};
+    drySubLpIc1_ = {};
+    drySubLpIc2_ = {};
+    drySubHpIc1_ = {};
+    drySubHpIc2_ = {};
+    wetSubHpIc1_ = {};
+    wetSubHpIc2_ = {};
+    guardWavefold_ = {};
+    guardComb_ = {};
+    guardSaturation_ = {};
+    guardMultiFx_ = {};
     hasProcessedAudio_ = false;
 }
 
@@ -300,16 +317,18 @@ void GlitchProcessorCore::processBlock(float* leftChannel, float* rightChannel, 
             bpm_, useHostSync_, hasValidHostPpq_, sampleHostPpq, enteredActive, fxTransitionMask);
         lastGate = stepGate;
 
-        auto advanceSilentEcho = [&] {
-            if (!fxEnabled_[static_cast<size_t>(GlitchFxId::PingPong)]
-                || fxAmount_[static_cast<size_t>(GlitchFxId::PingPong)] <= 1e-4f) {
-                return;
-            }
-            float l = 0.0f, r = 0.0f;
-            pingPong_.processSample(fxAmount_[static_cast<size_t>(GlitchFxId::PingPong)], bpm_, l, r);
-        };
+        const bool echoArmed = fxEnabled_[static_cast<size_t>(GlitchFxId::PingPong)]
+                            && fxAmount_[static_cast<size_t>(GlitchFxId::PingPong)] > 1e-4f;
+        const bool combArmed = fxEnabled_[static_cast<size_t>(GlitchFxId::CombReso)]
+                            && fxAmount_[static_cast<size_t>(GlitchFxId::CombReso)] > 1e-4f;
+
         if (masterBypassed_) {
-            advanceSilentEcho();
+            tapeStop_.recordDrySample(dryL, dryR);
+            if (echoArmed) {
+                float silentL = 0.0f;
+                float silentR = 0.0f;
+                pingPong_.processSendSample(fxAmount_[static_cast<size_t>(GlitchFxId::PingPong)], bpm_, 0.0f, silentL, silentR);
+            }
             maxPeakL = std::max(maxPeakL, std::abs(dryL));
             maxPeakR = std::max(maxPeakR, std::abs(dryR));
             continue;
@@ -326,16 +345,40 @@ void GlitchProcessorCore::processBlock(float* leftChannel, float* rightChannel, 
             reverseGrain_.triggerGrain();
         }
 
-        float outL = dryL;
-        float outR = dryR;
+        auto applyLoudnessGuard = [&](LoudnessGuard& guard, float preL, float preR, float& postL, float& postR) {
+            const float kwInL = preL + 0.6f * (preL - guard.prevInL);
+            const float kwInR = preR + 0.6f * (preR - guard.prevInR);
+            guard.prevInL = preL;
+            guard.prevInR = preR;
 
-        bool echoProcessed = false;
+            const float kwOutL = postL + 0.6f * (postL - guard.prevOutL);
+            const float kwOutR = postR + 0.6f * (postR - guard.prevOutR);
+            guard.prevOutL = postL;
+            guard.prevOutR = postR;
+
+            const float inSq = 0.5f * (kwInL * kwInL + kwInR * kwInR);
+            const float outSq = 0.5f * (kwOutL * kwOutL + kwOutR * kwOutR);
+            guard.inPower += rmsAlpha_ * (inSq - guard.inPower);
+            guard.outPower += rmsAlpha_ * (outSq - guard.outPower);
+
+            if (guard.outPower > 1e-7f && guard.inPower > 1e-8f) {
+                const float ratio = (guard.inPower + 1e-7f) / (guard.outPower + 1e-7f);
+                const float targetGain = std::clamp(std::sqrt(ratio), 0.10f, 1.30f);
+                guard.gain += gainAlpha_ * (targetGain - guard.gain);
+            }
+            postL *= guard.gain;
+            postR *= guard.gain;
+        };
+
+        bool tapeRecorded = false;
+        bool combProcessed = false;
+        float wetL = dryL;
+        float wetR = dryR;
+        float sendTailL = 0.0f;
+        float sendTailR = 0.0f;
         const float effectiveWet = stepGate * currentMasterMix_;
-        if (effectiveWet > 1e-5f) {
-            float wetL = dryL;
-            float wetR = dryR;
 
-            // Helper: returns the per-pad smoothed FX envelope (0..1) if the FX module is enabled
+        if (effectiveWet > 1e-5f) {
             auto getFxGate = [&](GlitchFxId id) -> float {
                 const auto idx = static_cast<size_t>(id);
                 if (!fxEnabled_[idx] || fxAmount_[idx] <= 1e-4f) {
@@ -344,19 +387,39 @@ void GlitchProcessorCore::processBlock(float* leftChannel, float* rightChannel, 
                 return sequencer_.getFxEnvelope(static_cast<int>(id));
             };
 
-            auto applyGatedFx = [&](GlitchFxId id, auto&& processFn) {
+            // Buffer splices blend with equal-power crossfading over their S-curve micro-envelopes
+            float maxTimeGate = 0.0f;
+            auto applySpliceFx = [&](GlitchFxId id, float& busL, float& busR, auto&& processFn) {
                 const float g = getFxGate(id);
                 if (g > 1e-5f) {
-                    float fxL = wetL;
-                    float fxR = wetR;
+                    maxTimeGate = std::max(maxTimeGate, g);
+                    float fxL = busL;
+                    float fxR = busR;
                     processFn(fxAmount_[static_cast<size_t>(id)], fxL, fxR);
-                    wetL = wetL * (1.0f - g) + fxL * g;
-                    wetR = wetR * (1.0f - g) + fxR * g;
+                    const float theta = 0.5f * std::numbers::pi_v<float> * g;
+                    const float dryCoeff = std::cos(theta);
+                    const float wetCoeff = std::sin(theta);
+                    busL = busL * dryCoeff + fxL * wetCoeff;
+                    busR = busR * dryCoeff + fxR * wetCoeff;
+                }
+            };
+
+            float maxSpecGate = 0.0f;
+            auto applyGatedFx = [&](GlitchFxId id, float& busL, float& busR, bool& wasActive, auto&& processFn) {
+                const float g = getFxGate(id);
+                wasActive = g > 1e-5f;
+                if (wasActive) {
+                    maxSpecGate = std::max(maxSpecGate, g);
+                    float fxL = busL;
+                    float fxR = busR;
+                    processFn(fxAmount_[static_cast<size_t>(id)], fxL, fxR);
+                    busL = busL * (1.0f - g) + fxL * g;
+                    busR = busR * (1.0f - g) + fxR * g;
                 }
             };
 
             const int curStep = sequencer_.getCurrentStep();
-            const double secPer32nd = (60.0 / bpm_) * (4.0 / 32.0); // 7.5 / bpm_
+            const double secPer32nd = (60.0 / bpm_) * (4.0 / 32.0);
             const double secPerBeat = 60.0 / bpm_;
 
             const float spanPhase = sequencer_.getMergedPadSpan(curStep).spanPhase;
@@ -370,13 +433,15 @@ void GlitchProcessorCore::processBlock(float* leftChannel, float* rightChannel, 
                 return neutral + (y - neutral) * settings.depth;
             };
 
-            // 1. Time/Buffer FX (continuous across combined adjacent pads!)
-            applyGatedFx(GlitchFxId::Stutter, [&](float amt, float& l, float& r) {
+            // 1. Time/Buffer Bus (continuous across combined adjacent pads)
+            float timeL = dryL;
+            float timeR = dryR;
+            applySpliceFx(GlitchFxId::Stutter, timeL, timeR, [&](float amt, float& l, float& r) {
                 StutterSettings stutter = stutterSettings_;
                 stutter.rateMultiplier = std::pow(2.0, 2.0 * static_cast<double>(modulation(EnvTarget::Pitch, 0.5f)) - 1.0);
                 stutter_.processSample(amt, bpm_, stutter, l, r);
             });
-            applyGatedFx(GlitchFxId::Reverse, [&](float amt, float& l, float& r) {
+            applySpliceFx(GlitchFxId::Reverse, timeL, timeR, [&](float amt, float& l, float& r) {
                 const auto span = sequencer_.getActiveFxSpan(curStep, static_cast<int>(GlitchFxId::Reverse));
                 if ((sequencer_.getCurrentStepActiveFxMask() & (1u << static_cast<int>(GlitchFxId::Reverse))) != 0u) {
                     reverseSpanSec_ = static_cast<double>(span.lengthSteps) * secPer32nd;
@@ -384,59 +449,115 @@ void GlitchProcessorCore::processBlock(float* leftChannel, float* rightChannel, 
                 }
                 reverseGrain_.processSample(amt, reverseSpanPhase_, reverseSpanSec_, l, r);
             });
-            applyGatedFx(GlitchFxId::TapeStop, [&](float amt, float& l, float& r) {
+            applySpliceFx(GlitchFxId::TapeStop, timeL, timeR, [&](float amt, float& l, float& r) {
                 const auto span = sequencer_.getActiveFxSpan(curStep, static_cast<int>(GlitchFxId::TapeStop));
                 const double spanSec = tapeLengthBeats_ > 0.0 ? tapeLengthBeats_ * secPerBeat
                                                               : static_cast<double>(span.lengthSteps) * secPer32nd;
                 TapeStopSettings tape = tapeStopSettings_;
                 tape.fixedDurationSec = tapeLengthBeats_ > 0.0 ? spanSec : 0.0;
                 tapeStop_.processSample(amt, spanSec, tape, l, r);
+                tapeRecorded = true;
             });
-            applyGatedFx(GlitchFxId::PitchGlitch, [&](float amt, float& l, float& r) {
+            applySpliceFx(GlitchFxId::PitchGlitch, timeL, timeR, [&](float amt, float& l, float& r) {
                 pitchGlitch_.processSample(amt, l, r);
             });
+            const float gChopper = getFxGate(GlitchFxId::Chopper);
+            if (gChopper > 1e-5f) {
+                maxTimeGate = std::max(maxTimeGate, gChopper);
+                float chopL = timeL;
+                float chopR = timeR;
+                const auto span = sequencer_.getActiveFxSpan(curStep, static_cast<int>(GlitchFxId::Chopper));
+                chopperGate_.processSample(fxAmount_[static_cast<size_t>(GlitchFxId::Chopper)], bpm_, span.lengthSteps, chopL, chopR);
+                timeL = timeL * (1.0f - gChopper) + chopL * gChopper;
+                timeR = timeR * (1.0f - gChopper) + chopR * gChopper;
+            }
 
-            // 2. Harmonic / Spectral / Bitrate FX
-            applyGatedFx(GlitchFxId::Bitcrush, [&](float amt, float& l, float& r) {
+            // 2. Spectral / Nonlinear / Modulation Bus (Series or ParallelBuses routing)
+            const bool parallelRouting = (fxRoutingMode_ == FxRoutingMode::ParallelBuses);
+            const float specInL = parallelRouting ? dryL : timeL;
+            const float specInR = parallelRouting ? dryR : timeR;
+            float specL = specInL;
+            float specR = specInR;
+            int activeNonlinearCount = 0;
+            bool stageActive = false;
+
+            applyGatedFx(GlitchFxId::Bitcrush, specL, specR, stageActive, [&](float amt, float& l, float& r) {
                 bitcrusher_.processSample(amt, l, r);
             });
-            applyGatedFx(GlitchFxId::Downsample, [&](float amt, float& l, float& r) {
+            if (stageActive) ++activeNonlinearCount;
+
+            applyGatedFx(GlitchFxId::Downsample, specL, specR, stageActive, [&](float amt, float& l, float& r) {
                 decimator_.processSample(amt, l, r);
             });
-            applyGatedFx(GlitchFxId::Wavefold, [&](float amt, float& l, float& r) {
+            if (stageActive) ++activeNonlinearCount;
+
+            applyGatedFx(GlitchFxId::Wavefold, specL, specR, stageActive, [&](float amt, float& l, float& r) {
+                const float preL = l;
+                const float preR = r;
                 wavefolder_.processSample(amt, l, r);
+                applyLoudnessGuard(guardWavefold_, preL, preR, l, r);
             });
-            applyGatedFx(GlitchFxId::RingMod, [&](float amt, float& l, float& r) {
+            if (stageActive) ++activeNonlinearCount;
+
+            applyGatedFx(GlitchFxId::RingMod, specL, specR, stageActive, [&](float amt, float& l, float& r) {
                 ringMod_.processSample(amt, l, r);
             });
-            applyGatedFx(GlitchFxId::CombReso, [&](float amt, float& l, float& r) {
-                combResonator_.processSample(amt, l, r);
-            });
+            if (stageActive) ++activeNonlinearCount;
 
-            // 3. Rhythmic Chopper Slicer (sustains across combined pad spans)
-            applyGatedFx(GlitchFxId::Chopper, [&](float amt, float& l, float& r) {
-                const auto span = sequencer_.getActiveFxSpan(curStep, static_cast<int>(GlitchFxId::Chopper));
-                chopperGate_.processSample(amt, bpm_, span.lengthSteps, l, r);
-            });
+            // Tail-preserving post-fader send gating on CombReso with nonlinear RMS compensation
+            float gComb = 0.0f;
+            if (combArmed) gComb = sequencer_.getFxEnvelope(static_cast<int>(GlitchFxId::CombReso));
+            if (combArmed && (gComb > 1e-5f || combResonator_.hasAudibleTail())) {
+                const float preL = specL;
+                const float preR = specR;
+                combResonator_.processSendSample(fxAmount_[static_cast<size_t>(GlitchFxId::CombReso)], gComb, specL, specR);
+                if (gComb > 1e-5f) {
+                    applyLoudnessGuard(guardComb_, preL, preR, specL, specR);
+                    maxSpecGate = std::max(maxSpecGate, gComb);
+                    ++activeNonlinearCount;
+                }
+                combProcessed = true;
+            }
 
-            applyGatedFx(GlitchFxId::Chorus, [&](float amt, float& l, float& r) {
+            applyGatedFx(GlitchFxId::Chorus, specL, specR, stageActive, [&](float amt, float& l, float& r) {
                 chorus_.processSample(ModulatedDelayEffect::Mode::Chorus, amt, l, r);
             });
-            applyGatedFx(GlitchFxId::Flanger, [&](float amt, float& l, float& r) {
+            applyGatedFx(GlitchFxId::Flanger, specL, specR, stageActive, [&](float amt, float& l, float& r) {
                 flanger_.processSample(ModulatedDelayEffect::Mode::Flanger, amt, l, r);
             });
-            applyGatedFx(GlitchFxId::Phaser, [&](float amt, float& l, float& r) {
+            applyGatedFx(GlitchFxId::Phaser, specL, specR, stageActive, [&](float amt, float& l, float& r) {
                 phaser_.processSample(amt, l, r);
             });
-            applyGatedFx(GlitchFxId::PingPong, [&](float amt, float& l, float& r) {
-                pingPong_.processSample(amt, bpm_, l, r);
-                echoProcessed = true;
-            });
-            applyGatedFx(GlitchFxId::Saturation, [&](float amt, float& l, float& r) {
-                saturation_.processSample(amt, l, r);
-            });
 
-            // 4. Filter, volume and pan
+            applyGatedFx(GlitchFxId::Saturation, specL, specR, stageActive, [&](float amt, float& l, float& r) {
+                const float preL = l;
+                const float preR = r;
+                saturation_.processSample(amt, l, r);
+                applyLoudnessGuard(guardSaturation_, preL, preR, l, r);
+            });
+            if (stageActive) ++activeNonlinearCount;
+
+            if (activeNonlinearCount >= 2) {
+                applyLoudnessGuard(guardMultiFx_, specInL, specInR, specL, specR);
+            }
+
+            wetL = specL;
+            wetR = specR;
+            if (parallelRouting) {
+                const bool hasTime = maxTimeGate > 1e-5f;
+                const bool hasSpec = maxSpecGate > 1e-5f;
+                if (hasTime && hasSpec) {
+                    constexpr float kEqualPowerBusGain = 0.70710678f;
+                    wetL = (timeL + specL) * kEqualPowerBusGain;
+                    wetR = (timeR + specR) * kEqualPowerBusGain;
+                }
+                if (hasTime && !hasSpec) {
+                    wetL = timeL;
+                    wetR = timeR;
+                }
+            }
+
+            // 3. Filter, volume and pan
             if (filterMode_ != FilterMode::Off) {
                 const float filterMod = modulation(EnvTarget::Filter, 1.0f);
                 const float cutoff = filterCutoffHz_ * std::exp2(8.0f * (filterMod - 1.0f));
@@ -447,26 +568,75 @@ void GlitchProcessorCore::processBlock(float* leftChannel, float* rightChannel, 
             const float pan = 2.0f * modulation(EnvTarget::Pan, 0.5f) - 1.0f;
             wetL *= volume * std::min(1.0f, 1.0f - pan);
             wetR *= volume * std::min(1.0f, 1.0f + pan);
-
-            if (keepSubEnabled_) {
-                const float subAlpha = static_cast<float>(1.0 - std::exp(-2.0 * 3.141592653589793 * 95.0 / sampleRate_));
-                keepSubLp_[0] += subAlpha * (dryL - keepSubLp_[0]);
-                keepSubLp_[1] += subAlpha * (dryR - keepSubLp_[1]);
-                wetSubHp_[0] += subAlpha * (wetL - wetSubHp_[0]);
-                wetSubHp_[1] += subAlpha * (wetR - wetSubHp_[1]);
-                wetL = keepSubLp_[0] + (wetL - wetSubHp_[0]);
-                wetR = keepSubLp_[1] + (wetR - wetSubHp_[1]);
-            }
-
-            const float dryGain = (mixMode_ == MixMode::Parallel) ? 1.0f : (1.0f - effectiveWet);
-            outL = (dryL * dryGain + wetL * effectiveWet) * currentMasterGainLinear_;
-            outR = (dryR * dryGain + wetR * effectiveWet) * currentMasterGainLinear_;
-        } else {
-            outL = dryL * currentMasterGainLinear_;
-            outR = dryR * currentMasterGainLinear_;
         }
 
-        if (!echoProcessed) advanceSilentEcho();
+        if (!tapeRecorded) {
+            tapeStop_.recordDrySample(dryL, dryR);
+        }
+
+        if (!combProcessed && combArmed && combResonator_.hasAudibleTail()) {
+            float combTailL = 0.0f;
+            float combTailR = 0.0f;
+            combResonator_.processSendSample(fxAmount_[static_cast<size_t>(GlitchFxId::CombReso)], 0.0f, combTailL, combTailR);
+            sendTailL += combTailL * guardComb_.gain;
+            sendTailR += combTailR * guardComb_.gain;
+        }
+
+        // 4. Tail-preserving post-fader send gating on PingPongEcho
+        float totalWetL = (effectiveWet > 1e-5f ? wetL * stepGate : 0.0f) + sendTailL;
+        float totalWetR = (effectiveWet > 1e-5f ? wetR * stepGate : 0.0f) + sendTailR;
+        if (echoArmed) {
+            const float gEcho = sequencer_.getFxEnvelope(static_cast<int>(GlitchFxId::PingPong));
+            pingPong_.processSendSample(fxAmount_[static_cast<size_t>(GlitchFxId::PingPong)], bpm_, gEcho, totalWetL, totalWetR);
+        }
+
+        // 5. Phase-complementary 24 dB/oct Linkwitz-Riley (LR4) Keep Sub crossover
+        float outL = 0.0f;
+        float outR = 0.0f;
+        if (keepSubEnabled_) {
+            constexpr float kLr4Damp = 1.41421356f;
+            auto tickLr4Lp = [&](float x, size_t ch) noexcept {
+                float sig = x;
+                for (size_t st = 0; st < 2; ++st) {
+                    const float v3 = sig - drySubLpIc2_[ch][st];
+                    const float v1 = subLr4A1_ * drySubLpIc1_[ch][st] + subLr4A2_ * v3;
+                    const float v2 = drySubLpIc2_[ch][st] + subLr4A2_ * drySubLpIc1_[ch][st] + subLr4A3_ * v3;
+                    drySubLpIc1_[ch][st] = 2.0f * v1 - drySubLpIc1_[ch][st];
+                    drySubLpIc2_[ch][st] = 2.0f * v2 - drySubLpIc2_[ch][st];
+                    sig = v2;
+                }
+                return sig;
+            };
+            auto tickLr4Hp = [&](float x, std::array<std::array<float, 2>, 2>& ic1, std::array<std::array<float, 2>, 2>& ic2, size_t ch) noexcept {
+                float sig = x;
+                for (size_t st = 0; st < 2; ++st) {
+                    const float v3 = sig - ic2[ch][st];
+                    const float v1 = subLr4A1_ * ic1[ch][st] + subLr4A2_ * v3;
+                    const float v2 = ic2[ch][st] + subLr4A2_ * ic1[ch][st] + subLr4A3_ * v3;
+                    ic1[ch][st] = 2.0f * v1 - ic1[ch][st];
+                    ic2[ch][st] = 2.0f * v2 - ic2[ch][st];
+                    sig = sig - kLr4Damp * v1 - v2;
+                }
+                return sig;
+            };
+
+            const float dryLpL = tickLr4Lp(dryL, 0);
+            const float dryLpR = tickLr4Lp(dryR, 1);
+            const float dryHpL = tickLr4Hp(dryL, drySubHpIc1_, drySubHpIc2_, 0);
+            const float dryHpR = tickLr4Hp(dryR, drySubHpIc1_, drySubHpIc2_, 1);
+            const float wetHpL = tickLr4Hp(totalWetL, wetSubHpIc1_, wetSubHpIc2_, 0);
+            const float wetHpR = tickLr4Hp(totalWetR, wetSubHpIc1_, wetSubHpIc2_, 1);
+
+            const bool parallelMix = (mixMode_ == MixMode::Parallel);
+            const float highDryGain = parallelMix ? 1.0f : (1.0f - effectiveWet);
+            outL = (dryLpL + dryHpL * highDryGain + wetHpL * currentMasterMix_) * currentMasterGainLinear_;
+            outR = (dryLpR + dryHpR * highDryGain + wetHpR * currentMasterMix_) * currentMasterGainLinear_;
+        }
+        if (!keepSubEnabled_) {
+            const float dryGain = (mixMode_ == MixMode::Parallel) ? 1.0f : (1.0f - effectiveWet);
+            outL = (dryL * dryGain + totalWetL * currentMasterMix_) * currentMasterGainLinear_;
+            outR = (dryR * dryGain + totalWetR * currentMasterMix_) * currentMasterGainLinear_;
+        }
 
         outL = softCeiling(outL);
         outR = softCeiling(outR);

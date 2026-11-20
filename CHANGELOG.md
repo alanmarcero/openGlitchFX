@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.9.0 — 2026-11-20
+
+- **Dual-head Buffer Stutter**: Crossfades overlapping read heads at loop wraps and retriggers to eliminate tremolo pumping at 1/64 divisions.
+- **Circular Varispeed Tape Stop**: Uses a continuous ring buffer with dynamic polyphase sinc resampling for artifact-free deceleration beyond 15 seconds.
+- **Dual-grain Reverse**: Hermite-interpolated overlapping grains eliminate zero-dip dropouts across fractional beat wraps.
+- **WSOLA Pitch Glitch**: Keeps drum transients tight within 22 ms without flam echoes.
+- **2x Oversampled Bitrate Crusher & PolyBLEP Decimator**: Suppresses foldback aliasing in sample-and-hold and bit-depth reduction.
+- **12-stage ZDF Phaser & Thiran Flanger**: Multi-notch dispersion and fractional allpass delay without click spikes.
+- **SVF Band-Limited Ping-Pong Echo & Post-Fader Send Gating**: Band-limits repeats to 120 Hz–7 kHz, morphs tempo changes smoothly, and lets Ping-Pong and Comb Resonator tails ring across disabled steps.
+- **Per-sample Smoothed ZDF Wet Filter**: Smooths resonant cutoff jumps per sample without zipper or crackle spikes.
+- **LR4 24 dB/oct Keep Sub Crossover**: Blocks uncorrelated wet sub bleed and sums flat with the dry signal.
+- **Asymmetric Category Micro-Envelopes & Multi-FX Gain Staging**: Per-effect attack/release shaping, RMS loudness guards on nonlinear effects, and parallel time-vs-spectral FX bus summing.
+
 ## 1.8.0 — 2026-11-19
 
 - Added 36 factory patterns. A new plugin opens on Club Stutter instead of an empty grid. The same list is in the editor and the DAW program list.

@@ -224,3 +224,44 @@ TEST_CASE("Adjacent enabled pads combine into a contiguous span and do NOT reset
         REQUIRE(seq.getCurrentEnvelope() > 0.99f);
     }
 }
+
+TEST_CASE("BeatStepSequencer uses asymmetric category micro-envelopes instead of one global 1-pole curve", "[sequencer][envelopes]") {
+    BeatStepSequencer seq;
+    seq.setAllSteps(false);
+    seq.setStep(1, true);
+    seq.setStepFxMask(1, BeatStepSequencer::kAllFxMask);
+    seq.prepare(48000.0);
+    seq.setSmoothingTimeMs(2.5f);
+
+    bool entered = false;
+    uint16_t transitions = 0u;
+    seq.advanceSampleWithFxMask(120.0, true, true, 0.0, entered, transitions);
+
+    // Sample 1 of attack on Step 1: Chopper (FX 6) uses a 3 ms raised-cosine edge (gentle initial slope)
+    // while Bitcrush (FX 0) uses a fast punchy attack and slower release.
+    seq.advanceSampleWithFxMask(120.0, true, true, 0.126, entered, transitions);
+    const float firstChopperAttack = seq.getFxEnvelope(6);
+    const float firstBitcrushAttack = seq.getFxEnvelope(0);
+    REQUIRE(firstChopperAttack < 0.01f);
+    REQUIRE(firstBitcrushAttack > firstChopperAttack);
+
+    // Advance 40 samples (~0.83 ms): Buffer splice Stutter (FX 2, ~1.75 ms S-curve) rises faster than 3 ms Chopper.
+    for (int n = 0; n < 40; ++n) {
+        seq.advanceSampleWithFxMask(120.0, true, true, 0.126 + (n + 1) * 1e-5, entered, transitions);
+    }
+    const float midStutterAttack = seq.getFxEnvelope(2);
+    const float midChopperAttack = seq.getFxEnvelope(6);
+    REQUIRE(midStutterAttack > midChopperAttack + 0.1f);
+
+    // Settle all envelopes at 1.0, then step to inactive Step 2 and measure asymmetric release after 96 samples (2 ms).
+    for (int n = 0; n < 400; ++n) {
+        seq.advanceSampleWithFxMask(120.0, true, true, 0.14 + n * 1e-5, entered, transitions);
+    }
+    REQUIRE(seq.getFxEnvelope(0) > 0.999f);
+    for (int n = 0; n < 96; ++n) {
+        seq.advanceSampleWithFxMask(120.0, true, true, 0.26 + n * 1e-5, entered, transitions);
+    }
+    const float bitcrushReleaseAt2ms = seq.getFxEnvelope(0);
+    // Attack reached > 0.95 within 2 ms, whereas asymmetric release (~4 ms) still retains substantial level at 2 ms.
+    REQUIRE(bitcrushReleaseAt2ms > 0.25f);
+}

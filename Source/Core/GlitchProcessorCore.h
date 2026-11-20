@@ -33,6 +33,7 @@ enum class GlitchFxId : int {
 };
 
 enum class MixMode : int { Insert = 0, Parallel };
+enum class FxRoutingMode : int { Series = 0, ParallelBuses };
 enum class TriggerMode : int { Sequencer = 0, Midi };
 
 // In beats. Index 0 uses the pad span.
@@ -101,6 +102,8 @@ public:
     void setEnvelopeSettings(EnvTarget target, const ModEnvelopeSettings& settings);
     void setEnvelopePoints(EnvTarget target, std::vector<EnvelopePoint> points);
     void setMixMode(MixMode mode) { mixMode_ = mode; }
+    void setFxRoutingMode(FxRoutingMode mode) { fxRoutingMode_ = mode; }
+    FxRoutingMode getFxRoutingMode() const { return fxRoutingMode_; }
 
     // Glitch FX parameters
     void setEffectEnabled(GlitchFxId id, bool enabled);
@@ -174,6 +177,7 @@ private:
     std::array<ModEnvelope, kNumEnvelopes> envelopes_;
     std::array<ModEnvelopeSettings, kNumEnvelopes> envelopeSettings_{};
     MixMode mixMode_ = MixMode::Insert;
+    FxRoutingMode fxRoutingMode_ = FxRoutingMode::Series;
 
     TriggerMode triggerMode_ = TriggerMode::Sequencer;
     std::array<MidiTrigger, kMaxQueuedMidi> midiQueue_{};
@@ -183,6 +187,16 @@ private:
     std::array<bool, kNumEffects> fxEnabled_{};
     std::array<float, kNumEffects> fxAmount_{};
 
+    struct LoudnessGuard {
+        float prevInL = 0.0f;
+        float prevInR = 0.0f;
+        float prevOutL = 0.0f;
+        float prevOutR = 0.0f;
+        float inPower = 0.0f;
+        float outPower = 0.0f;
+        float gain = 1.0f;
+    };
+
     float masterMix_ = 1.0f;
     float currentMasterMix_ = 1.0f;
     float masterGainDb_ = 0.0f;
@@ -190,8 +204,21 @@ private:
     float currentMasterGainLinear_ = 1.0f;
     bool masterBypassed_ = false;
     bool keepSubEnabled_ = false;
-    std::array<float, 2> keepSubLp_{};
-    std::array<float, 2> wetSubHp_{};
+    float subLr4A1_ = 1.0f;
+    float subLr4A2_ = 0.0f;
+    float subLr4A3_ = 0.0f;
+    std::array<std::array<float, 2>, 2> drySubLpIc1_{};
+    std::array<std::array<float, 2>, 2> drySubLpIc2_{};
+    std::array<std::array<float, 2>, 2> drySubHpIc1_{};
+    std::array<std::array<float, 2>, 2> drySubHpIc2_{};
+    std::array<std::array<float, 2>, 2> wetSubHpIc1_{};
+    std::array<std::array<float, 2>, 2> wetSubHpIc2_{};
+    float rmsAlpha_ = 0.002f;
+    float gainAlpha_ = 0.005f;
+    LoudnessGuard guardWavefold_{};
+    LoudnessGuard guardComb_{};
+    LoudnessGuard guardSaturation_{};
+    LoudnessGuard guardMultiFx_{};
     bool hasProcessedAudio_ = false;
 
     MeterTelemetry telemetry_{};
