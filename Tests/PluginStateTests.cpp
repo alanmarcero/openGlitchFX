@@ -220,12 +220,14 @@ TEST_CASE("Editor renders native UI screenshot", "[plugin][gui]") {
     REQUIRE(stream.openedOk());
     juce::PNGImageFormat png;
     REQUIRE(png.writeImageToStream(snapshot, stream));
-    const auto artifact = juce::File("/opt/cursor/artifacts/ui.png");
-    artifact.getParentDirectory().createDirectory();
-    artifact.deleteFile();
-    juce::FileOutputStream artifactStream(artifact);
-    REQUIRE(artifactStream.openedOk());
-    REQUIRE(png.writeImageToStream(snapshot, artifactStream));
+    if (const auto* artifactPath = std::getenv("OPENGLITCHFX_ARTIFACT_UI_PNG")) {
+        const auto artifact = juce::File(artifactPath);
+        artifact.getParentDirectory().createDirectory();
+        artifact.deleteFile();
+        juce::FileOutputStream artifactStream(artifact);
+        REQUIRE(artifactStream.openedOk());
+        REQUIRE(png.writeImageToStream(snapshot, artifactStream));
+    }
 }
 
 TEST_CASE("Sequencer length and swing are automatable and survive state restore", "[plugin][sequencer]") {
