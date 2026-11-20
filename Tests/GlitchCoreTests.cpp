@@ -743,3 +743,397 @@ TEST_CASE("A faster tempo does not retrigger reverse in the middle of an active 
         if (i > 5900) REQUIRE_THAT(l, Catch::Matchers::WithinAbs(0.2 + 0.6 * (7999 - i) / 8000, 1e-5));
     }
 }
+
+TEST_CASE("BufferStutter dual-head crossfade eliminates tremolo pumping at 1/64 loop wraps and retriggers", "[core][stutter]") {
+    constexpr double kSr = 48000.0;
+    BufferStutter stutter;
+    stutter.prepare(kSr);
+    StutterSettings settings;
+    settings.syncedSliceBeats = 0.0625;
+    settings.gate = 1.0f;
+
+    // 1/64 at 120 BPM is 1500 samples; run across 4 repeats with constant unit-level input.
+    float minWrapOutput = 1.0f;
+    for (int i = 0; i < 6000; ++i) {
+        float l = 0.8f;
+        float r = 0.8f;
+        stutter.processSample(1.0f, 120.0, settings, l, r);
+        if (i >= 1500) {
+            minWrapOutput = std::min(minWrapOutput, l);
+        }
+    }
+    REQUIRE(minWrapOutput > 0.72f);
+
+    // Retriggering mid-playback crossfades from the outgoing head without a single-sample jump.
+    float prevL = 0.8f;
+    float prevR = 0.8f;
+    stutter.processSample(1.0f, 120.0, settings, prevL, prevR);
+    stutter.triggerCapture();
+    float maxStepJump = 0.0f;
+    for (int i = 0; i < 512; ++i) {
+        float l = -0.6f;
+        float r = -0.6f;
+        stutter.processSample(1.0f, 120.0, settings, l, r);
+        maxStepJump = std::max(maxStepJump, std::abs(l - prevL));
+        prevL = l;
+    }
+    REQUIRE(maxStepJump < 0.05f);
+}
+
+TEST_CASE("TapeStop circular varispeed buffer never exhausts after 15 seconds and sinc-filters high frequencies", "[core][tapestop]") {
+    constexpr double kSr = 8000.0;
+    TapeStopEffect tape;
+    tape.prepare(kSr);
+    TapeStopSettings settings;
+    settings.fade = false;
+    settings.lowpass = false;
+
+    // Exceed the old 12-second linear buffer limit (15 seconds = 120000 samples), then retrigger on a new level.
+    for (int i = 0; i < 120000; ++i) {
+        float l = 0.1f;
+        float r = 0.1f;
+        tape.processSample(1.0f, 4.0, settings, l, r);
+    }
+    tape.triggerBrake();
+    float afterRetriggerL = 0.0f;
+    for (int i = 0; i < 2000; ++i) {
+        float l = 0.75f;
+        float r = 0.75f;
+        tape.processSample(1.0f, 1.0, settings, l, r);
+        afterRetriggerL = l;
+    }
+    REQUIRE_THAT(afterRetriggerL, Catch::Matchers::WithinAbs(0.75f, 0.02f));
+
+    // Verify dynamic polyphase sinc lowpass strongly attenuates 16 kHz at 48 kHz as speed decelerates near 0.
+    TapeStopEffect hfTape;
+    hfTape.prepare(48000.0);
+    hfTape.triggerBrake();
+    TapeStopSettings lpSettings;
+    lpSettings.fade = false;
+    lpSettings.lowpass = true;
+    double tailSq = 0.0;
+    for (int i = 0; i < 24000; ++i) {
+        float s = 0.8f * std::sin(static_cast<float>(2.0 * std::numbers::pi * 16000.0 * i / 48000.0));
+        float l = s;
+        float r = s;
+        hfTape.processSample(1.0f, 0.25, lpSettings, l, r);
+        if (i >= 18000) {
+            tailSq += static_cast<double>(l * l);
+        }
+    }
+    const double tailRms = std::sqrt(tailSq / 6000.0);
+    REQUIRE(tailRms < 0.03);
+}
+
+TEST_CASE("ReverseGrainEffect dual-grain Hermite overlap eliminates zero-dip dropouts across fractional beat wraps", "[core][reverse]") {
+    constexpr double kSr = 48000.0;
+    const double fractionalSpanSec = 7.5 / 127.0;
+    ReverseGrainEffect reverse;
+    reverse.prepare(kSr);
+
+    for (int i = 0; i < 8000; ++i) {
+        reverse.recordDrySample(0.6f, 0.6f);
+    }
+    reverse.triggerGrain();
+
+    const double spanSamples = fractionalSpanSec * kSr;
+    float minAcrossWrap = 1.0f;
+    for (int i = 0; i < 7000; ++i) {
+        const float phase = static_cast<float>(std::fmod(static_cast<double>(i), spanSamples) / spanSamples);
+        float l = 0.6f;
+        float r = 0.6f;
+        reverse.processSample(1.0f, phase, fractionalSpanSec, l, r);
+        reverse.recordDrySample(0.6f, 0.6f);
+        minAcrossWrap = std::min(minAcrossWrap, l);
+    }
+    REQUIRE(minAcrossWrap > 0.52f);
+}
+
+TEST_CASE("PitchGlitchEffect WSOLA keeps drum transients tight within 22 ms without 42 ms flam echoes", "[core][pitch]") {
+    constexpr double kSr = 48000.0;
+    PitchGlitchEffect pitch;
+    pitch.prepare(kSr);
+
+    // Pre-warm silence, then inject a crisp 2 ms percussive transient burst at sample 4000.
+    std::vector<float> out(8000, 0.0f);
+    for (int i = 0; i < static_cast<int>(out.size()); ++i) {
+        const bool inBurst = (i >= 4000 && i < 4096);
+        const float env = inBurst ? (1.0f - static_cast<float>(i - 4000) / 96.0f) : 0.0f;
+        const float x = env * std::sin(static_cast<float>(2.0 * std::numbers::pi * 900.0 * i / kSr));
+        pitch.recordDrySample(x, x);
+        float l = x;
+        float r = x;
+        pitch.processSample(1.0f, l, r);
+        out[static_cast<size_t>(i)] = l;
+    }
+
+    const float mainHitRms = computeRms(out, 4000, 5056);
+    const float lateFlamRms = computeRms(out, 5350, 6400);
+    REQUIRE(mainHitRms > 0.02f);
+    REQUIRE(lateFlamRms < mainHitRms * 0.08f);
+}
+
+TEST_CASE("Keep Sub LR4 24 dB/oct crossover blocks uncorrelated wet sub bleed and sums flat", "[core][keepsub]") {
+    constexpr double kSr = 48000.0;
+    GlitchProcessorCore core;
+    core.applyPatternPreset(StepPatternPreset::Last32nd);
+    core.prepare(kSr);
+    core.setGateSmoothingMs(0.0f);
+    core.setKeepSubEnabled(true);
+    for (int i = 0; i < GlitchProcessorCore::kNumEffects; ++i) {
+        core.setEffectAmount(static_cast<GlitchFxId>(i), 0.0f);
+    }
+    core.setEffectEnabled(GlitchFxId::Reverse, true);
+    core.setEffectAmount(GlitchFxId::Reverse, 1.0f);
+
+    // Pre-warm Reverse buffer on inactive Step 30 with a loud 30 Hz sub-bass sine.
+    std::vector<float> warmL(4000), warmR(4000);
+    fillSineStereo(warmL, warmR, kSr, 30.0, 0.9f);
+    core.setTransport(120.0, true, true, 3.75);
+    core.processBlock(warmL.data(), warmR.data(), 4000);
+
+    // Enter active Step 31 with silent dry input: Reverse tries to output 30 Hz wet sub, which LR4 HPF must suppress > 28 dB.
+    std::vector<float> silentDryL(3000, 0.0f), silentDryR(3000, 0.0f);
+    core.setTransport(120.0, true, true, 3.88);
+    core.processBlock(silentDryL.data(), silentDryR.data(), 3000);
+    const float leakedWetSubRms = computeRms(silentDryL, 800, 2800);
+    REQUIRE(leakedWetSubRms < 0.03f);
+}
+
+TEST_CASE("WetFilter smooths steep resonant cutoff jumps per sample without crackle spikes", "[core][filter]") {
+    constexpr double kSr = 48000.0;
+    WetFilter filter;
+    filter.prepare(kSr);
+
+    float prevL = 0.0f;
+    float maxSampleDelta = 0.0f;
+    for (int i = 0; i < 2048; ++i) {
+        const float cutoff = (i < 1024) ? 400.0f : 12000.0f;
+        float l = 0.4f * std::sin(static_cast<float>(2.0 * std::numbers::pi * 400.0 * i / kSr));
+        float r = l;
+        filter.processSample(FilterMode::LowPass, cutoff, 0.98f, l, r);
+        if (i >= 1020 && i <= 1040) {
+            maxSampleDelta = std::max(maxSampleDelta, std::abs(l - prevL));
+        }
+        prevL = l;
+    }
+    REQUIRE(maxSampleDelta < 0.6f);
+}
+
+TEST_CASE("SampleRateDecimator PolyBLEP and oversampled BitrateCrusher suppress foldback aliasing", "[core][decimator][bitcrush]") {
+    constexpr double kSr = 48000.0;
+    constexpr int kN = 9600;
+    SampleRateDecimator decimator;
+    decimator.prepare(kSr);
+
+    std::vector<float> decimated(kN), naiveZoh(kN);
+    double zohPhase = 1.0;
+    float zohHeld = 0.0f;
+    const float amt = 0.36f;
+    const double step = 1.0 / (1.0 + static_cast<double>(amt * amt) * 58.0);
+    for (int i = 0; i < kN; ++i) {
+        const float in = 0.7f * std::sin(static_cast<float>(2.0 * std::numbers::pi * 7000.0 * i / kSr));
+        float l = in;
+        float r = in;
+        decimator.processSample(amt, l, r);
+        decimated[static_cast<size_t>(i)] = l;
+
+        zohPhase += step;
+        if (zohPhase >= 1.0) {
+            zohPhase -= 1.0;
+            zohHeld = in;
+        }
+        const float wet = std::min(1.0f, amt * 1.35f);
+        naiveZoh[static_cast<size_t>(i)] = in * (1.0f - wet) + zohHeld * wet;
+    }
+
+    auto highFreqAliasEnergy = [&](const std::vector<float>& x) {
+        double energy = 0.0;
+        for (int hz = 15500; hz <= 22500; hz += 500) {
+            if (hz == 21000) continue;
+            double re = 0.0;
+            double im = 0.0;
+            for (size_t i = 4800; i < x.size(); ++i) {
+                const double a = 2.0 * std::numbers::pi * hz * static_cast<double>(i) / kSr;
+                re += x[i] * std::cos(a);
+                im += x[i] * std::sin(a);
+            }
+            energy += re * re + im * im;
+        }
+        return energy;
+    };
+    REQUIRE(highFreqAliasEnergy(decimated) < highFreqAliasEnergy(naiveZoh) * 0.35);
+}
+
+TEST_CASE("Multi-FX routing gain-stages stacked nonlinear effects and supports parallel time-vs-spectral summing", "[core][gainstaging]") {
+    constexpr double kSr = 48000.0;
+    constexpr int kN = 12000;
+    GlitchProcessorCore core;
+    prepareAllOnCore(core, kSr);
+
+    for (auto id : { GlitchFxId::Bitcrush, GlitchFxId::Downsample, GlitchFxId::Wavefold,
+                     GlitchFxId::RingMod, GlitchFxId::CombReso, GlitchFxId::Saturation }) {
+        core.setEffectEnabled(id, true);
+        core.setEffectAmount(id, 0.85f);
+    }
+
+    std::vector<float> l(kN), r(kN);
+    fillSineStereo(l, r, kSr, 220.0, 0.125f);
+    const float inputRms = computeRms(l, 2000, kN);
+    core.processBlock(l.data(), r.data(), kN);
+    const float stackedRms = computeRms(l, 2000, kN);
+    REQUIRE(stackedRms < inputRms * 2.5f);
+    REQUIRE(stackedRms > inputRms * 0.4f);
+
+    // ParallelBuses mode sums time FX and spectral FX without series intermodulation blowup.
+    GlitchProcessorCore parallelCore;
+    prepareAllOnCore(parallelCore, kSr);
+    parallelCore.setFxRoutingMode(FxRoutingMode::ParallelBuses);
+    parallelCore.setEffectAmount(GlitchFxId::Stutter, 0.8f);
+    parallelCore.setEffectAmount(GlitchFxId::Wavefold, 0.85f);
+
+    GlitchProcessorCore seriesCore;
+    prepareAllOnCore(seriesCore, kSr);
+    seriesCore.setFxRoutingMode(FxRoutingMode::Series);
+    seriesCore.setEffectAmount(GlitchFxId::Stutter, 0.8f);
+    seriesCore.setEffectAmount(GlitchFxId::Wavefold, 0.85f);
+
+    std::vector<float> parL(kN), parR(kN), serL(kN), serR(kN);
+    fillSineStereo(parL, parR, kSr, 220.0, 0.4f);
+    serL = parL;
+    serR = parR;
+    parallelCore.processBlock(parL.data(), parR.data(), kN);
+    seriesCore.processBlock(serL.data(), serR.data(), kN);
+    REQUIRE(computeRmsDifference(parL, serL) > 0.01f);
+}
+
+TEST_CASE("PingPong and CombReso use post-fader send gating so wet tails ring across disabled steps", "[core][sendgate]") {
+    constexpr double kSr = 8000.0;
+    GlitchProcessorCore core;
+    core.setAllStepsFxMask(0u);
+    // Enable PingPong ONLY on Step 0 (samples 0..499); Step 4 (sample 2000) is disabled!
+    core.setStepFxMask(0, static_cast<uint16_t>(1u << static_cast<int>(GlitchFxId::PingPong)));
+    core.prepare(kSr);
+    core.setGateSmoothingMs(0.0f);
+    for (int i = 0; i < GlitchProcessorCore::kNumEffects; ++i) {
+        core.setEffectAmount(static_cast<GlitchFxId>(i), 0.0f);
+    }
+    core.setEffectEnabled(GlitchFxId::PingPong, true);
+    core.setEffectAmount(GlitchFxId::PingPong, 1.0f);
+    core.setTransport(120.0, true, true, 0.0);
+
+    std::vector<float> l(2500, 0.0f), r(2500, 0.0f);
+    l[0] = 1.0f;
+    r[0] = 1.0f;
+    core.processBlock(l.data(), r.data(), 2500);
+    REQUIRE(l[2000] > 0.4f);
+
+    // An impulse arriving on disabled Step 1 (sample 600) must NOT enter the echo send.
+    std::fill(l.begin(), l.end(), 0.0f);
+    std::fill(r.begin(), r.end(), 0.0f);
+    core.reset();
+    core.setTransport(120.0, true, true, 0.0);
+    l[600] = 1.0f;
+    r[600] = 1.0f;
+    core.processBlock(l.data(), r.data(), 2500);
+    REQUIRE(std::abs(l[600] - 1.0f) < 1e-5f);
+    std::vector<float> tailL(600, 0.0f), tailR(600, 0.0f);
+    core.setTransport(120.0, true, true, 2500.0 / 4000.0);
+    core.processBlock(tailL.data(), tailR.data(), 600);
+    REQUIRE(std::abs(tailL[100]) < 1e-5f);
+}
+
+TEST_CASE("PingPongEcho SVF band-limits repeats to 120 Hz-7 kHz and morphs tempo changes smoothly", "[core][echo]") {
+    constexpr double kSr = 48000.0;
+    auto measureEchoBandGain = [&](double freqHz) {
+        PingPongEchoEffect echo;
+        echo.prepare(kSr);
+        constexpr int kDelay = 12000;
+        std::vector<float> l(kDelay * 2 + 4500, 0.0f), r(kDelay * 2 + 4500, 0.0f);
+        for (int i = 0; i < 4000; ++i) {
+            const float s = 0.5f * std::sin(static_cast<float>(2.0 * std::numbers::pi * freqHz * i / kSr));
+            l[static_cast<size_t>(i)] = s;
+            r[static_cast<size_t>(i)] = s;
+        }
+        for (size_t i = 0; i < l.size(); ++i) {
+            echo.processSample(1.0f, 120.0, l[i], r[i]);
+        }
+        return computeRms(r, kDelay * 2 + 500, kDelay * 2 + 3500);
+    };
+
+    const float midGain = measureEchoBandGain(1000.0);
+    const float subGain = measureEchoBandGain(40.0);
+    const float highGain = measureEchoBandGain(16000.0);
+    REQUIRE(subGain < midGain * 0.35f);
+    REQUIRE(highGain < midGain * 0.30f);
+
+    // Tempo jump mid-echo uses equal-power tap morphing instead of Doppler pitch slewing.
+    PingPongEchoEffect morphEcho;
+    morphEcho.prepare(kSr);
+    float prev = 0.0f;
+    float maxDiff = 0.0f;
+    for (int i = 0; i < 36000; ++i) {
+        const double bpm = (i < 18000) ? 120.0 : 88.0;
+        float l = 0.4f * std::sin(static_cast<float>(2.0 * std::numbers::pi * 220.0 * i / kSr));
+        float r = l;
+        morphEcho.processSample(1.0f, bpm, l, r);
+        if (i > 17900) {
+            maxDiff = std::max(maxDiff, std::abs(l - prev));
+        }
+        prev = l;
+    }
+    REQUIRE(maxDiff < 0.03f);
+}
+
+TEST_CASE("Phaser 12-stage ZDF cascade and Thiran Flanger create multi-notch dispersion without click spikes", "[core][modulation]") {
+    constexpr double kSr = 48000.0;
+    PhaserEffect phaser;
+    phaser.prepare(kSr);
+
+    // Measure steady-state phase shift / notch count across frequency on a slow LFO snapshot or chirp.
+    // With 12 ZDF allpass stages, total phase rotation spans up to 12 * pi (6 full cycles -> up to 6 notches),
+    // whereas a 6-stage phaser can produce at most 3 notches!
+    int signFlips = 0;
+    int prevSign = 0;
+    for (int m = 0; m < 40; ++m) {
+        const double hz = 120.0 * std::pow(12000.0 / 120.0, m / 39.0);
+        PhaserEffect probe;
+        probe.prepare(kSr);
+        double dot = 0.0;
+        for (int i = 0; i < 600; ++i) {
+            const float in = 0.05f * std::sin(static_cast<float>(2.0 * std::numbers::pi * hz * i / kSr));
+            float l = in;
+            float r = in;
+            probe.processSample(0.95f, l, r);
+            if (i >= 300) {
+                const float wetEst = (l - in * (1.0f - 0.5f * 0.95f)) / (0.5f * 0.95f);
+                dot += static_cast<double>(in * wetEst);
+            }
+        }
+        const int sign = (dot >= 0.0) ? 1 : -1;
+        if (prevSign != 0 && sign != prevSign) {
+            ++signFlips;
+        }
+        prevSign = sign;
+    }
+    REQUIRE(signFlips >= 8);
+
+    // Verify Thiran Flanger modulates across integer sample boundaries smoothly without click spikes.
+    ModulatedDelayEffect flanger;
+    flanger.prepare(kSr);
+    float prevL = 0.0f;
+    float maxSecondDiff = 0.0f;
+    float prevDiff = 0.0f;
+    for (int i = 0; i < 12000; ++i) {
+        float l = 0.5f * std::sin(static_cast<float>(2.0 * std::numbers::pi * 330.0 * i / kSr));
+        float r = l;
+        flanger.processSample(ModulatedDelayEffect::Mode::Flanger, 0.9f, l, r);
+        const float diff = l - prevL;
+        if (i > 200) {
+            maxSecondDiff = std::max(maxSecondDiff, std::abs(diff - prevDiff));
+        }
+        prevDiff = diff;
+        prevL = l;
+    }
+    REQUIRE(maxSecondDiff < 0.08f);
+}

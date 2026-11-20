@@ -1,13 +1,16 @@
 #include "BeatStepSequencer.h"
 #include <algorithm>
 #include <cmath>
+#include <numbers>
 
 namespace openglitch::core {
 
 BeatStepSequencer::BeatStepSequencer() {
     steps_.fill(true);
     stepFxMasks_.fill(kAllFxMask);
+    fxRampPhase_.fill(1.0f);
     fxEnvelopes_.fill(1.0f);
+    gateRampPhase_ = 1.0f;
     updateSmoothingCoeff();
 }
 
@@ -24,10 +27,13 @@ void BeatStepSequencer::reset() {
     const uint16_t activeMask0 = getEffectiveStepFxMask(0);
     wasActiveStep_ = false;
     wasActiveFxMask_ = 0u;
-    envelope_ = activeMask0 != 0u ? 1.0f : 0.0f;
+    gateRampPhase_ = activeMask0 != 0u ? 1.0f : 0.0f;
+    envelope_ = gateRampPhase_;
     for (int fx = 0; fx < kNumFxSlots; ++fx) {
         const bool fxOn = ((activeMask0 >> fx) & 1u) != 0u;
-        fxEnvelopes_[static_cast<size_t>(fx)] = fxOn ? 1.0f : 0.0f;
+        const float initVal = fxOn ? 1.0f : 0.0f;
+        fxRampPhase_[static_cast<size_t>(fx)] = initVal;
+        fxEnvelopes_[static_cast<size_t>(fx)] = initVal;
     }
 }
 
@@ -230,11 +236,41 @@ void BeatStepSequencer::setSmoothingTimeMs(float ms) {
 }
 
 void BeatStepSequencer::updateSmoothingCoeff() {
-    const double tauSeconds = static_cast<double>(smoothingTimeMs_) * 0.001;
-    if (tauSeconds <= 0.0001 || sampleRate_ <= 0.0) {
-        smoothCoeff_ = 0.0f;
-    } else {
-        smoothCoeff_ = static_cast<float>(std::exp(-1.0 / (tauSeconds * sampleRate_)));
+    if (smoothingTimeMs_ <= 0.001f || sampleRate_ <= 0.0) {
+        gateAttackStep_ = 1.0f;
+        gateReleaseStep_ = 1.0f;
+        for (int fx = 0; fx < kNumFxSlots; ++fx) {
+            const bool isShapedRamp = (fx == 2 || fx == 3 || fx == 5 || fx == 6 || fx == 7);
+            fxAttackCoeff_[static_cast<size_t>(fx)] = isShapedRamp ? 1.0f : 0.0f;
+            fxReleaseCoeff_[static_cast<size_t>(fx)] = isShapedRamp ? 1.0f : 0.0f;
+        }
+        return;
+    }
+
+    const double scale = static_cast<double>(smoothingTimeMs_) / 2.5;
+    gateAttackStep_ = static_cast<float>(1.0 / std::max(1.0, 0.0020 * scale * sampleRate_));
+    gateReleaseStep_ = static_cast<float>(1.0 / std::max(1.0, 0.0030 * scale * sampleRate_));
+
+    for (int fx = 0; fx < kNumFxSlots; ++fx) {
+        const auto idx = static_cast<size_t>(fx);
+        // Buffer splices (Stutter=2, TapeStop=3, Reverse=5, PitchGlitch=7): 1.75 ms / 2.0 ms S-curve
+        if (fx == 2 || fx == 3 || fx == 5 || fx == 7) {
+            fxAttackCoeff_[idx] = static_cast<float>(1.0 / std::max(1.0, 0.00175 * scale * sampleRate_));
+            fxReleaseCoeff_[idx] = static_cast<float>(1.0 / std::max(1.0, 0.00200 * scale * sampleRate_));
+            continue;
+        }
+        // Chopper gate (FX 6): click-free 3.0 ms / 3.2 ms raised-cosine edges
+        if (fx == 6) {
+            fxAttackCoeff_[idx] = static_cast<float>(1.0 / std::max(1.0, 0.0030 * scale * sampleRate_));
+            fxReleaseCoeff_[idx] = static_cast<float>(1.0 / std::max(1.0, 0.0032 * scale * sampleRate_));
+            continue;
+        }
+        // Send FX (CombReso=8, PingPong=13) & Spectral/Mod FX: fast punchy attack, smooth asymmetric release
+        const bool isSendFx = (fx == 8 || fx == 13);
+        const double tauAttack = (isSendFx ? 0.00055 : 0.00060) * scale;
+        const double tauRelease = (isSendFx ? 0.00220 : 0.00280) * scale;
+        fxAttackCoeff_[idx] = static_cast<float>(std::exp(-1.0 / std::max(1e-6, tauAttack * sampleRate_)));
+        fxReleaseCoeff_[idx] = static_cast<float>(std::exp(-1.0 / std::max(1e-6, tauRelease * sampleRate_)));
     }
 }
 
@@ -378,16 +414,36 @@ float BeatStepSequencer::advanceSampleWithFxMask(double bpm,
     wasActiveStep_ = activeNow;
     wasActiveFxMask_ = activeFxMaskNow;
 
-    const float target = activeNow ? 1.0f : 0.0f;
-    envelope_ = target + smoothCoeff_ * (envelope_ - target);
+    const float gateDelta = activeNow ? gateAttackStep_ : -gateReleaseStep_;
+    gateRampPhase_ = std::clamp(gateRampPhase_ + gateDelta, 0.0f, 1.0f);
+    envelope_ = 0.5f * (1.0f - std::cos(std::numbers::pi_v<float> * gateRampPhase_));
     if (envelope_ < 1e-5f) envelope_ = 0.0f;
     if (envelope_ > 0.99999f) envelope_ = 1.0f;
 
     for (int fx = 0; fx < kNumFxSlots; ++fx) {
+        const auto idx = static_cast<size_t>(fx);
         const bool fxActive = ((activeFxMaskNow >> fx) & 1u) != 0u;
+        float& fxEnv = fxEnvelopes_[idx];
+
+        // Buffer splices use S-curve; Chopper uses raised-cosine; Send & Spectral FX use asymmetric 1-pole.
+        if (fx == 2 || fx == 3 || fx == 5 || fx == 7) {
+            const float step = fxActive ? fxAttackCoeff_[idx] : -fxReleaseCoeff_[idx];
+            const float p = std::clamp(fxRampPhase_[idx] + step, 0.0f, 1.0f);
+            fxRampPhase_[idx] = p;
+            fxEnv = p * p * (3.0f - 2.0f * p);
+            continue;
+        }
+        if (fx == 6) {
+            const float step = fxActive ? fxAttackCoeff_[idx] : -fxReleaseCoeff_[idx];
+            const float p = std::clamp(fxRampPhase_[idx] + step, 0.0f, 1.0f);
+            fxRampPhase_[idx] = p;
+            fxEnv = 0.5f * (1.0f - std::cos(std::numbers::pi_v<float> * p));
+            continue;
+        }
+
         const float fxTarget = fxActive ? 1.0f : 0.0f;
-        float& fxEnv = fxEnvelopes_[static_cast<size_t>(fx)];
-        fxEnv = fxTarget + smoothCoeff_ * (fxEnv - fxTarget);
+        const float coeff = fxActive ? fxAttackCoeff_[idx] : fxReleaseCoeff_[idx];
+        fxEnv = fxTarget + coeff * (fxEnv - fxTarget);
         if (fxEnv < 1e-5f) fxEnv = 0.0f;
         if (fxEnv > 0.99999f) fxEnv = 1.0f;
     }

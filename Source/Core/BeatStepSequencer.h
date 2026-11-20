@@ -124,7 +124,12 @@ private:
     double externalElapsedPpq_ = 0.0;
 
     float smoothingTimeMs_ = 2.5f;
-    float smoothCoeff_ = 0.99f;
+    float gateAttackStep_ = 0.02f;
+    float gateReleaseStep_ = 0.01f;
+    float gateRampPhase_ = 0.0f;
+    std::array<float, kNumFxSlots> fxAttackCoeff_{};
+    std::array<float, kNumFxSlots> fxReleaseCoeff_{};
+    std::array<float, kNumFxSlots> fxRampPhase_{};
     int sequenceLength_ = kNumSteps;
     float swingPercent_ = 0.0f;
     float patternRate_ = 1.0f;
