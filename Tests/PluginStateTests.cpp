@@ -1,3 +1,4 @@
+#include "../Source/Plugin/DetailPanelComponent.h"
 #include "../Source/Plugin/PluginEditor.h"
 #include "../Source/Plugin/PluginProcessor.h"
 #include "../Source/Plugin/Parameters.h"
@@ -372,6 +373,29 @@ TEST_CASE("Bars fill in the theme colour and bipolar knobs fill from zero", "[pl
     REQUIRE(litLeftOfCentre == 0);
     gate.setLookAndFeel(nullptr);
     gain.setLookAndFeel(nullptr);
+}
+
+TEST_CASE("Detail controls with no effect dim and name what turns them on", "[plugin][gui]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    OpenGlitchFXProcessor processor;
+    openglitch::ui::GlitchLookAndFeel look;
+    openglitch::ui::DetailPanelComponent panel(processor, look);
+    auto* cutoff = findDescendant<juce::Slider>(panel, [](juce::Slider& s) { return s.getTooltip().startsWith("Filter cutoff"); });
+    auto* midiStart = findDescendant<juce::ComboBox>(panel, [](juce::ComboBox& b) { return b.getTooltip().startsWith("FREE starts"); });
+    REQUIRE(cutoff != nullptr);
+    REQUIRE(midiStart != nullptr);
+    panel.refreshDependencies();
+    REQUIRE(cutoff->getAlpha() < 0.5f);
+    REQUIRE(cutoff->getTooltip().contains("Needs FILTER on"));
+    REQUIRE(midiStart->getAlpha() < 0.5f);
+    REQUIRE(midiStart->getTooltip().contains("Needs TRIGGER set to MIDI"));
+
+    processor.parameters.getParameter(openglitch::params::kFilterMode)->setValueNotifyingHost(0.5f);
+    processor.parameters.getParameter(openglitch::params::kTriggerMode)->setValueNotifyingHost(1.0f);
+    panel.refreshDependencies();
+
+    REQUIRE(cutoff->getAlpha() > 0.99f);
+    REQUIRE(midiStart->getAlpha() > 0.99f);
 }
 
 TEST_CASE("The editor scales its content as one unit and reopens at the saved size", "[plugin][gui]") {

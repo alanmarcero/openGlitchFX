@@ -1,4 +1,5 @@
 #include "DetailPanelComponent.h"
+#include <ranges>
 
 namespace openglitch::ui {
 
@@ -44,34 +45,34 @@ DetailPanelComponent::DetailPanelComponent(OpenGlitchFXProcessor& processor, con
     cards_[3] = { "FILTER & TRIGGER", "", {} };
 
     setupCombo(stutterSyncBox_, kStutterSync, "SIZE",
-               "Stutter slice length. KNOB lets the STUTTER amount set it; a note value locks it to the tempo.");
+               "Stutter slice length. KNOB lets the STUTTER amount set it; a note value locks it to the tempo. Needs STUTTER on.");
     setupCombo(stutterReverseBox_, kStutterReverse, "REVERSE",
-               "Play repeats backwards: every repeat (ALL) or every second one (ALTERNATE).");
+               "Play repeats backwards: every repeat (ALL) or every second one (ALTERNATE). Needs STUTTER on.");
     setupBar(stutterGateSlider_, kStutterGate, "GATE",
-             "How much of each repeat is heard. Lower values cut each repeat short.");
+             "How much of each repeat is heard. Lower values cut each repeat short. Needs STUTTER on.");
     setupBar(stutterPitchSlider_, kStutterPitch, "PITCH / REPEAT",
-             "Pitch change added on every repeat, in semitones. Negative values pitch each repeat further down.");
+             "Pitch change added on every repeat, in semitones. Negative values pitch each repeat further down. Needs STUTTER on.");
     setupToggle(stutterAdvanceButton_, kStutterAdvance,
-                "Each repeat starts half a slice later, so the stutter walks forward through the audio.");
+                "Each repeat starts half a slice later, so the stutter walks forward through the audio. Needs STUTTER on.");
 
     setupCombo(tapeDirectionBox_, kTapeDirection, "DIRECTION",
-               "STOP slows the tape to a halt. START spins it up from a standstill.");
+               "STOP slows the tape to a halt. START spins it up from a standstill. Needs TAPE STOP on.");
     setupCombo(tapeCurveBox_, kTapeCurve, "CURVE",
-               "SMOOTH ramps the speed continuously. STEPPED moves it in 8 audible steps.");
+               "SMOOTH ramps the speed continuously. STEPPED moves it in 8 audible steps. Needs TAPE STOP on.");
     setupCombo(tapeLengthBox_, kTapeLength, "LENGTH",
-               "Stop length. PAD SPAN stretches it over the active pads; a note value fixes it to the tempo.");
-    setupToggle(tapeSlipButton_, kTapeSlip, "Adds wow and flutter, like a worn tape or a warped record.");
-    setupToggle(tapeLowpassButton_, kTapeLowpass, "Low-pass filter that rolls off highs as the tape slows down.");
-    setupToggle(tapeFadeButton_, kTapeFade, "Lowers the volume as the tape slows down.");
+               "Stop length. PAD SPAN stretches it over the active pads; a note value fixes it to the tempo. Needs TAPE STOP on.");
+    setupToggle(tapeSlipButton_, kTapeSlip, "Adds wow and flutter, like a worn tape or a warped record. Needs TAPE STOP on.");
+    setupToggle(tapeLowpassButton_, kTapeLowpass, "Low-pass filter that rolls off highs as the tape slows down. Needs TAPE STOP on.");
+    setupToggle(tapeFadeButton_, kTapeFade, "Lowers the volume as the tape slows down. Needs TAPE STOP on.");
 
     setupCombo(filterModeBox_, kFilterMode, "FILTER",
                "Filter on the glitched signal while a pad or MIDI note is active. The FILTER envelope moves its cutoff.");
-    setupBar(filterCutoffSlider_, kFilterCutoff, "CUTOFF", "Filter cutoff frequency.");
-    setupBar(filterResoSlider_, kFilterReso, "RESONANCE", "Filter resonance.");
+    setupBar(filterCutoffSlider_, kFilterCutoff, "CUTOFF", "Filter cutoff frequency. Needs FILTER on.");
+    setupBar(filterResoSlider_, kFilterReso, "RESONANCE", "Filter resonance. Needs FILTER on.");
     setupCombo(triggerModeBox_, kTriggerMode, "TRIGGER",
                "SEQUENCER uses the 32 pads. MIDI ignores the pads: any note triggers every FX, notes 60-74 trigger one FX each.");
     setupCombo(triggerStartBox_, kTriggerStart, "MIDI START",
-               "FREE starts on the note. SYNCED waits for the next 1/32 step.");
+               "FREE starts on the note. SYNCED waits for the next 1/32 step. Needs TRIGGER set to MIDI.");
     setupCombo(mixModeBox_, kMixMode, "DRY/WET",
                "INSERT replaces the dry signal on active pads. PARALLEL keeps the dry signal and adds the glitch on top.");
 
@@ -98,12 +99,13 @@ DetailPanelComponent::DetailPanelComponent(OpenGlitchFXProcessor& processor, con
     envOnButton_.setTooltip("Turn this envelope on.");
     addAndMakeVisible(envOnButton_);
     envRateBox_.addItemList(kNoteLengthLabels, 1);
-    envRateBox_.setTooltip("PAD SPAN runs the envelope once across each block of active pads. A note value loops it in time with the song.");
+    envRateBox_.setTooltip("PAD SPAN runs the envelope once across each block of active pads. A note value loops it in time with the song. "
+                           "Needs this envelope on.");
     captions_.emplace_back(&envRateBox_, "LENGTH");
     addAndMakeVisible(envRateBox_);
     envDepthSlider_.setSliderStyle(juce::Slider::LinearBar);
     envDepthSlider_.setTextValueSuffix(" %");
-    envDepthSlider_.setTooltip("How far the envelope moves its target.");
+    envDepthSlider_.setTooltip("How far the envelope moves its target. Needs this envelope on.");
     captions_.emplace_back(&envDepthSlider_, "DEPTH");
     addAndMakeVisible(envDepthSlider_);
     envResetButton_.setTooltip("Restore this envelope's default shape.");
@@ -166,6 +168,54 @@ void DetailPanelComponent::refreshFromState() {
     envEditor_.setPoints(processor_.getEnvelopePoints(static_cast<EnvTarget>(selectedEnv_)));
 }
 
+void DetailPanelComponent::refreshDependencies() {
+    using namespace openglitch::params;
+    const auto value = [this](const char* id) { return processor_.parameters.getRawParameterValue(id)->load(); };
+    const bool stutterOn = value(kStutterOn) > 0.5f && value(kStutterAmt) > 0.1f;
+    const bool tapeOn = value(kTapeStopOn) > 0.5f && value(kTapeStopAmt) > 0.1f;
+    const bool filterOn = value(kFilterMode) > 0.5f;
+    const bool midiTrigger = value(kTriggerMode) > 0.5f;
+    const auto target = static_cast<EnvTarget>(selectedEnv_);
+    const bool envOn = envOnButton_.getToggleState();
+    const bool envNeedsFilter = target == EnvTarget::Filter && !filterOn;
+    const bool envNeedsStutter = target == EnvTarget::Pitch && !stutterOn;
+    const bool envActive = envOn && !envNeedsFilter && !envNeedsStutter;
+
+    const std::array<std::pair<juce::Component*, bool>, 16> controls = { {
+        { &stutterSyncBox_, stutterOn }, { &stutterReverseBox_, stutterOn }, { &stutterGateSlider_, stutterOn },
+        { &stutterPitchSlider_, stutterOn }, { &stutterAdvanceButton_, stutterOn },
+        { &tapeDirectionBox_, tapeOn }, { &tapeCurveBox_, tapeOn }, { &tapeLengthBox_, tapeOn },
+        { &tapeSlipButton_, tapeOn }, { &tapeLowpassButton_, tapeOn }, { &tapeFadeButton_, tapeOn },
+        { &filterCutoffSlider_, filterOn }, { &filterResoSlider_, filterOn }, { &triggerStartBox_, midiTrigger },
+        { &envRateBox_, envActive }, { &envDepthSlider_, envActive },
+    } };
+    const auto envSubtitle = [&]() -> juce::String {
+        if (!envOn) return "TURN ON TO USE LENGTH AND DEPTH";
+        if (envNeedsFilter) return "FILTER ENVELOPE NEEDS FILTER ON";
+        if (envNeedsStutter) return "PITCH ENVELOPE NEEDS STUTTER ON";
+        return "DRAWN MODULATION OF THE WET SIGNAL";
+    }();
+    const auto filterSubtitle = [&]() -> juce::String {
+        if (!filterOn) return "CUTOFF NEEDS FILTER ON";
+        if (!midiTrigger) return "MIDI START NEEDS MIDI";
+        return "";
+    }();
+    const std::array<juce::String, 4> subtitles = { stutterOn ? "STUTTER OPTIONS" : "NEEDS STUTTER ON",
+                                                    tapeOn ? "TAPE STOP OPTIONS" : "NEEDS TAPE STOP ON",
+                                                    envSubtitle, filterSubtitle };
+
+    const bool dimmingChanged = std::ranges::any_of(controls, [](const auto& control) {
+        return (control.first->getAlpha() < 1.0f) == control.second;
+    });
+    const bool subtitlesChanged = !std::ranges::equal(cards_, subtitles, {}, &Card::subtitle);
+    if (!dimmingChanged && !subtitlesChanged) {
+        return;
+    }
+    std::ranges::for_each(controls, [](const auto& control) { control.first->setAlpha(control.second ? 1.0f : 0.45f); });
+    std::ranges::for_each(std::views::iota(size_t{ 0 }, cards_.size()), [&](size_t i) { cards_[i].subtitle = subtitles[i]; });
+    repaint();
+}
+
 void DetailPanelComponent::setTelemetry(const openglitch::core::MeterTelemetry& telemetry) {
     const auto& pal = lnf_.getPalette();
     for (size_t i = 0; i < envTabs_.size(); ++i) {
@@ -180,7 +230,7 @@ void DetailPanelComponent::setTelemetry(const openglitch::core::MeterTelemetry& 
 void DetailPanelComponent::resized() {
     const auto bounds = getLocalBounds().toFloat();
     constexpr float kCardGap = 8.0f;
-    const std::array<float, 4> widths = { 230.0f, 230.0f, 0.0f, 230.0f };
+    const std::array<float, 4> widths = { 230.0f, 230.0f, 0.0f, 300.0f };
     const float envWidth = bounds.getWidth() - widths[0] - widths[1] - widths[3] - 3.0f * kCardGap;
 
     float x = bounds.getX();
@@ -263,9 +313,9 @@ void DetailPanelComponent::paint(juce::Graphics& g) {
         g.drawText(card.subtitle, hdr.reduced(8.0f, 0.0f).toNearestInt(), juce::Justification::centredRight);
     }
 
-    g.setColour(pal.textMuted);
     g.setFont(juce::FontOptions(8.5f, juce::Font::bold));
     for (const auto& [component, caption] : captions_) {
+        g.setColour(pal.textMuted.withMultipliedAlpha(component->getAlpha()));
         const auto b = component->getBounds();
         g.drawText(caption, b.getX(), b.getY() - static_cast<int>(kCaptionH), b.getWidth(), static_cast<int>(kCaptionH),
                    juce::Justification::centredLeft);

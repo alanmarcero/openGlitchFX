@@ -409,6 +409,7 @@ void EditorContent::timerCallback() {
         detailPanel_.refreshFromState();
     }
     detailPanel_.setTelemetry(tel);
+    detailPanel_.refreshDependencies();
     const auto scaleText = juce::String(juce::roundToInt(processor_.getEditorScale() * 100.0f)) + "%";
     if (scaleBox_.getText() != scaleText) {
         scaleBox_.setText(scaleText, juce::dontSendNotification);

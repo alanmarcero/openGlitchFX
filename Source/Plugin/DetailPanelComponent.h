@@ -15,6 +15,8 @@ public:
 
     void setTelemetry(const openglitch::core::MeterTelemetry& telemetry);
     void refreshFromState();
+    // Dims controls that have no effect and names what turns them on.
+    void refreshDependencies();
 
     void paint(juce::Graphics& g) override;
     void resized() override;
