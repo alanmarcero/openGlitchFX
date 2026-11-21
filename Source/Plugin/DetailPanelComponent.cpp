@@ -18,14 +18,22 @@ struct EnvAxis {
     const char* top;
     const char* bottom;
     bool centreLine;
+    int valueSteps;
+    juce::String (*describe)(float y);
 };
 
-// Order matches EnvTarget
+// Order matches EnvTarget. PITCH snaps to the 24 semitones of its range.
 constexpr std::array<EnvAxis, 4> kEnvAxes = {{
-    { "100%",   "0%",     false },
-    { "R",      "L",      true  },
-    { "CUTOFF", "-8 OCT", false },
-    { "+12 ST", "-12 ST", true  }
+    { "100%",   "0%",     false, 0,  [](float y) { return juce::String(juce::roundToInt(y * 100.0f)) + "%"; } },
+    { "R",      "L",      true,  0,  [](float y) {
+        const int pan = juce::roundToInt((y - 0.5f) * 200.0f);
+        return pan == 0 ? juce::String("C") : juce::String(std::abs(pan)) + (pan < 0 ? " L" : " R");
+    } },
+    { "CUTOFF", "-8 OCT", false, 0,  [](float y) { return juce::String((y - 1.0f) * 8.0f, 1) + " OCT"; } },
+    { "+12 ST", "-12 ST", true,  24, [](float y) {
+        const int tenths = juce::roundToInt((y - 0.5f) * 240.0f);
+        return (tenths > 0 ? "+" : "") + juce::String(static_cast<float>(tenths) / 10.0f, tenths % 10 == 0 ? 0 : 1) + " st";
+    } }
 }};
 
 // Each control skips the caption row, so the rows align.
@@ -160,7 +168,7 @@ void DetailPanelComponent::selectEnvelope(int index) {
     envDepthAttach_ = std::make_unique<SliderAttachment>(processor_.parameters, desc.depthParamId, envDepthSlider_);
     envDepthSlider_.setDoubleClickReturnValue(true, 100.0);
 
-    envEditor_.setAxisLabels(axis.top, axis.bottom, axis.centreLine);
+    envEditor_.setAxis(axis.top, axis.bottom, axis.centreLine, axis.valueSteps, axis.describe);
     envEditor_.setPoints(processor_.getEnvelopePoints(static_cast<EnvTarget>(selectedEnv_)));
 }
 

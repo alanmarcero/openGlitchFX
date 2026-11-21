@@ -398,6 +398,42 @@ TEST_CASE("Detail controls with no effect dim and name what turns them on", "[pl
     REQUIRE(midiStart->getAlpha() > 0.99f);
 }
 
+TEST_CASE("Pitch envelope points snap, read out while dragging, and delete as their own undo step", "[plugin][gui]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    OpenGlitchFXProcessor processor;
+    openglitch::ui::GlitchLookAndFeel look;
+    openglitch::ui::DetailPanelComponent panel(processor, look);
+    panel.setBounds(0, 0, 1384, 250);
+    auto* pitchTab = findDescendant<juce::TextButton>(panel, [](juce::TextButton& b) { return b.getButtonText() == "PITCH"; });
+    auto* envelope = findDescendant<openglitch::ui::EnvelopeEditorComponent>(panel, [](auto&) { return true; });
+    REQUIRE(pitchTab != nullptr);
+    REQUIRE(envelope != nullptr);
+    pitchTab->onClick();
+    const auto plot = envelope->getLocalBounds().toFloat().reduced(6.0f);
+    const juce::Point<float> target(plot.getX() + 0.30f * plot.getWidth(), plot.getBottom() - 0.804f * plot.getHeight());
+    auto mouse = [&](juce::ModifierKeys mods, int clicks) {
+        return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), target, mods, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                                envelope, envelope, juce::Time::getCurrentTime(), target, juce::Time::getCurrentTime(), clicks, false);
+    };
+    using openglitch::core::EnvTarget;
+
+    envelope->mouseDown(mouse({}, 1));
+    const auto readout = envelope->dragReadout();
+    envelope->mouseUp(mouse({}, 1));
+    const auto added = processor.getEnvelopePoints(EnvTarget::Pitch);
+    envelope->mouseDown(mouse({}, 2));
+    envelope->mouseUp(mouse({}, 2));
+    envelope->mouseDoubleClick(mouse({}, 2));
+    const auto afterDelete = processor.getEnvelopePoints(EnvTarget::Pitch).size();
+    REQUIRE(processor.getUndo().undo());
+
+    REQUIRE(readout == "+7 st  5/16");
+    REQUIRE(added.size() == 3);
+    REQUIRE_THAT(added[1].x, Catch::Matchers::WithinAbs(5.0 / 16.0, 1e-4));
+    REQUIRE(afterDelete == 2);
+    REQUIRE(processor.getEnvelopePoints(EnvTarget::Pitch).size() == 3);
+}
+
 TEST_CASE("The editor scales its content as one unit and reopens at the saved size", "[plugin][gui]") {
     juce::ScopedJuceInitialiser_GUI gui;
     OpenGlitchFXProcessor processor;

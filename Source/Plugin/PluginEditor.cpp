@@ -725,7 +725,7 @@ void EditorContent::resized() {
     randomizeButton_.setBounds(1038, controlY, 136, controlH);
 
     // 15 Glitch FX Cards (3 Rows x 5 Columns) + Master Strip on Right
-    const float detailH = 220.0f;
+    const float detailH = 250.0f;
     const float fxTop = 306.0f;
     const float fxTotalH = h - fxTop - detailH - 22.0f - 8.0f;
     detailPanel_.setBounds(static_cast<int>(margin), static_cast<int>(h - 22.0f - detailH),

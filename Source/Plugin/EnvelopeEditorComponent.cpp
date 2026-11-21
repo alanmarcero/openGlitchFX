@@ -22,11 +22,24 @@ void EnvelopeEditorComponent::setPoints(std::vector<EnvelopePoint> points) {
     repaint();
 }
 
-void EnvelopeEditorComponent::setAxisLabels(const juce::String& top, const juce::String& bottom, bool showCentreLine) {
+void EnvelopeEditorComponent::setAxis(const juce::String& top, const juce::String& bottom, bool showCentreLine,
+                                      int valueSteps, juce::String (*describeValue)(float)) {
     topLabel_ = top;
     bottomLabel_ = bottom;
     showCentreLine_ = showCentreLine;
+    valueSteps_ = valueSteps;
+    describeValue_ = describeValue;
     repaint();
+}
+
+juce::String EnvelopeEditorComponent::dragReadout() const {
+    if (dragIndex_ < 0 || describeValue_ == nullptr) {
+        return {};
+    }
+    const auto& point = points_[static_cast<size_t>(dragIndex_)];
+    const float sixteenths = point.x * 16.0f;
+    const bool onGrid = std::abs(sixteenths - std::round(sixteenths)) < 0.01f;
+    return describeValue_(point.y) + "  " + juce::String(sixteenths, onGrid ? 0 : 1) + "/16";
 }
 
 void EnvelopeEditorComponent::setPlayhead(float phase01, bool visible) {
@@ -52,10 +65,15 @@ juce::Point<float> EnvelopeEditorComponent::toScreen(const EnvelopePoint& p) con
     return { area.getX() + p.x * area.getWidth(), area.getBottom() - p.y * area.getHeight() };
 }
 
-EnvelopePoint EnvelopeEditorComponent::fromScreen(juce::Point<float> pos) const {
+EnvelopePoint EnvelopeEditorComponent::fromScreen(juce::Point<float> pos, bool snap) const {
     const auto area = plotArea();
-    return { std::clamp((pos.x - area.getX()) / area.getWidth(), 0.0f, 1.0f),
-             std::clamp((area.getBottom() - pos.y) / area.getHeight(), 0.0f, 1.0f) };
+    const float x = std::clamp((pos.x - area.getX()) / area.getWidth(), 0.0f, 1.0f);
+    const float y = std::clamp((area.getBottom() - pos.y) / area.getHeight(), 0.0f, 1.0f);
+    if (!snap) {
+        return { x, y };
+    }
+    const float steps = static_cast<float>(valueSteps_);
+    return { std::round(x * 16.0f) / 16.0f, valueSteps_ > 0 ? std::round(y * steps) / steps : y };
 }
 
 int EnvelopeEditorComponent::hitTestPoint(juce::Point<float> pos) const {
@@ -108,9 +126,11 @@ void EnvelopeEditorComponent::mouseDown(const juce::MouseEvent& event) {
     if (static_cast<int>(points_.size()) >= ModEnvelope::kMaxPoints) {
         return;
     }
-    const auto added = fromScreen(event.position);
+    const auto added = fromScreen(event.position, !event.mods.isShiftDown());
     const auto insertAt = std::ranges::find_if(points_, [&](const EnvelopePoint& p) { return p.x > added.x; });
-    dragIndex_ = static_cast<int>(std::distance(points_.begin(), points_.insert(insertAt, added)));
+    // Insert first: the insert can reallocate, so a begin() taken before it is stale.
+    const auto inserted = points_.insert(insertAt, added);
+    dragIndex_ = static_cast<int>(std::distance(points_.begin(), inserted));
     if (onPointsChanged) {
         onPointsChanged(points_);
     }
@@ -125,7 +145,7 @@ void EnvelopeEditorComponent::mouseDrag(const juce::MouseEvent& event) {
     const auto index = static_cast<size_t>(dragIndex_);
     const float minX = index == 0 ? 0.0f : points_[index - 1].x;
     const float maxX = index + 1 == points_.size() ? 1.0f : points_[index + 1].x;
-    auto moved = fromScreen(event.position);
+    auto moved = fromScreen(event.position, !event.mods.isShiftDown());
     moved.x = std::clamp(moved.x, minX, maxX);
     points_[index] = moved;
     if (onPointsChanged) {
@@ -137,10 +157,14 @@ void EnvelopeEditorComponent::mouseDrag(const juce::MouseEvent& event) {
 void EnvelopeEditorComponent::mouseUp(const juce::MouseEvent& /*event*/) {
     dragIndex_ = -1;
     endEdit();
+    repaint();
 }
 
+// JUCE sends the double-click after the second mouseUp has ended the gesture.
 void EnvelopeEditorComponent::mouseDoubleClick(const juce::MouseEvent& event) {
+    beginEdit();
     removePoint(hitTestPoint(event.position));
+    endEdit();
 }
 
 void EnvelopeEditorComponent::paint(juce::Graphics& g) {
@@ -203,6 +227,16 @@ void EnvelopeEditorComponent::paint(juce::Graphics& g) {
         const float x = area.getX() + playhead_ * area.getWidth();
         g.setColour(pal.accentSecondary);
         g.drawLine(x, area.getY(), x, area.getBottom(), 1.5f);
+    }
+
+    if (const auto readout = dragReadout(); readout.isNotEmpty()) {
+        const auto point = toScreen(points_[static_cast<size_t>(dragIndex_)]);
+        const auto box = juce::Rectangle<float>(112.0f, 18.0f).withCentre({ point.x, point.y - 16.0f }).constrainedWithin(bounds.reduced(2.0f));
+        g.setColour(pal.bgTop.withAlpha(0.92f));
+        g.fillRoundedRectangle(box, 3.0f);
+        g.setColour(pal.textBright);
+        g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
+        g.drawText(readout, box, juce::Justification::centred);
     }
 }
 
