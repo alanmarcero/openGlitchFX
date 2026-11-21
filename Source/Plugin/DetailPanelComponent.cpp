@@ -112,7 +112,6 @@ DetailPanelComponent::DetailPanelComponent(OpenGlitchFXProcessor& processor, con
     captions_.emplace_back(&envRateBox_, "LENGTH");
     addAndMakeVisible(envRateBox_);
     envDepthSlider_.setSliderStyle(juce::Slider::LinearBar);
-    envDepthSlider_.setTextValueSuffix(" %");
     envDepthSlider_.setTooltip("How far the envelope moves its target. Needs this envelope on.");
     captions_.emplace_back(&envDepthSlider_, "DEPTH");
     addAndMakeVisible(envDepthSlider_);
@@ -154,7 +153,6 @@ void DetailPanelComponent::setupBar(juce::Slider& slider, const char* paramId, c
     sliderAttachments_.push_back(std::make_unique<SliderAttachment>(processor_.parameters, paramId, slider));
     if (auto* param = processor_.parameters.getParameter(paramId)) {
         slider.setDoubleClickReturnValue(true, param->convertFrom0to1(param->getDefaultValue()));
-        slider.setTextValueSuffix(" " + param->getLabel());
     }
 }
 

@@ -268,3 +268,50 @@ TEST_CASE("User presets save, search, favorite, rename, and leave factory preset
     REQUIRE_FALSE(processor.getPresets().loadUser("Night Chop").isValid());
     directory.deleteRecursively();
 }
+
+TEST_CASE("Float parameters format consistently and round-trip typed values", "[plugin][params]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    OpenGlitchFXProcessor processor;
+    int floatCount = 0;
+
+    for (auto* param : processor.getParameters()) {
+        auto* floatParam = dynamic_cast<juce::AudioParameterFloat*>(param);
+        if (floatParam == nullptr) {
+            continue;
+        }
+        auto* ranged = static_cast<juce::RangedAudioParameter*>(floatParam);
+        ++floatCount;
+        for (const float v : { 0.0f, 0.25f, 0.5f, 0.75f, 1.0f }) {
+            const auto text = ranged->getText(v, 100);
+            const float parsed = ranged->getValueForText(text);
+            REQUIRE_THAT(parsed, Catch::Matchers::WithinAbs(v, 0.01f));
+            REQUIRE(ranged->getText(parsed, 100) == text);
+        }
+    }
+    REQUIRE(floatCount == 29);
+
+    auto asRanged = [&](const char* id) -> juce::RangedAudioParameter* {
+        return processor.parameters.getParameter(id);
+    };
+
+    auto* mix = asRanged(openglitch::params::kMasterMix);
+    REQUIRE(mix->getText(0.55f, 100) == "55%");
+    REQUIRE_THAT(mix->getValueForText("50"), Catch::Matchers::WithinAbs(0.5f, 1e-4f));
+    REQUIRE_THAT(mix->getValueForText("50%"), Catch::Matchers::WithinAbs(0.5f, 1e-4f));
+
+    auto* gain = asRanged(openglitch::params::kMasterGain);
+    REQUIRE(gain->getText(gain->convertTo0to1(3.0f), 100) == "+3.0 dB");
+    REQUIRE(gain->getText(gain->convertTo0to1(-0.01f), 100) == "0.0 dB");
+    REQUIRE_THAT(gain->convertFrom0to1(gain->getValueForText("+3.0 dB")), Catch::Matchers::WithinAbs(3.0f, 0.05f));
+
+    auto* cutoff = asRanged(openglitch::params::kFilterCutoff);
+    REQUIRE(cutoff->getText(cutoff->convertTo0to1(850.0f), 100) == "850 Hz");
+    REQUIRE(cutoff->getText(cutoff->convertTo0to1(6800.0f), 100) == "6.80 kHz");
+    REQUIRE_THAT(cutoff->convertFrom0to1(cutoff->getValueForText("2.5k")), Catch::Matchers::WithinAbs(2500.0f, 2.0f));
+    REQUIRE_THAT(cutoff->convertFrom0to1(cutoff->getValueForText("2.5 kHz")), Catch::Matchers::WithinAbs(2500.0f, 2.0f));
+
+    auto* smooth = asRanged(openglitch::params::kSmoothMs);
+    REQUIRE(smooth->getText(smooth->convertTo0to1(4.5f), 100) == "4.5 ms");
+    REQUIRE(smooth->getText(smooth->convertTo0to1(15.0f), 100) == "15 ms");
+    REQUIRE_THAT(smooth->convertFrom0to1(smooth->getValueForText("0.015 s")), Catch::Matchers::WithinAbs(15.0f, 0.1f));
+}

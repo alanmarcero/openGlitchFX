@@ -3,6 +3,38 @@
 
 namespace openglitch::params {
 
+namespace {
+
+juce::AudioParameterFloatAttributes makePercentAttributes() {
+    return juce::AudioParameterFloatAttributes()
+        .withLabel("%")
+        .withStringFromValueFunction([](float v, int) {
+            return juce::String(juce::roundToInt(v)) + "%";
+        })
+        .withValueFromStringFunction([](const juce::String& text) {
+            return text.trim().upToFirstOccurrenceOf("%", false, false).trim().getFloatValue();
+        });
+}
+
+juce::AudioParameterFloatAttributes makeSignedAttributes(const char* unit, int decimals) {
+    const juce::String unitStr(unit);
+    return juce::AudioParameterFloatAttributes()
+        .withLabel(unitStr)
+        .withStringFromValueFunction([unitStr, decimals](float v, int) {
+            const float scale = std::pow(10.0f, static_cast<float>(decimals));
+            const float rounded = std::round(v * scale) / scale;
+            if (std::abs(rounded) < (0.5f / scale)) {
+                return juce::String(0.0f, decimals) + " " + unitStr;
+            }
+            return (rounded > 0.0f ? "+" : "") + juce::String(rounded, decimals) + " " + unitStr;
+        })
+        .withValueFromStringFunction([unitStr](const juce::String& text) {
+            return text.trim().upToFirstOccurrenceOf(unitStr, false, true).trim().getFloatValue();
+        });
+}
+
+} // namespace
+
 juce::String stepParamId(int stepIndex) {
     return juce::String::formatted("step_%02d", stepIndex + 1);
 }
@@ -40,7 +72,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout() {
         "Internal BPM",
         juce::NormalisableRange<float>(40.0f, 240.0f, 0.1f),
         120.0f,
-        juce::AudioParameterFloatAttributes().withLabel("BPM")));
+        juce::AudioParameterFloatAttributes()
+            .withLabel("BPM")
+            .withStringFromValueFunction([](float v, int) { return juce::String(v, 1) + " BPM"; })
+            .withValueFromStringFunction([](const juce::String& text) {
+                return text.trim().upToFirstOccurrenceOf("bpm", false, true).trim().getFloatValue();
+            })));
 
     layout.push_back(std::make_unique<juce::AudioParameterInt>(
         juce::ParameterID{ kSequenceLength, 1 },
@@ -54,14 +91,32 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout() {
         "Sequencer Swing",
         juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
         0.0f,
-        juce::AudioParameterFloatAttributes().withLabel("%")));
+        makePercentAttributes()));
 
     layout.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{ kSmoothMs, 1 },
         "Gate Smooth",
         juce::NormalisableRange<float>(0.5f, 25.0f, 0.1f, 0.6f),
         2.5f,
-        juce::AudioParameterFloatAttributes().withLabel("ms")));
+        juce::AudioParameterFloatAttributes()
+            .withLabel("ms")
+            .withStringFromValueFunction([](float v, int) {
+                if (v < 10.0f) {
+                    return juce::String(v, 1) + " ms";
+                }
+                return juce::String(juce::roundToInt(v)) + " ms";
+            })
+            .withValueFromStringFunction([](const juce::String& text) {
+                const auto trimmed = text.trim();
+                const auto lower = trimmed.toLowerCase();
+                if (lower.endsWith("ms")) {
+                    return trimmed.dropLastCharacters(2).trim().getFloatValue();
+                }
+                if (lower.endsWith("s")) {
+                    return trimmed.dropLastCharacters(1).trim().getFloatValue() * 1000.0f;
+                }
+                return trimmed.getFloatValue();
+            })));
 
     // 32 Selectable Spots in a 4/4 Bar + Per-Pad 10-Bit FX Routing Mask
     constexpr int kAllFxInt = 1023; // Preserve the normalized automation range of v1.0/v1.1.
@@ -90,7 +145,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout() {
             juce::String(title) + " Amount",
             juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
             defaultPct,
-            juce::AudioParameterFloatAttributes().withLabel("%")));
+            makePercentAttributes()));
 
         layout.push_back(std::make_unique<juce::AudioParameterBool>(
             juce::ParameterID{ onId, version },
@@ -118,16 +173,17 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout() {
     auto addBool = [&](const char* id, const juce::String& title, bool defaultValue) {
         layout.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{ id, 1 }, title, defaultValue));
     };
-    auto addFloat = [&](const char* id, const juce::String& title, juce::NormalisableRange<float> range, float defaultValue, const char* label) {
+    auto addFloat = [&](const char* id, const juce::String& title, juce::NormalisableRange<float> range, float defaultValue,
+                        const juce::AudioParameterFloatAttributes& attributes) {
         layout.push_back(std::make_unique<juce::AudioParameterFloat>(
-            juce::ParameterID{ id, 1 }, title, range, defaultValue, juce::AudioParameterFloatAttributes().withLabel(label)));
+            juce::ParameterID{ id, 1 }, title, range, defaultValue, attributes));
     };
 
     addChoice(kStutterSync,    "Buffer Size",    kStutterSyncLabels, 0);
     addBool  (kStutterAdvance, "Buffer Advance", false);
     addChoice(kStutterReverse, "Buffer Reverse", { "OFF", "ALL", "ALTERNATE" }, 0);
-    addFloat (kStutterGate,    "Buffer Gate",    juce::NormalisableRange<float>(5.0f, 100.0f, 0.1f), 100.0f, "%");
-    addFloat (kStutterPitch,   "Buffer Pitch",   juce::NormalisableRange<float>(-12.0f, 12.0f, 0.1f), 0.0f, "st");
+    addFloat (kStutterGate,    "Buffer Gate",    juce::NormalisableRange<float>(5.0f, 100.0f, 0.1f), 100.0f, makePercentAttributes());
+    addFloat (kStutterPitch,   "Buffer Pitch",   juce::NormalisableRange<float>(-12.0f, 12.0f, 0.1f), 0.0f, makeSignedAttributes("st", 1));
 
     addChoice(kTapeDirection, "Tape Direction", { "STOP", "START" }, 0);
     addChoice(kTapeCurve,     "Tape Curve",     { "SMOOTH", "STEPPED" }, 0);
@@ -137,13 +193,35 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout() {
     addBool  (kTapeFade,      "Tape Fade",      true);
 
     addChoice(kFilterMode,   "Filter Mode",      { "OFF", "LOW-PASS", "HIGH-PASS" }, 0);
-    addFloat (kFilterCutoff, "Filter Cutoff",    juce::NormalisableRange<float>(20.0f, 20000.0f, 1.0f, 0.25f), 2000.0f, "Hz");
-    addFloat (kFilterReso,   "Filter Resonance", juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f), 20.0f, "%");
+    addFloat (kFilterCutoff, "Filter Cutoff",    juce::NormalisableRange<float>(20.0f, 20000.0f, 1.0f, 0.25f), 2000.0f,
+              juce::AudioParameterFloatAttributes()
+                  .withLabel("Hz")
+                  .withStringFromValueFunction([](float v, int) {
+                      if (v >= 1000.0f) {
+                          return juce::String(v / 1000.0f, 2) + " kHz";
+                      }
+                      return juce::String(juce::roundToInt(v)) + " Hz";
+                  })
+                  .withValueFromStringFunction([](const juce::String& text) {
+                      const auto trimmed = text.trim();
+                      const auto lower = trimmed.toLowerCase();
+                      if (lower.endsWith("khz")) {
+                          return trimmed.dropLastCharacters(3).trim().getFloatValue() * 1000.0f;
+                      }
+                      if (lower.endsWith("k")) {
+                          return trimmed.dropLastCharacters(1).trim().getFloatValue() * 1000.0f;
+                      }
+                      if (lower.endsWith("hz")) {
+                          return trimmed.dropLastCharacters(2).trim().getFloatValue();
+                      }
+                      return trimmed.getFloatValue();
+                  }));
+    addFloat (kFilterReso,   "Filter Resonance", juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f), 20.0f, makePercentAttributes());
 
     for (const auto& env : kEnvDescriptors) {
         const juce::String title(env.title);
         addBool  (env.onParamId,    title + " On",     false);
-        addFloat (env.depthParamId, title + " Depth",  juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f), 100.0f, "%");
+        addFloat (env.depthParamId, title + " Depth",  juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f), 100.0f, makePercentAttributes());
         addChoice(env.rateParamId,  title + " Length", kNoteLengthLabels, 0);
     }
 
@@ -157,14 +235,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout() {
         "Master Wet Mix",
         juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
         100.0f,
-        juce::AudioParameterFloatAttributes().withLabel("%")));
+        makePercentAttributes()));
 
     layout.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{ kMasterGain, 1 },
         "Output Gain",
         juce::NormalisableRange<float>(-18.0f, 18.0f, 0.1f),
         0.0f,
-        juce::AudioParameterFloatAttributes().withLabel("dB")));
+        makeSignedAttributes("dB", 1)));
 
     layout.push_back(std::make_unique<juce::AudioParameterBool>(
         juce::ParameterID{ kMasterPower, 1 },
@@ -193,7 +271,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout() {
         "Pattern Chance",
         juce::NormalisableRange<float>(0.0f, 100.0f, 1.0f),
         100.0f,
-        juce::AudioParameterFloatAttributes().withLabel("%")));
+        makePercentAttributes()));
 
     layout.push_back(std::make_unique<juce::AudioParameterBool>(
         juce::ParameterID{ kKeepSub, 2 },

@@ -46,7 +46,6 @@ EditorContent::EditorContent(OpenGlitchFXProcessor& owner)
     addAndMakeVisible(hostSyncButton_);
 
     internalBpmSlider_.setSliderStyle(juce::Slider::LinearBar);
-    internalBpmSlider_.setTextValueSuffix(" BPM");
     internalBpmSlider_.setTooltip("Internal tempo. Used when HOST SYNC is off, or when the host reports no tempo.");
     addAndMakeVisible(internalBpmSlider_);
 
@@ -182,7 +181,6 @@ EditorContent::EditorContent(OpenGlitchFXProcessor& owner)
 
         slot.knob.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
         slot.knob.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 64, 16);
-        slot.knob.setTextValueSuffix(" %");
         addAndMakeVisible(slot.knob);
 
         addAndMakeVisible(slot.enableBtn);
@@ -196,10 +194,9 @@ EditorContent::EditorContent(OpenGlitchFXProcessor& owner)
     }
 
     // Master Controls
-    auto setupMasterRotary = [this](juce::Slider& s, juce::Label& l, const juce::String& suffix) {
+    auto setupMasterRotary = [this](juce::Slider& s, juce::Label& l) {
         s.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
         s.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 64, 15);
-        s.setTextValueSuffix(suffix);
         addAndMakeVisible(s);
 
         l.setJustificationType(juce::Justification::centred);
@@ -207,9 +204,9 @@ EditorContent::EditorContent(OpenGlitchFXProcessor& owner)
         addAndMakeVisible(l);
     };
 
-    setupMasterRotary(smoothSlider_,     smoothLabel_,     " ms");
-    setupMasterRotary(masterMixSlider_,  masterMixLabel_,  " %");
-    setupMasterRotary(masterGainSlider_, masterGainLabel_, " dB");
+    setupMasterRotary(smoothSlider_,     smoothLabel_);
+    setupMasterRotary(masterMixSlider_,  masterMixLabel_);
+    setupMasterRotary(masterGainSlider_, masterGainLabel_);
     addAndMakeVisible(masterPowerButton_);
     smoothSlider_.setTooltip("Fade time when a pad turns on or off. Raise it if pad edges click.");
     masterMixSlider_.setTooltip("Dry/wet balance on active pads. See DRY/WET mode below.");
