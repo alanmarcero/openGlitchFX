@@ -30,9 +30,10 @@ public:
 
     static juce::String stepPillText(int currentStep, bool gateOpen, bool midiMode);
     juce::PopupMenu createRandomizeMenu();
+    // Public so a test can run one refresh without a message loop.
+    void timerCallback() override;
 
 private:
-    void timerCallback() override;
     void applyTheme(int themeIndex);
     void showRandomizeMenu();
     int fxCardHeaderAt(juce::Point<float> position) const;
@@ -80,6 +81,17 @@ private:
     juce::ToggleButton keepSubButton_{ "KEEP SUB" };
     juce::TextButton randomizeButton_{ "RANDOMIZE" };
 
+    // What a card paints. The timer repaints a card when this changes.
+    struct CardLook {
+        bool armed = false;
+        bool firing = false;
+        bool brush = false;
+        bool silent = false;
+        int pads = 0;
+        int envelope = 0;
+        bool operator==(const CardLook&) const = default;
+    };
+
     // 15 Glitch FX Slot UI (3 rows x 5 columns)
     struct FxSlotUi {
         juce::String title;
@@ -89,6 +101,7 @@ private:
         std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> knobAttach;
         std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> enableAttach;
         juce::Rectangle<float> cardBounds;
+        CardLook look;
     };
 
     static constexpr int kNumUiFx = openglitch::core::GlitchProcessorCore::kNumEffects;

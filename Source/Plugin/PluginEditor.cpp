@@ -1,5 +1,11 @@
 #include "PluginEditor.h"
 #include "BinaryData.h"
+#include <ranges>
+
+namespace {
+// Steps of the card envelope bar that cause a repaint.
+constexpr float kEnvelopeSteps = 64.0f;
+} // namespace
 
 EditorContent::EditorContent(OpenGlitchFXProcessor& owner)
     : processor_(owner),
@@ -361,6 +367,24 @@ void EditorContent::timerCallback() {
         clipHold_ = std::max(0.0f, clipHold_ - 0.05f);
     }
     sequencerGrid_.setPlayheadState(tel.currentStep, tel.barPhase, tel.stepEnabled, tel.activeGate);
+    sequencerGrid_.refreshPattern();
+
+    const bool gateOpen = tel.activeGate > 0.25f;
+    std::ranges::for_each(std::views::iota(0, kNumUiFx), [&](int fx) {
+        auto& slot = fxSlots_[static_cast<size_t>(fx)];
+        const bool on = slot.enableBtn.getToggleState();
+        const bool audible = slot.knob.getValue() > 0.1;
+        const CardLook look{ on && audible,
+                             on && audible && gateOpen && ((tel.currentStepFxMask >> fx) & 1u) != 0u,
+                             sequencerGrid_.getPaintTargetFx() == fx,
+                             on && !audible,
+                             sequencerGrid_.countStepsRoutingToFx(fx),
+                             juce::roundToInt(std::clamp(tel.fxEnvelopes[static_cast<size_t>(fx)], 0.0f, 1.0f) * kEnvelopeSteps) };
+        if (look != slot.look) {
+            slot.look = look;
+            repaint(slot.cardBounds.expanded(4.0f).toNearestInt());
+        }
+    });
 
     using namespace openglitch::params;
     sequencerGrid_.setMidiTriggerMode(processor_.parameters.getRawParameterValue(kTriggerMode)->load() > 0.5f);
@@ -486,16 +510,14 @@ void EditorContent::paint(juce::Graphics& g) {
     g.drawLine(28.0f, 58.0f, w - 28.0f, 58.0f, 1.0f);
 
     // 3. Draw 15 FX Slot Cards (3x5 Matrix) -- highlight when active on the current 1/32 pad!
-    const int activeBrushFx = sequencerGrid_.getPaintTargetFx();
     for (size_t i = 0; i < kNumUiFx; ++i) {
         const auto& slot = fxSlots_[i];
         const auto& r = slot.cardBounds;
-        const bool moduleArmed = slot.enableBtn.getToggleState() && slot.knob.getValue() > 0.1;
-        const bool routedOnCurrentPad = ((tel.currentStepFxMask >> i) & 1u) != 0u;
-        const bool firingNow = moduleArmed && routedOnCurrentPad && gateOpen;
-        const bool isBrushTarget = (activeBrushFx == static_cast<int>(i));
-        const int padCount = sequencerGrid_.countStepsRoutingToFx(static_cast<int>(i));
-        const float fxEnv = tel.fxEnvelopes[i];
+        const bool moduleArmed = slot.look.armed;
+        const bool firingNow = slot.look.firing;
+        const bool isBrushTarget = slot.look.brush;
+        const int padCount = slot.look.pads;
+        const float fxEnv = static_cast<float>(slot.look.envelope) / kEnvelopeSteps;
 
         g.setColour(pal.cardBg);
         g.fillRoundedRectangle(r, 6.0f);
@@ -526,7 +548,7 @@ void EditorContent::paint(juce::Graphics& g) {
         g.drawFittedText(slot.title, hdr.withTrimmedBottom(12.0f).withTrimmedRight(40.0f).withTrimmedLeft(4.0f).toNearestInt(),
                          juce::Justification::centredLeft, 1);
 
-        const bool silent = slot.enableBtn.getToggleState() && slot.knob.getValue() <= 0.1;
+        const bool silent = slot.look.silent;
         const juce::String subtitle = isBrushTarget ? juce::String("PAD BRUSH ACTIVE")
                                                     : (silent ? juce::String("AMOUNT 0%: NO EFFECT") : slot.subtitle);
         g.setColour(isBrushTarget ? pal.stepPlayheadOutline : pal.textMuted);

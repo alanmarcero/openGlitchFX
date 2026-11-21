@@ -4,6 +4,7 @@
 #include "../Source/Plugin/StepSequencerComponent.h"
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
+#include <ranges>
 
 namespace {
 
@@ -19,6 +20,14 @@ Type* findDescendant(juce::Component& root, const Predicate& matches) {
         return found != nullptr;
     });
     return isFound ? found : nullptr;
+}
+
+int differingPixels(const juce::Image& before, const juce::Image& after, juce::Rectangle<int> area) {
+    return static_cast<int>(std::ranges::count_if(std::views::iota(0, area.getWidth() * area.getHeight()), [&](int index) {
+        const int x = area.getX() + index % area.getWidth();
+        const int y = area.getY() + index / area.getWidth();
+        return before.getPixelAt(x, y) != after.getPixelAt(x, y);
+    }));
 }
 
 } // namespace
@@ -258,6 +267,33 @@ TEST_CASE("Editor renders native UI screenshot", "[plugin][gui]") {
         REQUIRE(artifactStream.openedOk());
         REQUIRE(png.writeImageToStream(snapshot, artifactStream));
     }
+}
+
+TEST_CASE("A preset load with the host idle repaints the pads and the FX cards", "[plugin][gui]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    OpenGlitchFXProcessor processor;
+    OpenGlitchFXEditor editor(processor);
+    auto* content = findDescendant<EditorContent>(editor, [](EditorContent&) { return true; });
+    auto* grid = findDescendant<openglitch::ui::StepSequencerComponent>(editor, [](auto&) { return true; });
+    auto* tapeKnob = findDescendant<juce::Slider>(editor, [](juce::Slider& knob) {
+        return knob.getTooltip().startsWith("TAPE STOP amount");
+    });
+    REQUIRE(content != nullptr);
+    REQUIRE(grid != nullptr);
+    REQUIRE(tapeKnob != nullptr);
+    const auto gridArea = editor.getLocalArea(grid, grid->getLocalBounds());
+    const auto tapeHeader = editor.getLocalArea(tapeKnob, tapeKnob->getLocalBounds()).withHeight(26).translated(0, -32);
+    // A buffered content repaints only the areas the code invalidates.
+    content->setBufferedToImage(true);
+    const auto before = editor.createComponentSnapshot(editor.getLocalBounds());
+
+    processor.loadFactoryProgram(4);
+    content->timerCallback();
+    const auto after = editor.createComponentSnapshot(editor.getLocalBounds());
+
+    REQUIRE(processor.currentPresetLabel() == "Tape Stop Fill");
+    REQUIRE(differingPixels(before, after, gridArea) > 500);
+    REQUIRE(differingPixels(before, after, tapeHeader) > 50);
 }
 
 TEST_CASE("The editor scales its content as one unit and reopens at the saved size", "[plugin][gui]") {

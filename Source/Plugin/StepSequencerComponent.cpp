@@ -43,6 +43,15 @@ void StepSequencerComponent::setMidiTriggerMode(bool midiMode) {
     }
 }
 
+void StepSequencerComponent::refreshPattern() {
+    std::array<uint16_t, 32> masks{};
+    std::ranges::generate(masks, [this, step = 0]() mutable { return getEffectiveStepFxMask(step++); });
+    if (masks != shownMasks_) {
+        shownMasks_ = masks;
+        repaint();
+    }
+}
+
 juce::String StepSequencerComponent::getTooltip() {
     if (midiMode_) {
         return "TRIGGER is set to MIDI, so the pads are ignored. Notes 60-74 trigger one FX each; any other note triggers every FX.";

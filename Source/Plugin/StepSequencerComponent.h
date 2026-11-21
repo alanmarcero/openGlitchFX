@@ -18,6 +18,8 @@ public:
 
     void setPlayheadState(int currentStep, float barPhase, bool isStepActive, float gateEnvelope);
     void setMidiTriggerMode(bool midiMode);
+    // Repaints after pad edits made elsewhere: preset load, undo, A/B or automation.
+    void refreshPattern();
     bool isMidiTriggerMode() const { return midiMode_; }
     void applyPreset(openglitch::core::StepPatternPreset preset);
     void invertPattern();
@@ -75,6 +77,7 @@ private:
 
     int paintTargetFx_ = -1; // -1 = ALL FX, 0..14 = specific FX brush
     bool dragTargetState_ = true;
+    std::array<uint16_t, 32> shownMasks_{};
 };
 
 } // namespace openglitch::ui
