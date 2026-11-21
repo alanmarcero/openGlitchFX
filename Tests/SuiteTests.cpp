@@ -395,3 +395,65 @@ TEST_CASE("Disabled controls draw dimmed and undo/redo reflect history", "[plugi
     const double disabledBoxAlpha = sumAlpha(box);
     REQUIRE(disabledBoxAlpha < enabledBoxAlpha * 0.6);
 }
+
+TEST_CASE("Save and Delete use inline two-step Replace? and Delete? confirmation", "[plugin][presets]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    OpenGlitchFXProcessor processor;
+    const auto directory = juce::File::getSpecialLocation(juce::File::tempDirectory)
+        .getChildFile("openglitch-confirm-" + juce::String(juce::Random::getSystemRandom().nextInt64()));
+    directory.deleteRecursively();
+    processor.getPresets().setDirectoryForTests(directory);
+
+    juce::String error;
+    REQUIRE(processor.saveUserPreset("My Glitch", error));
+    processor.loadUserPreset("My Glitch");
+
+    const auto editor = std::unique_ptr<juce::AudioProcessorEditor>(processor.createEditor());
+    auto* content = editor->getChildComponent(0);
+    REQUIRE(content != nullptr);
+
+    openglitch::suite::SuiteBar* suite = nullptr;
+    for (int i = 0; i < content->getNumChildComponents(); ++i) {
+        if ((suite = dynamic_cast<openglitch::suite::SuiteBar*>(content->getChildComponent(i))) != nullptr) {
+            break;
+        }
+    }
+    REQUIRE(suite != nullptr);
+
+    auto findBtn = [&](const juce::String& text) -> juce::TextButton* {
+        for (int i = 0; i < suite->getNumChildComponents(); ++i) {
+            if (auto* btn = dynamic_cast<juce::TextButton*>(suite->getChildComponent(i))) {
+                if (btn->getButtonText() == text) {
+                    return btn;
+                }
+            }
+        }
+        return nullptr;
+    };
+
+    auto* saveBtn = findBtn("SAVE");
+    auto* delBtn = findBtn("DEL");
+    REQUIRE(saveBtn != nullptr);
+    REQUIRE(delBtn != nullptr);
+    REQUIRE(delBtn->isEnabled());
+
+    auto* mix = processor.parameters.getParameter(openglitch::params::kMasterMix);
+    mix->setValueNotifyingHost(0.25f);
+    saveBtn->onClick();
+    REQUIRE(saveBtn->getButtonText() == "Replace?");
+    saveBtn->onClick();
+    REQUIRE(saveBtn->getButtonText() == "SAVE");
+
+    mix->setValueNotifyingHost(0.95f);
+    processor.loadUserPreset("My Glitch");
+    REQUIRE_THAT(mix->getValue(), Catch::Matchers::WithinAbs(0.25f, 0.02f));
+
+    delBtn->onClick();
+    REQUIRE(delBtn->getButtonText() == "Delete?");
+    REQUIRE(processor.getPresets().loadUser("My Glitch").isValid());
+    delBtn->onClick();
+    REQUIRE(delBtn->getButtonText() == "DEL");
+    REQUIRE_FALSE(processor.getPresets().loadUser("My Glitch").isValid());
+
+    directory.deleteRecursively();
+}

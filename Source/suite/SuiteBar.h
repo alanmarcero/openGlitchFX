@@ -7,7 +7,8 @@
 namespace openglitch::suite {
 
 // Compact undo, A/B, and preset controls. The host plugin supplies the actions.
-class SuiteBar final : public juce::Component {
+class SuiteBar final : public juce::Component,
+                       private juce::Timer {
 public:
     struct Hooks {
         std::function<void()> undo;
@@ -36,6 +37,13 @@ public:
     void resized() override;
 
 private:
+    enum class PromptMode { None, Save, Rename };
+
+    void timerCallback() override;
+    void openNamePrompt(PromptMode mode, const juce::String& initialText, const juce::String& renameFrom = {});
+    void closeNamePrompt();
+    void commitNamePrompt();
+    void clearConfirmState();
     void rebuildList();
     void chooseListed(int comboId);
     void showError(const juce::String& error);
@@ -45,6 +53,12 @@ private:
     Hooks hooks_;
     std::vector<PresetLibrary::Entry> shown_;
     bool rebuilding_ = false;
+    PromptMode promptMode_ = PromptMode::None;
+    juce::String pendingRenameFrom_;
+    bool confirmingReplace_ = false;
+    juce::String pendingReplaceName_;
+    bool confirmingDelete_ = false;
+    juce::String pendingDeleteName_;
 
     juce::TextButton undoButton_{ "UNDO" };
     juce::TextButton redoButton_{ "REDO" };
@@ -56,9 +70,11 @@ private:
     juce::TextButton previousButton_{ "<" };
     juce::TextButton nextButton_{ ">" };
     juce::ComboBox presetBox_;
+    juce::TextEditor nameEditor_;
     juce::TextButton saveButton_{ "SAVE" };
     juce::TextButton favoriteButton_{ "FAV" };
-    juce::TextButton editButton_{ "EDIT" };
+    juce::TextButton renameButton_{ "REN" };
+    juce::TextButton deleteButton_{ "DEL" };
 };
 
 } // namespace openglitch::suite
