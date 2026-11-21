@@ -9,7 +9,7 @@ using openglitch::core::ModEnvelope;
 namespace {
 
 constexpr float kCardHeaderH = 30.0f;
-constexpr float kCaptionH = 12.0f;
+constexpr float kCaptionH = 14.0f;
 constexpr float kControlH = 36.0f;
 constexpr float kRowGap = 6.0f;
 constexpr float kColGap = 6.0f;
@@ -310,18 +310,18 @@ void DetailPanelComponent::paint(juce::Graphics& g) {
         g.setColour(pal.cardBorder);
         g.drawRoundedRectangle(card.bounds, 6.0f, 1.0f);
 
-        const juce::Rectangle<float> hdr(card.bounds.getX() + 6.0f, card.bounds.getY() + 5.0f, card.bounds.getWidth() - 12.0f, 20.0f);
+        const juce::Rectangle<float> hdr(card.bounds.getX() + 6.0f, card.bounds.getY() + 5.0f, card.bounds.getWidth() - 12.0f, 22.0f);
         g.setColour(pal.headerPlate);
         g.fillRoundedRectangle(hdr, 4.0f);
         g.setColour(pal.accentPrimary);
-        g.setFont(juce::FontOptions(10.5f, juce::Font::bold));
+        g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
         g.drawText(card.title, hdr.reduced(8.0f, 0.0f).toNearestInt(), juce::Justification::centredLeft);
         g.setColour(pal.textMuted);
-        g.setFont(juce::FontOptions(8.0f, juce::Font::bold));
+        g.setFont(juce::FontOptions(11.0f, juce::Font::plain));
         g.drawText(card.subtitle, hdr.reduced(8.0f, 0.0f).toNearestInt(), juce::Justification::centredRight);
     }
 
-    g.setFont(juce::FontOptions(8.5f, juce::Font::bold));
+    g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
     for (const auto& [component, caption] : captions_) {
         g.setColour(pal.textMuted.withMultipliedAlpha(component->getAlpha()));
         const auto b = component->getBounds();

@@ -491,9 +491,9 @@ void EditorContent::paint(juce::Graphics& g) {
     g.setColour(pal.textBright);
     g.setFont(juce::FontOptions(20.0f, juce::Font::bold));
     g.drawText("openGlitchFX", static_cast<int>(w * 0.5f - 160.0f), 15, 320, 22, juce::Justification::centred);
-    g.setFont(juce::FontOptions(8.5f, juce::Font::bold));
-    g.setColour(pal.accentPrimary.withAlpha(0.70f));
-    g.drawText("15-ENGINE RACK  /  32-STEP GLITCH MATRIX", static_cast<int>(w * 0.5f - 160.0f), 37, 320, 12, juce::Justification::centred);
+    g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
+    g.setColour(pal.accentPrimary.withAlpha(0.75f));
+    g.drawText("15-ENGINE RACK  /  32-STEP GLITCH MATRIX", static_cast<int>(w * 0.5f - 160.0f), 38, 320, 14, juce::Justification::centred);
 
     // Live Gate Status Pill Indicator in Header
     const auto tel = processor_.getTelemetry();
@@ -505,7 +505,7 @@ void EditorContent::paint(juce::Graphics& g) {
     g.setColour(gateOpen ? pal.accentPrimary : pal.cardBorder);
     g.drawRoundedRectangle(statusPill, 13.0f, 1.3f);
     g.setColour(gateOpen ? pal.textBright : pal.textMuted);
-    g.setFont(juce::FontOptions(10.5f, juce::Font::bold));
+    g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
     g.drawText(stepPillText(tel.currentStep, sequencerGrid_.loopLength(), gateOpen, midiMode), statusPill.toNearestInt(),
                juce::Justification::centred);
 
@@ -534,30 +534,30 @@ void EditorContent::paint(juce::Graphics& g) {
         g.setColour(firingNow ? pal.accentSecondary : (isBrushTarget ? pal.stepPlayheadOutline : (moduleArmed ? pal.cardActiveBorder : pal.cardBorder)));
         g.drawRoundedRectangle(r, 6.0f, (firingNow || isBrushTarget) ? 1.8f : (moduleArmed ? 1.4f : 1.0f));
 
-        juce::Rectangle<float> hdr(r.getX() + 6.0f, r.getY() + 5.0f, r.getWidth() - 12.0f, 28.0f);
+        juce::Rectangle<float> hdr(r.getX() + 6.0f, r.getY() + 5.0f, r.getWidth() - 12.0f, 32.0f);
         g.setColour(firingNow ? pal.accentSecondary.withAlpha(0.28f)
                               : (isBrushTarget ? pal.accentPrimary.withAlpha(0.22f) : pal.headerPlate));
         g.fillRoundedRectangle(hdr, 4.0f);
 
         // Per-FX Pad Routing Count Badge in top-right corner of header
-        juce::Rectangle<float> padBadge(hdr.getRight() - 40.0f, hdr.getY() + 3.0f, 37.0f, 11.0f);
-        g.setColour(padCount > 0 ? pal.accentPrimary.withAlpha(0.22f) : juce::Colours::black.withAlpha(0.35f));
-        g.fillRoundedRectangle(padBadge, 2.5f);
-        g.setColour(padCount > 0 ? pal.accentPrimary : pal.textMuted.withAlpha(0.6f));
-        g.setFont(juce::FontOptions(7.5f, juce::Font::bold));
+        juce::Rectangle<float> padBadge(hdr.getRight() - 56.0f, hdr.getY() + 2.0f, 53.0f, 15.0f);
+        g.setColour(padCount > 0 ? pal.accentPrimary.withAlpha(0.24f) : juce::Colours::black.withAlpha(0.55f));
+        g.fillRoundedRectangle(padBadge, 3.0f);
+        g.setColour(padCount > 0 ? pal.accentPrimary : pal.textBright.withAlpha(0.85f));
+        g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
         g.drawText(juce::String(padCount) + (padCount == 1 ? " PAD" : " PADS"), padBadge.toNearestInt(), juce::Justification::centred);
 
         g.setColour(firingNow ? pal.textBright : (moduleArmed ? pal.accentPrimary : pal.textBright));
-        g.setFont(juce::FontOptions(10.5f, juce::Font::bold));
-        g.drawFittedText(slot.title, hdr.withTrimmedBottom(12.0f).withTrimmedRight(40.0f).withTrimmedLeft(4.0f).toNearestInt(),
+        g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
+        g.drawFittedText(slot.title, hdr.withTrimmedBottom(14.0f).withTrimmedRight(58.0f).withTrimmedLeft(4.0f).toNearestInt(),
                          juce::Justification::centredLeft, 1);
 
         const bool silent = slot.look.silent;
         const juce::String subtitle = isBrushTarget ? juce::String("PAD BRUSH ACTIVE")
                                                     : (silent ? juce::String("AMOUNT 0%: NO EFFECT") : slot.subtitle);
         g.setColour(isBrushTarget ? pal.stepPlayheadOutline : pal.textMuted);
-        g.setFont(juce::FontOptions(8.2f, juce::Font::plain));
-        g.drawText(subtitle, hdr.withTrimmedTop(13.0f).withTrimmedLeft(4.0f).toNearestInt(), juce::Justification::centredLeft);
+        g.setFont(juce::FontOptions(11.0f, juce::Font::plain));
+        g.drawText(subtitle, hdr.withTrimmedTop(15.0f).withTrimmedLeft(4.0f).toNearestInt(), juce::Justification::centredLeft);
 
         // Live Per-FX Envelope Activity Bar along bottom of card header
         juce::Rectangle<float> envTrack(hdr.getX() + 2.0f, hdr.getBottom() - 2.2f, hdr.getWidth() - 4.0f, 2.0f);
@@ -581,7 +581,7 @@ void EditorContent::paint(juce::Graphics& g) {
         g.setColour(pal.headerPlate);
         g.fillRoundedRectangle(hdr, 4.0f);
         g.setColour(pal.accentPrimary);
-        g.setFont(juce::FontOptions(10.5f, juce::Font::bold));
+        g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
         g.drawText("MASTER & METERS", hdr.toNearestInt(), juce::Justification::centred);
 
         if (!masterMeterBounds_.isEmpty()) {
@@ -599,10 +599,10 @@ void EditorContent::paint(juce::Graphics& g) {
 
             auto drawBar = [&](float y, const char* label, float val01, juce::Colour col) {
                 g.setColour(pal.textMuted);
-                g.setFont(juce::FontOptions(7.5f, juce::Font::bold));
-                g.drawText(label, static_cast<int>(mb.getX() + 5.0f), static_cast<int>(y - 1.0f), 26, 9, juce::Justification::centredLeft);
+                g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
+                g.drawText(label, static_cast<int>(mb.getX() + 5.0f), static_cast<int>(y - 3.0f), 42, 12, juce::Justification::centredLeft);
 
-                juce::Rectangle<float> track(mb.getX() + 32.0f, y + 1.0f, mb.getWidth() - 38.0f, 5.5f);
+                juce::Rectangle<float> track(mb.getX() + 48.0f, y, mb.getWidth() - 54.0f, 6.0f);
                 g.setColour(pal.stepInactiveFill);
                 g.fillRoundedRectangle(track, 2.0f);
 
@@ -620,30 +620,30 @@ void EditorContent::paint(juce::Graphics& g) {
             };
 
             const float inPeak = std::max(tel.inputPeakL, tel.inputPeakR);
-            drawBar(mb.getY() + 5.0f,  "IN",   toNormDb(inPeak),       pal.accentPrimary.withAlpha(0.85f));
-            drawBar(mb.getY() + 15.0f, "OUT L", toNormDb(tel.peakL),   pal.accentPrimary);
-            drawBar(mb.getY() + 25.0f, "OUT R", toNormDb(tel.peakR),   pal.accentPrimary);
-            drawBar(mb.getY() + 35.0f, "GATE",  std::clamp(tel.activeGate, 0.0f, 1.0f), pal.accentSecondary);
+            drawBar(mb.getY() + 6.0f,  "IN",    toNormDb(inPeak),       pal.accentPrimary.withAlpha(0.85f));
+            drawBar(mb.getY() + 20.0f, "OUT L", toNormDb(tel.peakL),    pal.accentPrimary);
+            drawBar(mb.getY() + 34.0f, "OUT R", toNormDb(tel.peakR),    pal.accentPrimary);
+            drawBar(mb.getY() + 48.0f, "GATE",  std::clamp(tel.activeGate, 0.0f, 1.0f), pal.accentSecondary);
 
             // Digital dB & CLIP Indicator along bottom of telemetry box
             const float maxOut = std::max(tel.peakL, tel.peakR);
             const juce::String dbStr = (maxOut <= 1e-4f) ? "OUT: -INF dB"
                                                          : juce::String::formatted("OUT: %+.1f dB", 20.0f * std::log10(maxOut));
             g.setColour(clipHold_ > 0.1f ? pal.accentSecondary : pal.textBright.withAlpha(0.85f));
-            g.setFont(juce::FontOptions(8.0f, juce::Font::bold));
-            g.drawText(dbStr, static_cast<int>(mb.getX() + 6.0f), static_cast<int>(mb.getBottom() - 12.0f), 90, 10, juce::Justification::centredLeft);
+            g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
+            g.drawText(dbStr, static_cast<int>(mb.getX() + 6.0f), static_cast<int>(mb.getBottom() - 18.0f), 110, 14, juce::Justification::centredLeft);
 
-            juce::Rectangle<float> clipBadge(mb.getRight() - 38.0f, mb.getBottom() - 12.0f, 32.0f, 9.5f);
+            juce::Rectangle<float> clipBadge(mb.getRight() - 44.0f, mb.getBottom() - 18.0f, 38.0f, 14.0f);
             g.setColour(clipHold_ > 0.1f ? pal.accentSecondary : pal.stepInactiveFill);
-            g.fillRoundedRectangle(clipBadge, 2.5f);
-            g.setColour(clipHold_ > 0.1f ? pal.textBright : pal.textMuted.withAlpha(0.55f));
-            g.setFont(juce::FontOptions(7.0f, juce::Font::bold));
+            g.fillRoundedRectangle(clipBadge, 3.0f);
+            g.setColour(clipHold_ > 0.1f ? pal.textBright : pal.textMuted);
+            g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
             g.drawText("CLIP", clipBadge.toNearestInt(), juce::Justification::centred);
         }
     }
 
     g.setColour(pal.textMuted);
-    g.setFont(juce::FontOptions(10.0f, juce::Font::plain));
+    g.setFont(juce::FontOptions(11.0f, juce::Font::plain));
     g.drawText("v" JucePlugin_VersionString, static_cast<int>(w - 180.0f), static_cast<int>(h - 20.0f), 150, 16, juce::Justification::centredRight);
 }
 
@@ -750,7 +750,7 @@ void EditorContent::resized() {
         slot.cardBounds = { cx, cy, cardW, cardH };
 
         auto inner = slot.cardBounds.reduced(8.0f);
-        inner.removeFromTop(30.0f);
+        inner.removeFromTop(34.0f);
         auto btnArea = inner.removeFromBottom(36.0f);
         slot.knob.setBounds(inner.toNearestInt());
         slot.enableBtn.setBounds(btnArea.reduced(8.0f, 0.0f).toNearestInt());
@@ -761,7 +761,7 @@ void EditorContent::resized() {
     auto mInner = masterCardBounds_.reduced(10.0f);
     mInner.removeFromTop(24.0f);
 
-    masterMeterBounds_ = mInner.removeFromTop(56.0f);
+    masterMeterBounds_ = mInner.removeFromTop(84.0f);
     mInner.removeFromTop(4.0f);
 
     auto powerArea = mInner.removeFromBottom(36.0f);

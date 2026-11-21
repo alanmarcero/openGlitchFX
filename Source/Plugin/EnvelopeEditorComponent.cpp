@@ -189,10 +189,10 @@ void EnvelopeEditorComponent::paint(juce::Graphics& g) {
     }
 
     g.setColour(pal.textMuted);
-    g.setFont(juce::FontOptions(8.0f, juce::Font::bold));
+    g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
     const auto labelArea = area.reduced(kHitRadius + 2.0f, 0.0f);
-    g.drawText(topLabel_, labelArea.withHeight(10.0f).toNearestInt(), juce::Justification::topLeft);
-    g.drawText(bottomLabel_, labelArea.withTrimmedTop(labelArea.getHeight() - 10.0f).toNearestInt(), juce::Justification::bottomLeft);
+    g.drawText(topLabel_, labelArea.withHeight(14.0f).toNearestInt(), juce::Justification::topLeft);
+    g.drawText(bottomLabel_, labelArea.withTrimmedTop(labelArea.getHeight() - 14.0f).toNearestInt(), juce::Justification::bottomLeft);
 
     if (points_.empty()) {
         return;

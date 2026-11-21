@@ -629,7 +629,7 @@ void StepSequencerComponent::paint(juce::Graphics& g) {
         g.setColour(pal.accentSecondary.withAlpha(0.20f));
         g.fillRoundedRectangle(header, 3.0f);
         g.setColour(pal.textBright);
-        g.setFont(juce::FontOptions(9.5f, juce::Font::bold));
+        g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
         g.drawText(readout, header.toNearestInt(), juce::Justification::centred);
     }
 
@@ -646,7 +646,7 @@ void StepSequencerComponent::paint(juce::Graphics& g) {
         g.fillRoundedRectangle(beatHeader, 3.0f);
 
         g.setColour(playheadInBeat ? pal.accentPrimary : pal.textMuted.withAlpha(firstStep < length ? 1.0f : 0.45f));
-        g.setFont(juce::FontOptions(9.5f, juce::Font::bold));
+        g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
         g.drawText(juce::String::formatted("BEAT %d (%d-%d)", b + 1, firstStep + 1, lastStep + 1),
                    beatHeader.toNearestInt(), juce::Justification::centred);
     }
@@ -674,8 +674,8 @@ void StepSequencerComponent::paint(juce::Graphics& g) {
         g.drawRoundedRectangle(r, 3.5f, (isPlayhead || isHovered) ? 1.8f : 1.0f);
 
         auto topLabelRect = r.withHeight(16.0f).withY(r.getY() + 2.0f);
-        g.setColour(isSixteenthStart ? pal.textBright.withAlpha(0.7f) : pal.textMuted.withAlpha(0.5f));
-        g.setFont(juce::FontOptions(9.0f, juce::Font::bold));
+        g.setColour(isSixteenthStart ? pal.textBright.withAlpha(0.75f) : pal.textMuted.withAlpha(0.65f));
+        g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
         g.drawText(juce::String(i + 1), topLabelRect.toNearestInt(), juce::Justification::centred);
     }
 
@@ -742,10 +742,10 @@ void StepSequencerComponent::paint(juce::Graphics& g) {
                 g.drawLine(tickX, mergedRect.getY() + 2.0f, tickX, mergedRect.getY() + 15.0f, 1.0f);
             }
 
-            auto topNumRect = sr.withHeight(14.0f).withY(sr.getY() + 2.0f);
+            auto topNumRect = sr.withHeight(16.0f).withY(sr.getY() + 2.0f);
             const bool isCurrentSubStep = (s == currentStep_);
             g.setColour(isCurrentSubStep ? pal.stepPlayheadOutline : juce::Colours::black.withAlpha(0.85f));
-            g.setFont(juce::FontOptions(8.5f, juce::Font::bold));
+            g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
             g.drawText(juce::String(s + 1), topNumRect.toNearestInt(), juce::Justification::centred);
         }
 
@@ -759,7 +759,7 @@ void StepSequencerComponent::paint(juce::Graphics& g) {
         g.fillRoundedRectangle(badgeRect, 3.5f);
 
         g.setColour(isCustomMask ? pal.stepPlayheadOutline : pal.textBright);
-        g.setFont(juce::FontOptions(runLen >= 2 ? 9.5f : 8.5f, juce::Font::bold));
+        g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
         g.drawText(formatStepFxBadge(runMask, runLen, beatSteps), badgeRect.toNearestInt(), juce::Justification::centred);
 
         // Unified 3x5 Mini LED Dot Matrix centered at the bottom of the combined block
