@@ -9,12 +9,18 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
 
-class OpenGlitchFXEditor final : public juce::AudioProcessorEditor,
-                                 public juce::TooltipClient,
-                                 private juce::Timer {
+// The whole editor at its design size. OpenGlitchFXEditor scales it.
+class EditorContent final : public juce::Component,
+                            public juce::TooltipClient,
+                            private juce::Timer {
 public:
-    explicit OpenGlitchFXEditor(OpenGlitchFXProcessor& owner);
-    ~OpenGlitchFXEditor() override;
+    static constexpr int kDesignWidth = 1440;
+    static constexpr int kDesignHeight = 1120;
+    static constexpr float kMinScale = 0.7f;
+    static constexpr float kMaxScale = 1.5f;
+
+    explicit EditorContent(OpenGlitchFXProcessor& owner);
+    ~EditorContent() override;
 
     void paint(juce::Graphics& g) override;
     void resized() override;
@@ -42,6 +48,7 @@ private:
     // Header Controls
     juce::ComboBox themeBox_;
     juce::Label themeLabel_{ {}, "THEME:" };
+    juce::ComboBox scaleBox_;
     juce::ToggleButton hostSyncButton_{ "HOST SYNC" };
     juce::Slider internalBpmSlider_;
     juce::Label internalBpmLabel_{ {}, "BPM" };
@@ -122,6 +129,20 @@ private:
     std::unique_ptr<SliderAttachment> masterMixAttach_;
     std::unique_ptr<SliderAttachment> masterGainAttach_;
     std::unique_ptr<ButtonAttachment> masterPowerAttach_;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(EditorContent)
+};
+
+class OpenGlitchFXEditor final : public juce::AudioProcessorEditor {
+public:
+    explicit OpenGlitchFXEditor(OpenGlitchFXProcessor& owner);
+
+    void resized() override;
+    bool keyPressed(const juce::KeyPress& key) override;
+
+private:
+    OpenGlitchFXProcessor& processor_;
+    EditorContent content_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(OpenGlitchFXEditor)
 };

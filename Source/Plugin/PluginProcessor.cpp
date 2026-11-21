@@ -438,6 +438,7 @@ void OpenGlitchFXProcessor::getStateInformation(juce::MemoryBlock& destData) {
     tree.setProperty("abActive", ab_.isA() ? "A" : "B", nullptr);
     tree.setProperty("presetLabel", presetLabel_, nullptr);
     tree.setProperty("presetFactory", presetIsFactory_, nullptr);
+    tree.setProperty("editorScale", editorScale_.load(), nullptr);
     juce::ValueTree slots("SUITE_AB");
     auto slotA = ab_.slotA().createCopy();
     slotA.setProperty("slot", "A", nullptr);
@@ -476,8 +477,10 @@ void OpenGlitchFXProcessor::setStateInformation(const void* data, int sizeInByte
                 ? static_cast<bool>(restored.getProperty("presetFactory"))
                 : false;
             const bool savedA = restored.getProperty("abActive", "A").toString() != "B";
+            const auto savedScale = static_cast<float>(restored.getProperty("editorScale", editorScale_.load()));
+            editorScale_.store(std::clamp(savedScale, EditorContent::kMinScale, EditorContent::kMaxScale));
             restored.removeChild(restored.getChildWithName("SUITE_AB"), nullptr);
-            for (const char* property : { "suiteProgram", "abActive", "presetLabel", "presetFactory" }) {
+            for (const char* property : { "suiteProgram", "abActive", "presetLabel", "presetFactory", "editorScale" }) {
                 restored.removeProperty(property, nullptr);
             }
             undo_.suspend();

@@ -48,6 +48,8 @@ public:
     bool abIsA() const { return ab_.isA(); }
     juce::String currentPresetLabel() const { return presetLabel_; }
     bool currentPresetIsFactory() const { return presetIsFactory_; }
+    float getEditorScale() const { return editorScale_.load(); }
+    void setEditorScale(float scale) { editorScale_.store(scale); }
 
     void getStateInformation(juce::MemoryBlock& destData) override;
     void setStateInformation(const void* data, int sizeInBytes) override;
@@ -85,6 +87,7 @@ private:
     openglitch::core::GlitchProcessorCore core_;
     std::atomic<float> visualBeat_{ 0.0f };
     std::atomic<int> stateVersion_{ 0 };
+    std::atomic<float> editorScale_{ 1.0f };
     std::array<std::atomic<float>*, 32> stepParams_{};
     std::array<std::atomic<float>*, 32> stepFxParams_{};
     std::array<std::atomic<float>*, 32> stepExtraFxParams_{};

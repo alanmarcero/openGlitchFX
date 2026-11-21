@@ -26,7 +26,7 @@ Type* findDescendant(juce::Component& root, const Predicate& matches) {
 TEST_CASE("Editor text reads the same on every platform", "[plugin][gui]") {
     juce::ScopedJuceInitialiser_GUI gui;
     OpenGlitchFXProcessor processor;
-    OpenGlitchFXEditor editor(processor);
+    EditorContent editor(processor);
     auto* brush = findDescendant<juce::ComboBox>(editor, [](juce::ComboBox& box) {
         return box.getItemText(0) == "ALL ACTIVE FX (DEFAULT)";
     });
@@ -37,7 +37,7 @@ TEST_CASE("Editor text reads the same on every platform", "[plugin][gui]") {
         randomizeItems.add(item.getItem().text);
     }
 
-    REQUIRE(OpenGlitchFXEditor::stepPillText(0, false, false) == "STEP 01/32 DRY");
+    REQUIRE(EditorContent::stepPillText(0, false, false) == "STEP 01/32 DRY");
     REQUIRE(brush->getItemText(1) == "ONLY: BITCRUSH [BC]");
     REQUIRE(randomizeItems == juce::StringArray{ "Randomize the full pattern", "Light (35% step density)",
                                                  "Medium (55% step density)", "Wild (75% step density)" });
@@ -189,12 +189,9 @@ TEST_CASE("Editor renders native UI screenshot", "[plugin][gui]") {
     REQUIRE(editor->getWidth() == 1440);
     REQUIRE(editor->getHeight() == 1120);
     auto hasVisibleLabel = [&](const juce::String& text) {
-        for (auto* child : editor->getChildren()) {
-            if (auto* label = dynamic_cast<juce::Label*>(child);
-                label != nullptr && label->getText() == text && label->isVisible() && !label->getBounds().isEmpty())
-                return true;
-        }
-        return false;
+        return findDescendant<juce::Label>(*editor, [&](juce::Label& label) {
+            return label.getText() == text && label.isVisible() && !label.getBounds().isEmpty();
+        }) != nullptr;
     };
     REQUIRE(hasVisibleLabel("LENGTH"));
     REQUIRE(hasVisibleLabel("SWING"));
@@ -218,19 +215,13 @@ TEST_CASE("Editor renders native UI screenshot", "[plugin][gui]") {
             self(self, *c);
         }
     };
-    for (const auto size : {juce::Point<int>(1300, 1050), juce::Point<int>(1440, 1120)}) {
-        editor->setSize(size.x, size.y);
-        check(check, *editor);
-    }
-    REQUIRE(targets >= 90);
-    juce::ComboBox* themes = nullptr;
-    for (auto* c : editor->getChildren())
-        if (auto* box = dynamic_cast<juce::ComboBox*>(c); box && box->getItemText(0) == "Cyber Neon")
-            themes = box;
+    check(check, *editor);
+    REQUIRE(targets >= 60);
+    auto* themes = findDescendant<juce::ComboBox>(*editor, [](juce::ComboBox& box) { return box.getItemText(0) == "Cyber Neon"; });
     REQUIRE(themes != nullptr);
     for (int i = 0; i < 4; ++i) {
         themes->setSelectedId(i + 1, juce::sendNotificationSync);
-        auto& look = editor->getLookAndFeel();
+        auto& look = themes->getLookAndFeel();
         REQUIRE(look.findColour(juce::PopupMenu::backgroundColourId).getBrightness() < 0.42f);
         REQUIRE(look.findColour(juce::TooltipWindow::textColourId).getBrightness() > 0.72f);
         int width = 0, height = 0;
@@ -267,6 +258,35 @@ TEST_CASE("Editor renders native UI screenshot", "[plugin][gui]") {
         REQUIRE(artifactStream.openedOk());
         REQUIRE(png.writeImageToStream(snapshot, artifactStream));
     }
+}
+
+TEST_CASE("The editor scales its content as one unit and reopens at the saved size", "[plugin][gui]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    OpenGlitchFXProcessor processor;
+    auto editor = std::unique_ptr<juce::AudioProcessorEditor>(processor.createEditor());
+    auto* content = findDescendant<EditorContent>(*editor, [](EditorContent&) { return true; });
+    auto* sizes = findDescendant<juce::ComboBox>(*editor, [](juce::ComboBox& box) { return box.getItemText(0) == "70%"; });
+    REQUIRE(content != nullptr);
+    REQUIRE(sizes != nullptr);
+    auto* constrainer = editor->getConstrainer();
+    REQUIRE_THAT(constrainer->getFixedAspectRatio(), Catch::Matchers::WithinAbs(1440.0 / 1120.0, 1e-9));
+    REQUIRE(constrainer->getMinimumWidth() == 1008);
+    REQUIRE(constrainer->getMaximumWidth() == 2160);
+
+    sizes->setSelectedId(4, juce::sendNotificationSync);
+    REQUIRE(editor->getWidth() == 1800);
+    REQUIRE(editor->getHeight() == 1400);
+    editor->setSize(1008, 784);
+    REQUIRE(editor->getLocalArea(content, content->getLocalBounds()) == editor->getLocalBounds());
+    editor.reset();
+    juce::MemoryBlock saved;
+    processor.getStateInformation(saved);
+    OpenGlitchFXProcessor restored;
+    restored.setStateInformation(saved.getData(), static_cast<int>(saved.getSize()));
+    const std::unique_ptr<juce::AudioProcessorEditor> reopened(restored.createEditor());
+
+    REQUIRE(reopened->getWidth() == 1008);
+    REQUIRE(reopened->getHeight() == 784);
 }
 
 TEST_CASE("Sequencer length and swing are automatable and survive state restore", "[plugin][sequencer]") {

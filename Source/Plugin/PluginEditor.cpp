@@ -1,9 +1,8 @@
 #include "PluginEditor.h"
 #include "BinaryData.h"
 
-OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
-    : AudioProcessorEditor(&owner),
-      processor_(owner),
+EditorContent::EditorContent(OpenGlitchFXProcessor& owner)
+    : processor_(owner),
       sequencerGrid_(owner.parameters, lookAndFeel_, owner.getUndo()),
       detailPanel_(owner, lookAndFeel_) {
     setLookAndFeel(&lookAndFeel_);
@@ -21,6 +20,17 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
     themeBox_.setJustificationType(juce::Justification::centred);
     themeBox_.onChange = [this]() { applyTheme(themeBox_.getSelectedItemIndex()); };
     addAndMakeVisible(themeBox_);
+
+    scaleBox_.addItemList({ "70%", "85%", "100%", "125%" }, 1);
+    scaleBox_.setTooltip("Editor size. Drag the bottom-right corner for any size from 70% to 150%.");
+    scaleBox_.setJustificationType(juce::Justification::centred);
+    scaleBox_.onChange = [this]() {
+        const float scale = scaleBox_.getText().getFloatValue() / 100.0f;
+        if (auto* editor = getParentComponent()) {
+            editor->setSize(juce::roundToInt(kDesignWidth * scale), juce::roundToInt(kDesignHeight * scale));
+        }
+    };
+    addAndMakeVisible(scaleBox_);
 
     themeLabel_.setFont(juce::FontOptions(14.0f, juce::Font::bold));
     themeLabel_.setJustificationType(juce::Justification::centredRight);
@@ -253,18 +263,17 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
     addAndMakeVisible(*suiteBar_);
 
     setWantsKeyboardFocus(true);
-    setResizable(true, true);
-    setResizeLimits(1300, 1050, 1620, 1390);
-    setSize(1440, 1120);
+    setSize(kDesignWidth, kDesignHeight);
+    timerCallback();
     startTimerHz(30);
 }
 
-OpenGlitchFXEditor::~OpenGlitchFXEditor() {
+EditorContent::~EditorContent() {
     stopTimer();
     setLookAndFeel(nullptr);
 }
 
-void OpenGlitchFXEditor::applyTheme(int themeIndex) {
+void EditorContent::applyTheme(int themeIndex) {
     themeIndex = std::clamp(themeIndex, 0, 3);
     lookAndFeel_.setTheme(static_cast<openglitch::ui::Theme>(themeIndex));
     const auto& pal = lookAndFeel_.getPalette();
@@ -292,7 +301,7 @@ void OpenGlitchFXEditor::applyTheme(int themeIndex) {
     repaint();
 }
 
-juce::PopupMenu OpenGlitchFXEditor::createRandomizeMenu() {
+juce::PopupMenu EditorContent::createRandomizeMenu() {
     juce::PopupMenu menu;
     menu.setLookAndFeel(&lookAndFeel_);
     menu.addSectionHeader(sequencerGrid_.getPaintTargetFx() >= 0 ? "Randomize selected FX lane" : "Randomize the full pattern");
@@ -302,9 +311,9 @@ juce::PopupMenu OpenGlitchFXEditor::createRandomizeMenu() {
     return menu;
 }
 
-void OpenGlitchFXEditor::showRandomizeMenu() {
+void EditorContent::showRandomizeMenu() {
     createRandomizeMenu().showMenuAsync(juce::PopupMenu::Options{}.withTargetComponent(&randomizeButton_),
-                       [safeThis = juce::Component::SafePointer<OpenGlitchFXEditor>(this)](int choice) {
+                       [safeThis = juce::Component::SafePointer<EditorContent>(this)](int choice) {
         if (safeThis != nullptr && choice > 0) {
             const auto seed = static_cast<uint32_t>(juce::Random::getSystemRandom().nextInt());
             safeThis->processor_.getUndo().perform("Randomize", [&] {
@@ -314,7 +323,7 @@ void OpenGlitchFXEditor::showRandomizeMenu() {
     });
 }
 
-int OpenGlitchFXEditor::fxCardHeaderAt(juce::Point<float> position) const {
+int EditorContent::fxCardHeaderAt(juce::Point<float> position) const {
     const auto hit = std::ranges::find_if(fxSlots_, [&](const FxSlotUi& slot) {
         const auto& r = slot.cardBounds;
         return juce::Rectangle<float>(r.getX(), r.getY(), r.getWidth(), 36.0f).contains(position);
@@ -322,7 +331,7 @@ int OpenGlitchFXEditor::fxCardHeaderAt(juce::Point<float> position) const {
     return hit == fxSlots_.end() ? -1 : static_cast<int>(std::distance(fxSlots_.begin(), hit));
 }
 
-void OpenGlitchFXEditor::mouseDown(const juce::MouseEvent& event) {
+void EditorContent::mouseDown(const juce::MouseEvent& event) {
     // Clicking an FX card's top header plate toggles/selects that FX as the active Pad Brush!
     const int fx = fxCardHeaderAt(event.position);
     if (fx < 0) {
@@ -332,7 +341,7 @@ void OpenGlitchFXEditor::mouseDown(const juce::MouseEvent& event) {
     paintBrushBox_.setSelectedId(targetBrush + 2, juce::sendNotificationSync);
 }
 
-juce::String OpenGlitchFXEditor::getTooltip() {
+juce::String EditorContent::getTooltip() {
     const int fx = fxCardHeaderAt(getMouseXYRelative().toFloat());
     if (fx < 0) {
         return {};
@@ -342,7 +351,7 @@ juce::String OpenGlitchFXEditor::getTooltip() {
          + " this FX as the pad brush. Active on " + juce::String(pads) + " of 32 pads.";
 }
 
-void OpenGlitchFXEditor::timerCallback() {
+void EditorContent::timerCallback() {
     const auto theme = static_cast<int>(processor_.parameters.getRawParameterValue(openglitch::params::kTheme)->load());
     if (theme != static_cast<int>(lookAndFeel_.getTheme())) applyTheme(theme);
     const auto tel = processor_.getTelemetry();
@@ -375,6 +384,10 @@ void OpenGlitchFXEditor::timerCallback() {
         detailPanel_.refreshFromState();
     }
     detailPanel_.setTelemetry(tel);
+    const auto scaleText = juce::String(juce::roundToInt(processor_.getEditorScale() * 100.0f)) + "%";
+    if (scaleBox_.getText() != scaleText) {
+        scaleBox_.setText(scaleText, juce::dontSendNotification);
+    }
     if (suiteBar_ != nullptr) {
         const auto token = juce::String(processor_.abIsA() ? 1 : 0)
             + processor_.currentPresetLabel()
@@ -391,7 +404,7 @@ void OpenGlitchFXEditor::timerCallback() {
     repaint(385, 6, 144, 46);
 }
 
-void OpenGlitchFXEditor::paint(juce::Graphics& g) {
+void EditorContent::paint(juce::Graphics& g) {
     const float w = static_cast<float>(getWidth());
     const float h = static_cast<float>(getHeight());
     const auto& pal = lookAndFeel_.getPalette();
@@ -608,14 +621,14 @@ void OpenGlitchFXEditor::paint(juce::Graphics& g) {
     g.drawText("v" JucePlugin_VersionString, static_cast<int>(w - 180.0f), static_cast<int>(h - 20.0f), 150, 16, juce::Justification::centredRight);
 }
 
-juce::String OpenGlitchFXEditor::stepPillText(int currentStep, bool gateOpen, bool midiMode) {
+juce::String EditorContent::stepPillText(int currentStep, bool gateOpen, bool midiMode) {
     if (midiMode) {
         return gateOpen ? "MIDI ACTIVE" : "MIDI DRY";
     }
     return "STEP " + juce::String(currentStep + 1).paddedLeft('0', 2) + "/32" + (gateOpen ? " ACTIVE" : " DRY");
 }
 
-bool OpenGlitchFXEditor::keyPressed(const juce::KeyPress& key) {
+bool EditorContent::keyPressed(const juce::KeyPress& key) {
     const auto code = juce::CharacterFunctions::toUpperCase(static_cast<juce::juce_wchar>(key.getKeyCode()));
     if (key.getModifiers().isCommandDown() && code == 'Z') {
         if (key.getModifiers().isShiftDown()) {
@@ -628,10 +641,10 @@ bool OpenGlitchFXEditor::keyPressed(const juce::KeyPress& key) {
         }
         return true;
     }
-    return juce::AudioProcessorEditor::keyPressed(key);
+    return juce::Component::keyPressed(key);
 }
 
-void OpenGlitchFXEditor::resized() {
+void EditorContent::resized() {
     const float w = static_cast<float>(getWidth());
     const float h = static_cast<float>(getHeight());
     const float margin = 28.0f;
@@ -640,10 +653,11 @@ void OpenGlitchFXEditor::resized() {
     }
 
     // Header Controls (Right Side)
-    hostSyncButton_.setBounds(static_cast<int>(w - 510.0f), 12, 116, 36);
-    internalBpmSlider_.setBounds(static_cast<int>(w - 390.0f), 12, 96, 36);
-    themeLabel_.setBounds(static_cast<int>(w - 286.0f), 12, 62, 36);
-    themeBox_.setBounds(static_cast<int>(w - 216.0f), 12, 184, 36);
+    hostSyncButton_.setBounds(static_cast<int>(w - 566.0f), 12, 116, 36);
+    internalBpmSlider_.setBounds(static_cast<int>(w - 446.0f), 12, 92, 36);
+    themeLabel_.setBounds(static_cast<int>(w - 350.0f), 12, 62, 36);
+    themeBox_.setBounds(static_cast<int>(w - 282.0f), 12, 160, 36);
+    scaleBox_.setBounds(static_cast<int>(w - 116.0f), 12, 84, 36);
 
     // 32-Step Beat Sequencer Section
     sequencerGrid_.setBounds(static_cast<int>(margin), 106, static_cast<int>(w - margin * 2.0f), 112);
@@ -741,4 +755,30 @@ void OpenGlitchFXEditor::resized() {
     auto s3 = mInner.removeFromTop(148.0f);
     smoothLabel_.setBounds(s3.removeFromTop(16.0f).toNearestInt());
     smoothSlider_.setBounds(s3.reduced(20.0f, 4.0f).toNearestInt());
+}
+
+OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
+    : AudioProcessorEditor(&owner), processor_(owner), content_(owner) {
+    // Read the saved scale first: setResizeLimits resizes the editor, and resized() stores the new scale.
+    const float scale = owner.getEditorScale();
+    addAndMakeVisible(content_);
+    setWantsKeyboardFocus(true);
+    setResizable(true, true);
+    setResizeLimits(juce::roundToInt(EditorContent::kDesignWidth * EditorContent::kMinScale),
+                    juce::roundToInt(EditorContent::kDesignHeight * EditorContent::kMinScale),
+                    juce::roundToInt(EditorContent::kDesignWidth * EditorContent::kMaxScale),
+                    juce::roundToInt(EditorContent::kDesignHeight * EditorContent::kMaxScale));
+    getConstrainer()->setFixedAspectRatio(static_cast<double>(EditorContent::kDesignWidth) / EditorContent::kDesignHeight);
+    setSize(juce::roundToInt(EditorContent::kDesignWidth * scale), juce::roundToInt(EditorContent::kDesignHeight * scale));
+}
+
+void OpenGlitchFXEditor::resized() {
+    const float scale = std::min(static_cast<float>(getWidth()) / EditorContent::kDesignWidth,
+                                 static_cast<float>(getHeight()) / EditorContent::kDesignHeight);
+    content_.setTransform(juce::AffineTransform::scale(scale));
+    processor_.setEditorScale(scale);
+}
+
+bool OpenGlitchFXEditor::keyPressed(const juce::KeyPress& key) {
+    return content_.keyPressed(key);
 }
