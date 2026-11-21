@@ -20,6 +20,8 @@ SuiteBar::SuiteBar(PresetLibrary& library, Hooks hooks)
     style(saveButton_, "Save the current sound as a user preset.");
     style(favoriteButton_, "Mark or unmark the selected preset as a favorite.");
     style(editButton_, "Rename or delete the selected user preset.");
+    style(previousButton_, "Previous preset");
+    style(nextButton_, "Next preset");
     aButton_.setClickingTogglesState(true);
     bButton_.setClickingTogglesState(true);
     aButton_.setRadioGroupId(5101);
@@ -40,6 +42,18 @@ SuiteBar::SuiteBar(PresetLibrary& library, Hooks hooks)
     bButton_.onClick = [this] { if (hooks_.selectB && hooks_.abIsA && hooks_.abIsA()) hooks_.selectB(); refresh(); };
     copyAtoBButton_.onClick = [this] { if (hooks_.copyAtoB) hooks_.copyAtoB(); refresh(); };
     copyBtoAButton_.onClick = [this] { if (hooks_.copyBtoA) hooks_.copyBtoA(); refresh(); };
+    // Steps through the listed presets and wraps. With no listed preset loaded,
+    // Next starts at the first entry and Previous at the last.
+    auto step = [this](int delta) {
+        const int count = static_cast<int>(shown_.size());
+        if (count == 0) {
+            return;
+        }
+        const int from = std::max(presetBox_.getSelectedId() - 1, delta > 0 ? -1 : 0);
+        chooseListed((from + delta + count) % count + 1);
+    };
+    previousButton_.onClick = [step] { step(-1); };
+    nextButton_.onClick = [step] { step(1); };
     saveButton_.onClick = [this] {
         auto* window = new juce::AlertWindow("Save preset", "Saved presets go to Documents/Alan Marcero.", juce::AlertWindow::NoIcon);
         window->addTextEditor("name", hooks_.currentLabel ? hooks_.currentLabel() : juce::String(), "Name");
@@ -108,7 +122,7 @@ SuiteBar::SuiteBar(PresetLibrary& library, Hooks hooks)
     };
 
     for (auto* button : { &undoButton_, &redoButton_, &aButton_, &bButton_, &copyAtoBButton_, &copyBtoAButton_,
-                          &saveButton_, &favoriteButton_, &editButton_ }) {
+                          &previousButton_, &nextButton_, &saveButton_, &favoriteButton_, &editButton_ }) {
         addAndMakeVisible(button);
     }
     addAndMakeVisible(search_);
@@ -213,6 +227,8 @@ void SuiteBar::resized() {
     copyAtoBButton_.setBounds(take(52));
     copyBtoAButton_.setBounds(take(52));
     search_.setBounds(take(168));
+    previousButton_.setBounds(take(40).expanded(0, 2));
+    nextButton_.setBounds(take(40).expanded(0, 2));
     saveButton_.setBounds(row.removeFromRight(56));
     row.removeFromRight(4);
     editButton_.setBounds(row.removeFromRight(52));

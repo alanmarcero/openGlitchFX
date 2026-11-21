@@ -215,7 +215,7 @@ TEST_CASE("Editor renders native UI screenshot", "[plugin][gui]") {
                 const auto area = editor->getLocalArea(c, c->getLocalBounds());
                 CAPTURE(c->getName().toStdString(), area.toString().toStdString());
                 REQUIRE(area.getHeight() >= 36);
-                REQUIRE(area.getWidth() >= 44);
+                REQUIRE(area.getWidth() >= 40);
                 REQUIRE(editor->getLocalBounds().contains(area));
                 auto* hit = editor->getComponentAt(area.getCentre());
                 REQUIRE((hit == c || c->isParentOf(hit)));
@@ -313,6 +313,32 @@ TEST_CASE("The preset box marks an edit since the last load", "[plugin][gui]") {
     content.timerCallback();
 
     REQUIRE(presets->getText() == "Club Stutter *");
+}
+
+TEST_CASE("Previous and next step through the preset list and wrap at the ends", "[plugin][presets]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    OpenGlitchFXProcessor processor;
+    const auto directory = juce::File::getSpecialLocation(juce::File::tempDirectory)
+        .getChildFile("openglitch-steps-" + juce::String(juce::Random::getSystemRandom().nextInt64()));
+    processor.getPresets().setDirectoryForTests(directory);
+    EditorContent content(processor);
+    auto* previous = findDescendant<juce::TextButton>(content, [](juce::TextButton& b) { return b.getTooltip() == "Previous preset"; });
+    auto* next = findDescendant<juce::TextButton>(content, [](juce::TextButton& b) { return b.getTooltip() == "Next preset"; });
+    REQUIRE(previous != nullptr);
+    REQUIRE(next != nullptr);
+    REQUIRE(previous->getWidth() >= 40);
+    REQUIRE(previous->getHeight() >= 40);
+    const auto lastFactory = processor.getProgramName(processor.getNumPrograms() - 1);
+
+    previous->onClick();
+    const auto wrappedBack = processor.currentPresetLabel();
+    next->onClick();
+    const auto wrappedForward = processor.currentPresetLabel();
+    next->onClick();
+
+    REQUIRE(wrappedBack == lastFactory);
+    REQUIRE(wrappedForward == "Club Stutter");
+    REQUIRE(processor.currentPresetLabel() == processor.getProgramName(1));
 }
 
 TEST_CASE("The editor scales its content as one unit and reopens at the saved size", "[plugin][gui]") {

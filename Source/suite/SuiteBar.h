@@ -51,6 +51,8 @@ private:
     juce::TextButton copyAtoBButton_{ "A>B" };
     juce::TextButton copyBtoAButton_{ "B>A" };
     juce::TextEditor search_;
+    juce::TextButton previousButton_{ "<" };
+    juce::TextButton nextButton_{ ">" };
     juce::ComboBox presetBox_;
     juce::TextButton saveButton_{ "SAVE" };
     juce::TextButton favoriteButton_{ "FAV" };
