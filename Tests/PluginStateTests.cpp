@@ -341,6 +341,39 @@ TEST_CASE("Previous and next step through the preset list and wrap at the ends",
     REQUIRE(processor.currentPresetLabel() == processor.getProgramName(1));
 }
 
+TEST_CASE("Bars fill in the theme colour and bipolar knobs fill from zero", "[plugin][gui]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    openglitch::ui::GlitchLookAndFeel look;
+    const auto accent = look.getPalette().accentPrimary;
+    auto nearAccent = [&](juce::Colour pixel) {
+        return std::abs(pixel.getRed() - accent.getRed()) + std::abs(pixel.getGreen() - accent.getGreen())
+             + std::abs(pixel.getBlue() - accent.getBlue()) < 60;
+    };
+    juce::Slider gate(juce::Slider::LinearBar, juce::Slider::TextBoxBelow);
+    gate.setLookAndFeel(&look);
+    gate.setRange(5.0, 100.0);
+    gate.setValue(80.0);
+    gate.setSize(160, 36);
+    juce::Slider gain(juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::NoTextBox);
+    gain.setLookAndFeel(&look);
+    gain.setRange(-18.0, 18.0);
+    gain.setValue(0.0);
+    gain.setSize(100, 100);
+
+    const auto gateImage = gate.createComponentSnapshot(gate.getLocalBounds());
+    const auto gainImage = gain.createComponentSnapshot(gain.getLocalBounds());
+    const auto litLeftOfCentre = std::ranges::count_if(std::views::iota(0, 33 * 100), [&](int index) {
+        const auto pixel = gainImage.getPixelAt(index % 33, index / 33);
+        return pixel.getAlpha() > 100 && nearAccent(pixel);
+    });
+
+    REQUIRE(gateImage.getPixelAt(6, 18).getAlpha() > 40);
+    REQUIRE(nearAccent(gateImage.getPixelAt(6, 18)));
+    REQUIRE(litLeftOfCentre == 0);
+    gate.setLookAndFeel(nullptr);
+    gain.setLookAndFeel(nullptr);
+}
+
 TEST_CASE("The editor scales its content as one unit and reopens at the saved size", "[plugin][gui]") {
     juce::ScopedJuceInitialiser_GUI gui;
     OpenGlitchFXProcessor processor;

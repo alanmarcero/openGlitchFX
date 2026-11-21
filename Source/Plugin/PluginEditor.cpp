@@ -298,11 +298,11 @@ void EditorContent::applyTheme(int themeIndex) {
     patternChanceLabel_.setColour(juce::Label::textColourId, pal.textMuted);
     patternChanceValueLabel_.setColour(juce::Label::textColourId, pal.accentPrimary);
     sequenceLengthSlider_.setColour(juce::Slider::thumbColourId, pal.accentPrimary);
-    sequenceLengthSlider_.setColour(juce::Slider::trackColourId, pal.stepInactiveFill);
+    sequenceLengthSlider_.setColour(juce::Slider::trackColourId, pal.accentPrimary);
     sequencerSwingSlider_.setColour(juce::Slider::thumbColourId, pal.accentSecondary);
-    sequencerSwingSlider_.setColour(juce::Slider::trackColourId, pal.stepInactiveFill);
+    sequencerSwingSlider_.setColour(juce::Slider::trackColourId, pal.accentSecondary);
     patternChanceSlider_.setColour(juce::Slider::thumbColourId, pal.accentPrimary);
-    patternChanceSlider_.setColour(juce::Slider::trackColourId, pal.stepInactiveFill);
+    patternChanceSlider_.setColour(juce::Slider::trackColourId, pal.accentPrimary);
 
     sendLookAndFeelChange();
     repaint();

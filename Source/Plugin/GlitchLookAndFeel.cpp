@@ -6,6 +6,11 @@ namespace openglitch::ui {
 
 namespace {
 
+// Where 0 sits on a slider, so bipolar controls fill from the centre.
+float zeroProportion(juce::Slider& slider) {
+    return static_cast<float>(slider.valueToProportionOfLength(std::clamp(0.0, slider.getMinimum(), slider.getMaximum())));
+}
+
 ThemePalette makePalette(Theme t) {
     switch (t) {
         case Theme::IndustrialAmber:
@@ -100,6 +105,9 @@ void GlitchLookAndFeel::setTheme(Theme theme) {
     setColour(juce::Slider::textBoxTextColourId, palette_.textBright);
     setColour(juce::Slider::textBoxBackgroundColourId, palette_.bgBottom.withAlpha(0.85f));
     setColour(juce::Slider::textBoxOutlineColourId, palette_.cardBorder);
+    setColour(juce::Slider::backgroundColourId, palette_.cardBorder);
+    setColour(juce::Slider::trackColourId, palette_.accentPrimary);
+    setColour(juce::Slider::thumbColourId, palette_.accentPrimary);
     setColour(juce::ComboBox::backgroundColourId, palette_.headerPlate);
     setColour(juce::ComboBox::textColourId, palette_.textBright);
     setColour(juce::ComboBox::outlineColourId, palette_.cardBorder);
@@ -129,13 +137,16 @@ void GlitchLookAndFeel::drawRotarySlider(juce::Graphics& g,
                                          float sliderPosProportional,
                                          float rotaryStartAngle,
                                          float rotaryEndAngle,
-                                         juce::Slider& /*slider*/) {
+                                         juce::Slider& slider) {
     const auto bounds = juce::Rectangle<float>(static_cast<float>(x), static_cast<float>(y),
                                                static_cast<float>(width), static_cast<float>(height)).reduced(4.0f);
     const float radius = std::min(bounds.getWidth(), bounds.getHeight()) * 0.5f;
     const float cx = bounds.getCentreX();
     const float cy = bounds.getCentreY();
     const float angle = rotaryStartAngle + sliderPosProportional * (rotaryEndAngle - rotaryStartAngle);
+    const float zero = zeroProportion(slider);
+    const float zeroAngle = rotaryStartAngle + zero * (rotaryEndAngle - rotaryStartAngle);
+    const bool hasValue = std::abs(sliderPosProportional - zero) > 0.005f;
 
     // 0. Outer Cyber Scale Ticks
     constexpr int kNumTicks = 17;
@@ -143,7 +154,8 @@ void GlitchLookAndFeel::drawRotarySlider(juce::Graphics& g,
         const float norm = static_cast<float>(i) / static_cast<float>(kNumTicks - 1);
         const float ta = rotaryStartAngle + norm * (rotaryEndAngle - rotaryStartAngle);
         const bool isMajor = (i % 4 == 0);
-        const bool isLit = (norm <= sliderPosProportional + 0.005f) && (sliderPosProportional > 0.005f);
+        const bool isLit = hasValue && norm >= std::min(zero, sliderPosProportional) - 0.005f
+                        && norm <= std::max(zero, sliderPosProportional) + 0.005f;
         const float rIn = radius - 0.5f;
         const float rOut = radius + (isMajor ? 3.5f : 2.0f);
 
@@ -163,9 +175,9 @@ void GlitchLookAndFeel::drawRotarySlider(juce::Graphics& g,
     g.setColour(palette_.stepInactiveFill.brighter(0.15f));
     g.strokePath(bgArc, juce::PathStrokeType(3.2f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
-    if (sliderPosProportional > 0.005f) {
+    if (hasValue) {
         juce::Path valArc;
-        valArc.addCentredArc(cx, cy, arcRadius, arcRadius, 0.0f, rotaryStartAngle, angle, true);
+        valArc.addCentredArc(cx, cy, arcRadius, arcRadius, 0.0f, std::min(zeroAngle, angle), std::max(zeroAngle, angle), true);
 
         juce::ColourGradient arcGrad(palette_.accentPrimary, cx - arcRadius, cy,
                                      palette_.accentSecondary, cx + arcRadius, cy, false);
@@ -225,6 +237,22 @@ void GlitchLookAndFeel::drawRotarySlider(juce::Graphics& g,
     g.drawLine(sx0, sy0, sx1, sy1, 2.0f);
     g.setColour(palette_.accentPrimary);
     g.fillEllipse(sx1 - 2.2f, sy1 - 2.2f, 4.4f, 4.4f);
+}
+
+void GlitchLookAndFeel::drawLinearSlider(juce::Graphics& g,
+                                         int x, int y, int width, int height,
+                                         float sliderPos, float minSliderPos, float maxSliderPos,
+                                         juce::Slider::SliderStyle style,
+                                         juce::Slider& slider) {
+    if (!slider.isBar()) {
+        LookAndFeel_V4::drawLinearSlider(g, x, y, width, height, sliderPos, minSliderPos, maxSliderPos, style, slider);
+        return;
+    }
+    // A light fill keeps the value text readable.
+    const float zeroX = static_cast<float>(x) + static_cast<float>(width) * zeroProportion(slider);
+    g.setColour(slider.findColour(juce::Slider::trackColourId).withAlpha(0.3f));
+    g.fillRect(juce::Rectangle<float>::leftTopRightBottom(std::min(zeroX, sliderPos), static_cast<float>(y) + 0.5f,
+                                                          std::max(zeroX, sliderPos), static_cast<float>(y + height) - 0.5f));
 }
 
 void GlitchLookAndFeel::drawToggleButton(juce::Graphics& g,
