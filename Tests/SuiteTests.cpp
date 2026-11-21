@@ -357,7 +357,7 @@ TEST_CASE("Disabled controls draw dimmed and undo/redo reflect history", "[plugi
 
     auto sumAlpha = [](juce::Component& comp) {
         comp.setSize(80, 36);
-        juce::Image img(juce::Image::ARGB, 80, 36, true);
+        juce::Image img(juce::Image::ARGB, 80, 36, true, juce::SoftwareImageType());
         juce::Graphics g(img);
         comp.paintEntireComponent(g, false);
         double total = 0.0;
