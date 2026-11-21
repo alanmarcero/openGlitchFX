@@ -46,7 +46,7 @@ TEST_CASE("Editor text reads the same on every platform", "[plugin][gui]") {
         randomizeItems.add(item.getItem().text);
     }
 
-    REQUIRE(EditorContent::stepPillText(0, false, false) == "STEP 01/32 DRY");
+    REQUIRE(EditorContent::stepPillText(0, 32, false, false) == "STEP 01/32 DRY");
     REQUIRE(brush->getItemText(1) == "ONLY: BITCRUSH [BC]");
     REQUIRE(randomizeItems == juce::StringArray{ "Randomize the full pattern", "Light (35% step density)",
                                                  "Medium (55% step density)", "Wild (75% step density)" });
@@ -323,6 +323,31 @@ TEST_CASE("The editor scales its content as one unit and reopens at the saved si
 
     REQUIRE(reopened->getWidth() == 1008);
     REQUIRE(reopened->getHeight() == 784);
+}
+
+TEST_CASE("The pad grid, pill and card counts follow LENGTH and RATE", "[plugin][sequencer]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    OpenGlitchFXProcessor processor;
+    openglitch::ui::GlitchLookAndFeel look;
+    openglitch::ui::StepSequencerComponent grid(processor.parameters, look, processor.getUndo());
+    auto set = [&](const juce::String& id, float value) {
+        auto* parameter = processor.parameters.getParameter(id);
+        parameter->setValueNotifyingHost(parameter->convertTo0to1(value));
+    };
+    grid.setPaintTargetFx(2);
+    grid.applyPreset(openglitch::core::StepPatternPreset::AllOn);
+
+    set(openglitch::params::kSequenceLength, 16.0f);
+    set(openglitch::params::kPatternRate, 2.0f);
+
+    REQUIRE(grid.loopLength() == 16);
+    REQUIRE(grid.stepsPerBeat() == 16);
+    REQUIRE(grid.countStepsRoutingToFx(2) == 16);
+    REQUIRE(EditorContent::stepPillText(4, grid.loopLength(), true, false) == "STEP 05/16 ACTIVE");
+    REQUIRE(openglitch::ui::StepSequencerComponent::spanDuration(2, 8) == "1/16");
+    REQUIRE(openglitch::ui::StepSequencerComponent::spanDuration(12, 8) == "3/8");
+    REQUIRE(openglitch::ui::StepSequencerComponent::spanDuration(16, grid.stepsPerBeat()) == "1 BEAT");
+    REQUIRE(openglitch::ui::StepSequencerComponent::spanDuration(32, 4) == "2 BARS");
 }
 
 TEST_CASE("Sequencer length and swing are automatable and survive state restore", "[plugin][sequencer]") {

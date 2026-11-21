@@ -84,15 +84,15 @@ EditorContent::EditorContent(OpenGlitchFXProcessor& owner)
     };
     setupPresetBtn(presetAllBtn_,        "Turn on all 32 pads. Uses the pad brush FX if one is selected.",
                    editPattern("Pattern", [this] { sequencerGrid_.applyPreset(StepPatternPreset::AllOn); }));
-    setupPresetBtn(presetLastBeatBtn_,   "Pads 25-32: beat 4 of every bar. Uses the pad brush FX if one is selected.",
+    setupPresetBtn(presetLastBeatBtn_,   "Pads 25-32: beat 4 at RATE 1x. Uses the pad brush FX if one is selected.",
                    editPattern("Pattern", [this] { sequencerGrid_.applyPreset(StepPatternPreset::LastBeat); }));
-    setupPresetBtn(presetLast4StepsBtn_, "Pads 29-32: the last 1/8 note of the bar. Uses the pad brush FX if one is selected.",
+    setupPresetBtn(presetLast4StepsBtn_, "Pads 29-32: the last 1/8 note at RATE 1x. Uses the pad brush FX if one is selected.",
                    editPattern("Pattern", [this] { sequencerGrid_.applyPreset(StepPatternPreset::LastFourSteps); }));
-    setupPresetBtn(presetLast32ndBtn_,   "Pad 32 only: the last 1/32 note of the bar. Uses the pad brush FX if one is selected.",
+    setupPresetBtn(presetLast32ndBtn_,   "Pad 32 only: the last 1/32 note at RATE 1x. Uses the pad brush FX if one is selected.",
                    editPattern("Pattern", [this] { sequencerGrid_.applyPreset(StepPatternPreset::Last32nd); }));
-    setupPresetBtn(presetBackbeatBtn_,   "Pads 9-16 and 25-32: beats 2 and 4. Uses the pad brush FX if one is selected.",
+    setupPresetBtn(presetBackbeatBtn_,   "Pads 9-16 and 25-32: beats 2 and 4 at RATE 1x. Uses the pad brush FX if one is selected.",
                    editPattern("Pattern", [this] { sequencerGrid_.applyPreset(StepPatternPreset::Backbeat2And4); }));
-    setupPresetBtn(preset16thBtn_,       "The second 1/16 note of every 1/8 note. Uses the pad brush FX if one is selected.",
+    setupPresetBtn(preset16thBtn_,       "The second 1/16 note of every 1/8 note at RATE 1x. Uses the pad brush FX if one is selected.",
                    editPattern("Pattern", [this] { sequencerGrid_.applyPreset(StepPatternPreset::Stutter16ths); }));
     setupPresetBtn(presetInvertBtn_,     "Swap on and off for every pad.",
                    editPattern("Pattern", [this] { sequencerGrid_.invertPattern(); }));
@@ -111,7 +111,7 @@ EditorContent::EditorContent(OpenGlitchFXProcessor& owner)
         addAndMakeVisible(slider);
     };
     sequenceLengthSlider_.setRange(1.0, 32.0, 1.0);
-    sequenceLengthSlider_.setTooltip("Number of 1/32-note steps before the pattern loops.");
+    sequenceLengthSlider_.setTooltip("Number of steps before the pattern loops. Pads after it do not play.");
     sequenceLengthValueLabel_.setJustificationType(juce::Justification::centredLeft);
     sequenceLengthValueLabel_.setFont(juce::FontOptions(14.0f, juce::Font::bold));
     addAndMakeVisible(sequenceLengthValueLabel_);
@@ -354,7 +354,7 @@ juce::String EditorContent::getTooltip() {
     }
     const int pads = sequencerGrid_.countStepsRoutingToFx(fx);
     return juce::String("Click to ") + (sequencerGrid_.getPaintTargetFx() == fx ? "clear" : "select")
-         + " this FX as the pad brush. Active on " + juce::String(pads) + " of 32 pads.";
+         + " this FX as the pad brush. Active on " + juce::String(pads) + " of " + juce::String(sequencerGrid_.loopLength()) + " pads.";
 }
 
 void EditorContent::timerCallback() {
@@ -503,7 +503,8 @@ void EditorContent::paint(juce::Graphics& g) {
     g.drawRoundedRectangle(statusPill, 13.0f, 1.3f);
     g.setColour(gateOpen ? pal.textBright : pal.textMuted);
     g.setFont(juce::FontOptions(10.5f, juce::Font::bold));
-    g.drawText(stepPillText(tel.currentStep, gateOpen, midiMode), statusPill.toNearestInt(), juce::Justification::centred);
+    g.drawText(stepPillText(tel.currentStep, sequencerGrid_.loopLength(), gateOpen, midiMode), statusPill.toNearestInt(),
+               juce::Justification::centred);
 
     // Divider line
     g.setColour(pal.cardBorder);
@@ -643,11 +644,11 @@ void EditorContent::paint(juce::Graphics& g) {
     g.drawText("v" JucePlugin_VersionString, static_cast<int>(w - 180.0f), static_cast<int>(h - 20.0f), 150, 16, juce::Justification::centredRight);
 }
 
-juce::String EditorContent::stepPillText(int currentStep, bool gateOpen, bool midiMode) {
+juce::String EditorContent::stepPillText(int currentStep, int loopLength, bool gateOpen, bool midiMode) {
     if (midiMode) {
         return gateOpen ? "MIDI ACTIVE" : "MIDI DRY";
     }
-    return "STEP " + juce::String(currentStep + 1).paddedLeft('0', 2) + "/32" + (gateOpen ? " ACTIVE" : " DRY");
+    return "STEP " + juce::String(currentStep + 1).paddedLeft('0', 2) + "/" + juce::String(loopLength) + (gateOpen ? " ACTIVE" : " DRY");
 }
 
 bool EditorContent::keyPressed(const juce::KeyPress& key) {

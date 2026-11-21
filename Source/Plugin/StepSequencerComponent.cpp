@@ -1,7 +1,9 @@
 #include "StepSequencerComponent.h"
 #include <algorithm>
 #include <bit>
+#include <numeric>
 #include <random>
+#include <ranges>
 
 namespace openglitch::ui {
 
@@ -44,12 +46,36 @@ void StepSequencerComponent::setMidiTriggerMode(bool midiMode) {
 }
 
 void StepSequencerComponent::refreshPattern() {
-    std::array<uint16_t, 32> masks{};
-    std::ranges::generate(masks, [this, step = 0]() mutable { return getEffectiveStepFxMask(step++); });
-    if (masks != shownMasks_) {
-        shownMasks_ = masks;
+    std::array<int, 34> shape{};
+    std::ranges::generate_n(shape.begin(), 32, [this, step = 0]() mutable { return static_cast<int>(getEffectiveStepFxMask(step++)); });
+    shape[32] = loopLength();
+    shape[33] = stepsPerBeat();
+    if (shape != shownShape_) {
+        shownShape_ = shape;
         repaint();
     }
+}
+
+int StepSequencerComponent::loopLength() const {
+    return juce::roundToInt(apvts_.getRawParameterValue(openglitch::params::kSequenceLength)->load());
+}
+
+// RATE 1/2x, 1x and 2x make a beat 4, 8 or 16 pads.
+int StepSequencerComponent::stepsPerBeat() const {
+    return 4 << juce::roundToInt(apvts_.getRawParameterValue(openglitch::params::kPatternRate)->load());
+}
+
+// The musical length of a pad span, such as "1/16", "3/32", "1 BEAT" or "2 BARS".
+juce::String StepSequencerComponent::spanDuration(int steps, int stepsPerBeat) {
+    const int stepsPerBar = stepsPerBeat * 4;
+    if (steps % stepsPerBar == 0) {
+        return juce::String(steps / stepsPerBar) + (steps == stepsPerBar ? " BAR" : " BARS");
+    }
+    if (steps % stepsPerBeat == 0) {
+        return juce::String(steps / stepsPerBeat) + (steps == stepsPerBeat ? " BEAT" : " BEATS");
+    }
+    const int common = std::gcd(steps, stepsPerBar);
+    return juce::String(steps / common) + "/" + juce::String(stepsPerBar / common);
 }
 
 juce::String StepSequencerComponent::getTooltip() {
@@ -70,8 +96,9 @@ int StepSequencerComponent::countStepsRoutingToFx(int fxIndex) const {
         return 0;
     }
     const uint16_t bit = static_cast<uint16_t>(1u << fxIndex);
+    const int length = loopLength();
     int count = 0;
-    for (int i = 0; i < 32; ++i) {
+    for (int i = 0; i < length; ++i) {
         if ((getEffectiveStepFxMask(i) & bit) != 0u) {
             ++count;
         }
@@ -113,14 +140,18 @@ StepSequencerComponent::ContiguousRun StepSequencerComponent::findContiguousRun(
         return { stepIndex, stepIndex, 0u };
     }
 
-    // Only pads with identical FX join, as in BeatStepSequencer::getMergedPadSpan
+    // Only pads with identical FX join, as in BeatStepSequencer::getMergedPadSpan.
+    // A run stops at the loop end, so pads past LENGTH never join a played block.
+    const int length = loopLength();
+    const int first = stepIndex < length ? 0 : length;
+    const int last = stepIndex < length ? length - 1 : 31;
     int start = stepIndex;
-    while (start > 0 && getEffectiveStepFxMask(start - 1) == mask) {
+    while (start > first && getEffectiveStepFxMask(start - 1) == mask) {
         --start;
     }
 
     int end = stepIndex;
-    while (end + 1 < 32 && getEffectiveStepFxMask(end + 1) == mask) {
+    while (end < last && getEffectiveStepFxMask(end + 1) == mask) {
         ++end;
     }
 
@@ -355,10 +386,10 @@ void StepSequencerComponent::showStepContextMenu(int step) {
     juce::PopupMenu menu;
     menu.setLookAndFeel(&getLookAndFeel());
     if (isMergedGroup) {
-        menu.addSectionHeader(juce::String::formatted("COMBINED BLOCK: PADS %02d-%02d (%d/32)  |  PAD %02d",
-                                                      run.startStep + 1, run.endStep + 1, run.length(), step + 1));
+        menu.addSectionHeader(juce::String::formatted("COMBINED BLOCK: PADS %02d-%02d (", run.startStep + 1, run.endStep + 1)
+                              + spanDuration(run.length(), stepsPerBeat()) + juce::String::formatted(")  |  PAD %02d", step + 1));
     } else {
-        menu.addSectionHeader(juce::String::formatted("PAD %02d/32 - EFFECT ROUTING", step + 1));
+        menu.addSectionHeader(juce::String::formatted("PAD %02d - EFFECT ROUTING", step + 1));
     }
 
     const juce::String targetLabel = isMergedGroup
@@ -406,7 +437,8 @@ void StepSequencerComponent::showStepContextMenu(int step) {
     }
 
     menu.addSeparator();
-    menu.addItem(300, "Copy This Pad (On/Off + FX) to Its Beat (8 Pads)");
+    const int groupStart = (step / 8) * 8;
+    menu.addItem(300, juce::String::formatted("Copy This Pad (On/Off + FX) to Pads %02d-%02d", groupStart + 1, groupStart + 8));
     menu.addItem(301, "Copy FX Routing to All 32 Pads");
 
     const int applyStart = isMergedGroup ? run.startStep : step;
@@ -526,7 +558,7 @@ void StepSequencerComponent::mouseDrag(const juce::MouseEvent& event) {
     }
 }
 
-juce::String StepSequencerComponent::formatStepFxBadge(uint16_t mask, int spanLen) {
+juce::String StepSequencerComponent::formatStepFxBadge(uint16_t mask, int spanLen, int stepsPerBeat) {
     mask &= kAllFx;
     if (mask == 0u) return "OFF";
 
@@ -559,22 +591,7 @@ juce::String StepSequencerComponent::formatStepFxBadge(uint16_t mask, int spanLe
     if (spanLen <= 1) {
         return fxText;
     }
-    if (spanLen == 2) {
-        return fxText + " 2/32";
-    }
-    if (spanLen == 4) {
-        return fxText + " (4/32 | 1/8 BAR)";
-    }
-    if (spanLen == 8) {
-        return fxText + " (8/32 | 1 BEAT)";
-    }
-    if (spanLen == 16) {
-        return fxText + " (16/32 | 2 BEATS)";
-    }
-    if (spanLen == 32) {
-        return fxText + " (32/32 | FULL BAR)";
-    }
-    return fxText + juce::String::formatted(" (%d/32)", spanLen);
+    return fxText + " " + spanDuration(spanLen, stepsPerBeat);
 }
 
 void StepSequencerComponent::paint(juce::Graphics& g) {
@@ -587,22 +604,24 @@ void StepSequencerComponent::paint(juce::Graphics& g) {
     g.setColour(pal.cardBorder);
     g.drawRoundedRectangle(fullBounds, 6.0f, 1.2f);
 
-    // Beat Group Headers (BEAT 1..4), or one readout for the hovered pad
-    const juce::String beatTitles[4] = {
-        "BEAT 1 (1-8)",
-        "BEAT 2 (9-16)",
-        "BEAT 3 (17-24)",
-        "BEAT 4 (25-32)"
-    };
+    // One header per beat, or one readout for the hovered pad
+    const int length = loopLength();
+    const int beatSteps = stepsPerBeat();
 
     if (hoveredStep_ >= 0 && hoveredStep_ < 32) {
         const uint16_t hMask = getEffectiveStepFxMask(hoveredStep_);
         const auto hRun = findContiguousRun(hoveredStep_);
-        const juce::String readout = (hMask == 0u)
-            ? juce::String::formatted("PAD %02d/32: OFF (DRY)  |  CLICK TO TURN ON  |  RIGHT-CLICK FOR FX ROUTING", hoveredStep_ + 1)
-            : juce::String::formatted("PAD %02d/32  |  BLOCK %02d-%02d (%d/32)  |  FX: ",
-                                      hoveredStep_ + 1, hRun.startStep + 1, hRun.endStep + 1, hRun.length())
-                  + formatStepFxBadge(hMask, 1) + "  |  RIGHT-CLICK FOR FX ROUTING";
+        const auto readout = [&]() -> juce::String {
+            if (hoveredStep_ >= length) {
+                return juce::String::formatted("PAD %02d: AFTER LENGTH %d, NOT PLAYED  |  RIGHT-CLICK FOR FX ROUTING", hoveredStep_ + 1, length);
+            }
+            if (hMask == 0u) {
+                return juce::String::formatted("PAD %02d/%d: OFF (DRY)  |  CLICK TO TURN ON  |  RIGHT-CLICK FOR FX ROUTING", hoveredStep_ + 1, length);
+            }
+            return juce::String::formatted("PAD %02d/%d  |  BLOCK %02d-%02d (", hoveredStep_ + 1, length, hRun.startStep + 1, hRun.endStep + 1)
+                + spanDuration(hRun.length(), beatSteps) + ")  |  FX: " + formatStepFxBadge(hMask, 1, beatSteps)
+                + "  |  RIGHT-CLICK FOR FX ROUTING";
+        }();
         const auto firstStepRect = getStepBounds(0);
         const auto lastStepRect = getStepBounds(31);
         const juce::Rectangle<float> header(firstStepRect.getX(), fullBounds.getY() + 5.0f,
@@ -614,19 +633,22 @@ void StepSequencerComponent::paint(juce::Graphics& g) {
         g.drawText(readout, header.toNearestInt(), juce::Justification::centred);
     }
 
-    for (int b = 0; b < 4 && hoveredStep_ < 0; ++b) {
-        const auto firstStepRect = getStepBounds(b * 8);
-        const auto lastStepRect  = getStepBounds(b * 8 + 7);
+    for (int b = 0; b < 32 / beatSteps && hoveredStep_ < 0; ++b) {
+        const int firstStep = b * beatSteps;
+        const int lastStep = firstStep + beatSteps - 1;
+        const auto firstStepRect = getStepBounds(firstStep);
+        const auto lastStepRect  = getStepBounds(lastStep);
         juce::Rectangle<float> beatHeader(firstStepRect.getX(), fullBounds.getY() + 5.0f,
                                           lastStepRect.getRight() - firstStepRect.getX(), 18.0f);
 
-        const bool playheadInBeat = (currentStep_ / 8) == b;
+        const bool playheadInBeat = (currentStep_ / beatSteps) == b;
         g.setColour(playheadInBeat ? pal.accentPrimary.withAlpha(0.18f) : pal.headerPlate.withAlpha(0.7f));
         g.fillRoundedRectangle(beatHeader, 3.0f);
 
-        g.setColour(playheadInBeat ? pal.accentPrimary : pal.textMuted);
+        g.setColour(playheadInBeat ? pal.accentPrimary : pal.textMuted.withAlpha(firstStep < length ? 1.0f : 0.45f));
         g.setFont(juce::FontOptions(9.5f, juce::Font::bold));
-        g.drawText(beatTitles[b], beatHeader.toNearestInt(), juce::Justification::centred);
+        g.drawText(juce::String::formatted("BEAT %d (%d-%d)", b + 1, firstStep + 1, lastStep + 1),
+                   beatHeader.toNearestInt(), juce::Justification::centred);
     }
 
     // PASS 1: Draw all DISABLED (inactive) 1/32 steps first
@@ -738,7 +760,7 @@ void StepSequencerComponent::paint(juce::Graphics& g) {
 
         g.setColour(isCustomMask ? pal.stepPlayheadOutline : pal.textBright);
         g.setFont(juce::FontOptions(runLen >= 2 ? 9.5f : 8.5f, juce::Font::bold));
-        g.drawText(formatStepFxBadge(runMask, runLen), badgeRect.toNearestInt(), juce::Justification::centred);
+        g.drawText(formatStepFxBadge(runMask, runLen, beatSteps), badgeRect.toNearestInt(), juce::Justification::centred);
 
         // Unified 3x5 Mini LED Dot Matrix centered at the bottom of the combined block
         const float maxMatrixW = std::min(mergedRect.getWidth() - 6.0f, 80.0f);
@@ -765,6 +787,29 @@ void StepSequencerComponent::paint(juce::Graphics& g) {
         }
 
         stepIdx = runEnd + 1;
+    }
+
+    // Pads past LENGTH stay editable but never play: hatch them and mark the loop end.
+    if (length < 32) {
+        const auto lastPlayed = getStepBounds(length - 1);
+        const auto skipped = getStepBounds(length).withRight(getStepBounds(31).getRight()).expanded(2.0f);
+        g.setColour(pal.cardBg.withAlpha(0.6f));
+        g.fillRect(skipped);
+        juce::Path hatch;
+        const int lineCount = juce::roundToInt((skipped.getWidth() + skipped.getHeight()) / 8.0f) + 1;
+        std::ranges::for_each(std::views::iota(0, lineCount), [&](int line) {
+            const float x = skipped.getX() - skipped.getHeight() + 8.0f * static_cast<float>(line);
+            hatch.addLineSegment({ x, skipped.getBottom(), x + skipped.getHeight(), skipped.getY() }, 1.0f);
+        });
+        {
+            juce::Graphics::ScopedSaveState clip(g);
+            g.reduceClipRegion(skipped.toNearestInt());
+            g.setColour(pal.textMuted.withAlpha(0.35f));
+            g.fillPath(hatch);
+        }
+        const float loopEndX = (lastPlayed.getRight() + skipped.getX() + 2.0f) * 0.5f;
+        g.setColour(pal.accentSecondary);
+        g.fillRect(loopEndX - 1.0f, lastPlayed.getY() - 3.0f, 2.0f, lastPlayed.getHeight() + 12.0f);
     }
 
     // Continuous 4/4 Bar Progress Ribbon at bottom of sequencer panel

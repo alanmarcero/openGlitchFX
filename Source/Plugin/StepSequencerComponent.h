@@ -30,6 +30,9 @@ public:
     void setPaintTargetFx(int fxIndex);
     int getPaintTargetFx() const { return paintTargetFx_; }
     int countStepsRoutingToFx(int fxIndex) const;
+    int loopLength() const;
+    int stepsPerBeat() const;
+    static juce::String spanDuration(int steps, int stepsPerBeat);
 
     void paint(juce::Graphics& g) override;
     void mouseMove(const juce::MouseEvent& event) override;
@@ -61,7 +64,7 @@ private:
     void ensureFxAudible(int fxIndex);
     void applyPaintBrushToStep(int stepIndex, bool isInitialClick);
     void showStepContextMenu(int stepIndex);
-    static juce::String formatStepFxBadge(uint16_t mask, int spanLen);
+    static juce::String formatStepFxBadge(uint16_t mask, int spanLen, int stepsPerBeat);
 
     juce::AudioProcessorValueTreeState& apvts_;
     const GlitchLookAndFeel& lnf_;
@@ -77,7 +80,7 @@ private:
 
     int paintTargetFx_ = -1; // -1 = ALL FX, 0..14 = specific FX brush
     bool dragTargetState_ = true;
-    std::array<uint16_t, 32> shownMasks_{};
+    std::array<int, 34> shownShape_{};
 };
 
 } // namespace openglitch::ui

@@ -28,7 +28,7 @@ public:
     bool keyPressed(const juce::KeyPress& key) override;
     juce::String getTooltip() override;
 
-    static juce::String stepPillText(int currentStep, bool gateOpen, bool midiMode);
+    static juce::String stepPillText(int currentStep, int loopLength, bool gateOpen, bool midiMode);
     juce::PopupMenu createRandomizeMenu();
     // Public so a test can run one refresh without a message loop.
     void timerCallback() override;
