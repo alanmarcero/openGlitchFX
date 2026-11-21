@@ -3,7 +3,8 @@
 namespace openglitch::suite {
 
 namespace {
-void style(juce::Button& button, const juce::String& tip) {
+void style(juce::Button& button, const juce::String& title, const juce::String& tip) {
+    button.setTitle(title);
     button.setTooltip(tip);
     button.setMouseCursor(juce::MouseCursor::PointingHandCursor);
 }
@@ -11,25 +12,27 @@ void style(juce::Button& button, const juce::String& tip) {
 
 SuiteBar::SuiteBar(PresetLibrary& library, Hooks hooks)
     : library_(library), hooks_(std::move(hooks)) {
-    style(undoButton_, "Undo the last edit. Cmd/Ctrl+Z.");
-    style(redoButton_, "Redo. Shift+Cmd/Ctrl+Z.");
-    style(aButton_, "Hear slot A.");
-    style(bButton_, "Hear slot B.");
-    style(copyAtoBButton_, "Copy slot A onto slot B.");
-    style(copyBtoAButton_, "Copy slot B onto slot A.");
-    style(saveButton_, "Save the current sound as a user preset.");
-    style(favoriteButton_, "Mark or unmark the selected preset as a favorite.");
-    style(renameButton_, "Rename the selected user preset.");
-    style(deleteButton_, "Delete the selected user preset.");
-    style(previousButton_, "Previous preset");
-    style(nextButton_, "Next preset");
+    style(undoButton_, "Undo", "Undo the last edit. Cmd/Ctrl+Z.");
+    style(redoButton_, "Redo", "Redo. Shift+Cmd/Ctrl+Z.");
+    style(aButton_, "Slot A", "Hear slot A.");
+    style(bButton_, "Slot B", "Hear slot B.");
+    style(copyAtoBButton_, "Copy A to B", "Copy slot A onto slot B.");
+    style(copyBtoAButton_, "Copy B to A", "Copy slot B onto slot A.");
+    style(saveButton_, "Save preset", "Save the current sound as a user preset.");
+    style(favoriteButton_, "Favorite preset", "Mark or unmark the selected preset as a favorite.");
+    style(renameButton_, "Rename preset", "Rename the selected user preset.");
+    style(deleteButton_, "Delete preset", "Delete the selected user preset.");
+    style(previousButton_, "Previous preset", "Previous preset");
+    style(nextButton_, "Next preset", "Next preset");
     aButton_.setClickingTogglesState(true);
     bButton_.setClickingTogglesState(true);
     aButton_.setRadioGroupId(5101);
     bButton_.setRadioGroupId(5101);
     search_.setTextToShowWhenEmpty("Search presets", juce::Colours::grey);
+    search_.setTitle("Search presets");
     search_.setTooltip("Filter factory and user presets.");
     search_.onTextChange = [this] { rebuildList(); };
+    presetBox_.setTitle("Preset");
     presetBox_.setTooltip("Factory and user presets. Factory presets stay read-only.");
     presetBox_.onChange = [this] {
         if (!rebuilding_) {

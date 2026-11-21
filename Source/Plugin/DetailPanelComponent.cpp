@@ -87,6 +87,7 @@ DetailPanelComponent::DetailPanelComponent(OpenGlitchFXProcessor& processor, con
     for (size_t i = 0; i < envTabs_.size(); ++i) {
         auto& tab = envTabs_[i];
         tab.setButtonText(kEnvDescriptors[i].name);
+        tab.setTitle(juce::String(kEnvDescriptors[i].name) + " Envelope");
         tab.setClickingTogglesState(true);
         tab.setRadioGroupId(4201);
         tab.onClick = [this, i]() { selectEnvelope(static_cast<int>(i)); };
@@ -104,17 +105,21 @@ DetailPanelComponent::DetailPanelComponent(OpenGlitchFXProcessor& processor, con
     };
     addAndMakeVisible(envEditor_);
 
+    envOnButton_.setTitle("Envelope On");
     envOnButton_.setTooltip("Turn this envelope on.");
     addAndMakeVisible(envOnButton_);
     envRateBox_.addItemList(kNoteLengthLabels, 1);
+    envRateBox_.setTitle("Envelope Length");
     envRateBox_.setTooltip("PAD SPAN runs the envelope once across each block of active pads. A note value loops it in time with the song. "
                            "Needs this envelope on.");
     captions_.emplace_back(&envRateBox_, "LENGTH");
     addAndMakeVisible(envRateBox_);
     envDepthSlider_.setSliderStyle(juce::Slider::LinearBar);
+    envDepthSlider_.setTitle("Envelope Depth");
     envDepthSlider_.setTooltip("How far the envelope moves its target. Needs this envelope on.");
     captions_.emplace_back(&envDepthSlider_, "DEPTH");
     addAndMakeVisible(envDepthSlider_);
+    envResetButton_.setTitle("Reset Envelope");
     envResetButton_.setTooltip("Restore this envelope's default shape.");
     envResetButton_.onClick = [this]() {
         const auto target = static_cast<EnvTarget>(selectedEnv_);
@@ -133,6 +138,7 @@ void DetailPanelComponent::setupCombo(juce::ComboBox& box, const char* paramId, 
     auto* param = dynamic_cast<juce::AudioParameterChoice*>(processor_.parameters.getParameter(paramId));
     jassert(param != nullptr);
     box.addItemList(param->choices, 1);
+    box.setTitle(caption);
     box.setTooltip(tooltip);
     captions_.emplace_back(&box, caption);
     addAndMakeVisible(box);
@@ -140,6 +146,7 @@ void DetailPanelComponent::setupCombo(juce::ComboBox& box, const char* paramId, 
 }
 
 void DetailPanelComponent::setupToggle(juce::ToggleButton& button, const char* paramId, const juce::String& tooltip) {
+    button.setTitle(button.getButtonText());
     button.setTooltip(tooltip);
     addAndMakeVisible(button);
     buttonAttachments_.push_back(std::make_unique<ButtonAttachment>(processor_.parameters, paramId, button));
@@ -147,6 +154,7 @@ void DetailPanelComponent::setupToggle(juce::ToggleButton& button, const char* p
 
 void DetailPanelComponent::setupBar(juce::Slider& slider, const char* paramId, const juce::String& caption, const juce::String& tooltip) {
     slider.setSliderStyle(juce::Slider::LinearBar);
+    slider.setTitle(caption);
     slider.setTooltip(tooltip);
     captions_.emplace_back(&slider, caption);
     addAndMakeVisible(slider);

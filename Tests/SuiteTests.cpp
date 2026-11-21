@@ -457,3 +457,27 @@ TEST_CASE("Save and Delete use inline two-step Replace? and Delete? confirmation
 
     directory.deleteRecursively();
 }
+
+TEST_CASE("Every slider, combo box, and button has a screen-reader title", "[plugin][a11y]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    OpenGlitchFXProcessor processor;
+    const auto editor = std::unique_ptr<juce::AudioProcessorEditor>(processor.createEditor());
+    int checked = 0;
+
+    auto visit = [&](auto& self, juce::Component& comp) -> void {
+        if (dynamic_cast<juce::Slider*>(&comp) != nullptr
+            || dynamic_cast<juce::ComboBox*>(&comp) != nullptr
+            || dynamic_cast<juce::Button*>(&comp) != nullptr) {
+            INFO(typeid(comp).name());
+            REQUIRE(comp.getTitle().isNotEmpty());
+            ++checked;
+        }
+        for (int i = 0; i < comp.getNumChildComponents(); ++i) {
+            if (auto* child = comp.getChildComponent(i)) {
+                self(self, *child);
+            }
+        }
+    };
+    visit(visit, *editor);
+    REQUIRE(checked >= 60);
+}

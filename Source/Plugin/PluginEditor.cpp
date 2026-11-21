@@ -22,12 +22,14 @@ EditorContent::EditorContent(OpenGlitchFXProcessor& owner)
 
     // Header Look Selector
     themeBox_.addItemList({ "Cyber Neon", "Industrial Amber", "Acid Matrix", "Arctic Glitch" }, 1);
+    themeBox_.setTitle("Theme");
     themeBox_.setTooltip("Choose a dark colour scheme for the rack, menus and envelopes.");
     themeBox_.setJustificationType(juce::Justification::centred);
     themeBox_.onChange = [this]() { applyTheme(themeBox_.getSelectedItemIndex()); };
     addAndMakeVisible(themeBox_);
 
     scaleBox_.addItemList({ "70%", "85%", "100%", "125%" }, 1);
+    scaleBox_.setTitle("Editor Scale");
     scaleBox_.setTooltip("Editor size. Drag the bottom-right corner for any size from 70% to 150%.");
     scaleBox_.setJustificationType(juce::Justification::centred);
     scaleBox_.onChange = [this]() {
@@ -42,10 +44,12 @@ EditorContent::EditorContent(OpenGlitchFXProcessor& owner)
     themeLabel_.setJustificationType(juce::Justification::centredRight);
     addAndMakeVisible(themeLabel_);
 
+    hostSyncButton_.setTitle("Host Sync");
     hostSyncButton_.setTooltip("Follow the host's tempo and bar position. Turn off to run on the internal BPM.");
     addAndMakeVisible(hostSyncButton_);
 
     internalBpmSlider_.setSliderStyle(juce::Slider::LinearBar);
+    internalBpmSlider_.setTitle("Internal BPM");
     internalBpmSlider_.setTooltip("Internal tempo. Used when HOST SYNC is off, or when the host reports no tempo.");
     addAndMakeVisible(internalBpmSlider_);
 
@@ -62,6 +66,7 @@ EditorContent::EditorContent(OpenGlitchFXProcessor& owner)
         paintBrushBox_.addItem("ONLY: " + juce::String(desc.name) + " [" + desc.shortCode + "]", fx + 2);
     }
     paintBrushBox_.setSelectedId(1, juce::dontSendNotification);
+    paintBrushBox_.setTitle("Step Brush");
     paintBrushBox_.setTooltip("What a left-click on a pad paints. You can also click an FX card's title to pick it.");
     paintBrushBox_.onChange = [this]() {
         const int idx = paintBrushBox_.getSelectedItemIndex(); // 0 = All (-1), 1..15 = FX 0..14
@@ -71,6 +76,7 @@ EditorContent::EditorContent(OpenGlitchFXProcessor& owner)
 
     auto setupPresetBtn = [this](juce::TextButton& btn, const juce::String& tooltip, std::function<void()> fn) {
         btn.onClick = std::move(fn);
+        btn.setTitle(btn.getButtonText());
         btn.setTooltip(tooltip);
         addAndMakeVisible(btn);
     };
@@ -110,6 +116,7 @@ EditorContent::EditorContent(OpenGlitchFXProcessor& owner)
         addAndMakeVisible(slider);
     };
     sequenceLengthSlider_.setRange(1.0, 32.0, 1.0);
+    sequenceLengthSlider_.setTitle("Sequence Length");
     sequenceLengthSlider_.setTooltip("Number of steps before the pattern loops. Pads after it do not play.");
     sequenceLengthValueLabel_.setJustificationType(juce::Justification::centredLeft);
     sequenceLengthValueLabel_.setFont(juce::FontOptions(14.0f, juce::Font::bold));
@@ -117,6 +124,7 @@ EditorContent::EditorContent(OpenGlitchFXProcessor& owner)
     setupSequencerControl(sequenceLengthLabel_, sequenceLengthSlider_);
 
     sequencerSwingSlider_.setRange(0.0, 100.0, 0.1);
+    sequencerSwingSlider_.setTitle("Sequencer Swing");
     sequencerSwingSlider_.setTooltip("Delay odd-numbered steps in each pair for a swung glitch rhythm.");
     sequencerSwingValueLabel_.setJustificationType(juce::Justification::centredLeft);
     sequencerSwingValueLabel_.setFont(juce::FontOptions(14.0f, juce::Font::bold));
@@ -127,19 +135,23 @@ EditorContent::EditorContent(OpenGlitchFXProcessor& owner)
     patternRateLabel_.setJustificationType(juce::Justification::centredRight);
     addAndMakeVisible(patternRateLabel_);
     patternRateBox_.addItemList({ "1/2x", "1x", "2x" }, 1);
+    patternRateBox_.setTitle("Pattern Rate");
     patternRateBox_.setTooltip("Global sequencer speed multiplier relative to host tempo (1/2x, 1x, or 2x).");
     addAndMakeVisible(patternRateBox_);
 
     patternChanceSlider_.setRange(0.0, 100.0, 1.0);
+    patternChanceSlider_.setTitle("Pattern Chance");
     patternChanceSlider_.setTooltip("Deterministic step probability gate across bars (100% = every bar fires).");
     patternChanceValueLabel_.setJustificationType(juce::Justification::centredLeft);
     patternChanceValueLabel_.setFont(juce::FontOptions(14.0f, juce::Font::bold));
     addAndMakeVisible(patternChanceValueLabel_);
     setupSequencerControl(patternChanceLabel_, patternChanceSlider_);
 
+    keepSubButton_.setTitle("Keep Sub");
     keepSubButton_.setTooltip("Preserve clean sub-bass below 95 Hz while glitching mids and highs.");
     addAndMakeVisible(keepSubButton_);
 
+    randomizeButton_.setTitle("Randomize");
     randomizeButton_.setTooltip("Create a repeatable-density pattern. With an FX brush selected, randomize only that FX routing.");
     randomizeButton_.onClick = [this]() { showRandomizeMenu(); };
     addAndMakeVisible(randomizeButton_);
@@ -184,8 +196,10 @@ EditorContent::EditorContent(OpenGlitchFXProcessor& owner)
         addAndMakeVisible(slot.knob);
 
         addAndMakeVisible(slot.enableBtn);
-        slot.knob.setTooltip(juce::String(metas[i].title).upToFirstOccurrenceOf(" [", false, false)
-                             + " amount. At 0% this FX does nothing, even on pads routed to it.");
+        const auto fxName = juce::String(metas[i].title).upToFirstOccurrenceOf(" [", false, false);
+        slot.knob.setTitle(fxName + " Amount");
+        slot.enableBtn.setTitle(fxName + " Enable");
+        slot.knob.setTooltip(fxName + " amount. At 0% this FX does nothing, even on pads routed to it.");
         slot.enableBtn.setTooltip("Turn this FX module on or off for every pad.");
 
         slot.knobAttach = std::make_unique<SliderAttachment>(processor_.parameters, metas[i].amtId, slot.knob);
@@ -194,9 +208,10 @@ EditorContent::EditorContent(OpenGlitchFXProcessor& owner)
     }
 
     // Master Controls
-    auto setupMasterRotary = [this](juce::Slider& s, juce::Label& l) {
+    auto setupMasterRotary = [this](juce::Slider& s, juce::Label& l, const juce::String& title) {
         s.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
         s.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 64, 15);
+        s.setTitle(title);
         addAndMakeVisible(s);
 
         l.setJustificationType(juce::Justification::centred);
@@ -204,9 +219,10 @@ EditorContent::EditorContent(OpenGlitchFXProcessor& owner)
         addAndMakeVisible(l);
     };
 
-    setupMasterRotary(smoothSlider_,     smoothLabel_);
-    setupMasterRotary(masterMixSlider_,  masterMixLabel_);
-    setupMasterRotary(masterGainSlider_, masterGainLabel_);
+    setupMasterRotary(smoothSlider_,     smoothLabel_,     "De-Click");
+    setupMasterRotary(masterMixSlider_,  masterMixLabel_,  "Wet Mix");
+    setupMasterRotary(masterGainSlider_, masterGainLabel_, "Out Gain");
+    masterPowerButton_.setTitle("Master Power");
     addAndMakeVisible(masterPowerButton_);
     smoothSlider_.setTooltip("Fade time when a pad turns on or off. Raise it if pad edges click.");
     masterMixSlider_.setTooltip("Dry/wet balance on active pads. See DRY/WET mode below.");
