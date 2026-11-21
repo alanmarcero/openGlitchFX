@@ -12,6 +12,8 @@ public:
     struct Hooks {
         std::function<void()> undo;
         std::function<void()> redo;
+        std::function<bool()> canUndo;
+        std::function<bool()> canRedo;
         std::function<bool()> abIsA;
         std::function<void()> selectA;
         std::function<void()> selectB;

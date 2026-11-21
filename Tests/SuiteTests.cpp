@@ -1,7 +1,9 @@
 #include "../Source/Plugin/FactoryPatterns.h"
 #include "../Source/Plugin/Parameters.h"
+#include "../Source/Plugin/PluginEditor.h"
 #include "../Source/Plugin/PluginProcessor.h"
 #include "../Source/Plugin/StepSequencerComponent.h"
+#include "../Source/suite/SuiteBar.h"
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include <set>
@@ -314,4 +316,82 @@ TEST_CASE("Float parameters format consistently and round-trip typed values", "[
     REQUIRE(smooth->getText(smooth->convertTo0to1(4.5f), 100) == "4.5 ms");
     REQUIRE(smooth->getText(smooth->convertTo0to1(15.0f), 100) == "15 ms");
     REQUIRE_THAT(smooth->convertFrom0to1(smooth->getValueForText("0.015 s")), Catch::Matchers::WithinAbs(15.0f, 0.1f));
+}
+
+TEST_CASE("Disabled controls draw dimmed and undo/redo reflect history", "[plugin][ui]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    OpenGlitchFXProcessor processor;
+    const auto editor = std::unique_ptr<juce::AudioProcessorEditor>(processor.createEditor());
+    auto* content = editor->getChildComponent(0);
+    REQUIRE(content != nullptr);
+
+    auto findButton = [&](const juce::String& text) -> juce::TextButton* {
+        for (int i = 0; i < content->getNumChildComponents(); ++i) {
+            if (auto* suite = dynamic_cast<openglitch::suite::SuiteBar*>(content->getChildComponent(i))) {
+                for (int j = 0; j < suite->getNumChildComponents(); ++j) {
+                    if (auto* btn = dynamic_cast<juce::TextButton*>(suite->getChildComponent(j))) {
+                        if (btn->getButtonText() == text) {
+                            return btn;
+                        }
+                    }
+                }
+            }
+        }
+        return nullptr;
+    };
+
+    auto* undoBtn = findButton("UNDO");
+    auto* redoBtn = findButton("REDO");
+    REQUIRE(undoBtn != nullptr);
+    REQUIRE(redoBtn != nullptr);
+    REQUIRE_FALSE(undoBtn->isEnabled());
+    REQUIRE_FALSE(redoBtn->isEnabled());
+
+    auto* mix = processor.parameters.getParameter(openglitch::params::kMasterMix);
+    processor.getUndo().perform("Edit mix", [&] { mix->setValueNotifyingHost(0.5f); });
+    auto* editorContent = dynamic_cast<EditorContent*>(content);
+    REQUIRE(editorContent != nullptr);
+    editorContent->timerCallback();
+    REQUIRE(undoBtn->isEnabled());
+    REQUIRE_FALSE(redoBtn->isEnabled());
+
+    auto sumAlpha = [](juce::Component& comp) {
+        comp.setSize(80, 36);
+        juce::Image img(juce::Image::ARGB, 80, 36, true);
+        juce::Graphics g(img);
+        comp.paintEntireComponent(g, false);
+        double total = 0.0;
+        for (int y = 0; y < 36; ++y) {
+            for (int x = 0; x < 80; ++x) {
+                total += img.getPixelAt(x, y).getAlpha();
+            }
+        }
+        return total;
+    };
+
+    auto& lnf = undoBtn->getLookAndFeel();
+    juce::TextButton btn("TEST");
+    btn.setLookAndFeel(&lnf);
+    const double enabledBtnAlpha = sumAlpha(btn);
+    btn.setEnabled(false);
+    const double disabledBtnAlpha = sumAlpha(btn);
+    REQUIRE(disabledBtnAlpha < enabledBtnAlpha * 0.6);
+
+    juce::Slider slider(juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::NoTextBox);
+    slider.setLookAndFeel(&lnf);
+    slider.setRange(0.0, 100.0);
+    slider.setValue(60.0, juce::dontSendNotification);
+    const double enabledSliderAlpha = sumAlpha(slider);
+    slider.setEnabled(false);
+    const double disabledSliderAlpha = sumAlpha(slider);
+    REQUIRE(disabledSliderAlpha < enabledSliderAlpha * 0.6);
+
+    juce::ComboBox box;
+    box.setLookAndFeel(&lnf);
+    box.addItem("ONE", 1);
+    box.setSelectedId(1, juce::dontSendNotification);
+    const double enabledBoxAlpha = sumAlpha(box);
+    box.setEnabled(false);
+    const double disabledBoxAlpha = sumAlpha(box);
+    REQUIRE(disabledBoxAlpha < enabledBoxAlpha * 0.6);
 }

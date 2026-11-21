@@ -247,6 +247,8 @@ EditorContent::EditorContent(OpenGlitchFXProcessor& owner)
     openglitch::suite::SuiteBar::Hooks hooks;
     hooks.undo = [this] { processor_.getUndo().undo(); };
     hooks.redo = [this] { processor_.getUndo().redo(); };
+    hooks.canUndo = [this] { return processor_.getUndo().canUndo(); };
+    hooks.canRedo = [this] { return processor_.getUndo().canRedo(); };
     hooks.abIsA = [this] { return processor_.abIsA(); };
     hooks.selectA = [this] { processor_.selectAbSlot(true); };
     hooks.selectB = [this] { processor_.selectAbSlot(false); };

@@ -141,6 +141,11 @@ void GlitchLookAndFeel::drawRotarySlider(juce::Graphics& g,
     const auto bounds = juce::Rectangle<float>(static_cast<float>(x), static_cast<float>(y),
                                                static_cast<float>(width), static_cast<float>(height)).reduced(4.0f);
     const float radius = std::min(bounds.getWidth(), bounds.getHeight()) * 0.5f;
+    const bool enabled = slider.isEnabled();
+    if (!enabled) {
+        g.beginTransparencyLayer(0.4f);
+    }
+
     const float cx = bounds.getCentreX();
     const float cy = bounds.getCentreY();
     const float angle = rotaryStartAngle + sliderPosProportional * (rotaryEndAngle - rotaryStartAngle);
@@ -237,6 +242,10 @@ void GlitchLookAndFeel::drawRotarySlider(juce::Graphics& g,
     g.drawLine(sx0, sy0, sx1, sy1, 2.0f);
     g.setColour(palette_.accentPrimary);
     g.fillEllipse(sx1 - 2.2f, sy1 - 2.2f, 4.4f, 4.4f);
+
+    if (!enabled) {
+        g.endTransparencyLayer();
+    }
 }
 
 void GlitchLookAndFeel::drawLinearSlider(juce::Graphics& g,
@@ -244,26 +253,37 @@ void GlitchLookAndFeel::drawLinearSlider(juce::Graphics& g,
                                          float sliderPos, float minSliderPos, float maxSliderPos,
                                          juce::Slider::SliderStyle style,
                                          juce::Slider& slider) {
+    const bool enabled = slider.isEnabled();
+    if (!enabled) {
+        g.beginTransparencyLayer(0.4f);
+    }
     if (!slider.isBar()) {
         LookAndFeel_V4::drawLinearSlider(g, x, y, width, height, sliderPos, minSliderPos, maxSliderPos, style, slider);
-        return;
+    } else {
+        // A light fill keeps the value text readable.
+        const float zeroX = static_cast<float>(x) + static_cast<float>(width) * zeroProportion(slider);
+        g.setColour(slider.findColour(juce::Slider::trackColourId).withAlpha(0.3f));
+        g.fillRect(juce::Rectangle<float>::leftTopRightBottom(std::min(zeroX, sliderPos), static_cast<float>(y) + 0.5f,
+                                                              std::max(zeroX, sliderPos), static_cast<float>(y + height) - 0.5f));
     }
-    // A light fill keeps the value text readable.
-    const float zeroX = static_cast<float>(x) + static_cast<float>(width) * zeroProportion(slider);
-    g.setColour(slider.findColour(juce::Slider::trackColourId).withAlpha(0.3f));
-    g.fillRect(juce::Rectangle<float>::leftTopRightBottom(std::min(zeroX, sliderPos), static_cast<float>(y) + 0.5f,
-                                                          std::max(zeroX, sliderPos), static_cast<float>(y + height) - 0.5f));
+    if (!enabled) {
+        g.endTransparencyLayer();
+    }
 }
 
 void GlitchLookAndFeel::drawToggleButton(juce::Graphics& g,
                                          juce::ToggleButton& button,
                                          bool shouldDrawButtonAsHighlighted,
                                          bool /*shouldDrawButtonAsDown*/) {
+    const bool enabled = button.isEnabled();
+    if (!enabled) {
+        g.beginTransparencyLayer(0.4f);
+    }
     const auto bounds = button.getLocalBounds().toFloat().reduced(2.0f);
     const bool on = button.getToggleState();
 
     juce::Colour bg = on ? palette_.accentPrimary.withAlpha(0.22f) : palette_.stepInactiveFill;
-    if (shouldDrawButtonAsHighlighted) {
+    if (enabled && shouldDrawButtonAsHighlighted) {
         bg = bg.brighter(0.15f);
     }
 
@@ -293,6 +313,9 @@ void GlitchLookAndFeel::drawToggleButton(juce::Graphics& g,
     if (!on && text == "ON") text = "OFF";
     if (!on && text == "MASTER ON") text = "MASTER OFF";
     g.drawText(text, textRect.toNearestInt(), juce::Justification::centred);
+    if (!enabled) {
+        g.endTransparencyLayer();
+    }
 }
 
 void GlitchLookAndFeel::drawButtonBackground(juce::Graphics& g,
@@ -300,18 +323,20 @@ void GlitchLookAndFeel::drawButtonBackground(juce::Graphics& g,
                                              const juce::Colour& /*backgroundColour*/,
                                              bool shouldDrawButtonAsHighlighted,
                                              bool shouldDrawButtonAsDown) {
+    const float alpha = button.isEnabled() ? 1.0f : 0.4f;
     const auto bounds = button.getLocalBounds().toFloat().reduced(1.5f);
     juce::Colour bg = button.getToggleState() ? palette_.bgTop.interpolatedWith(palette_.accentPrimary, 0.26f) : palette_.headerPlate;
-    if (shouldDrawButtonAsDown) {
+    if (button.isEnabled() && shouldDrawButtonAsDown) {
         bg = palette_.accentPrimary.withAlpha(0.35f);
-    } else if (shouldDrawButtonAsHighlighted) {
+    } else if (button.isEnabled() && shouldDrawButtonAsHighlighted) {
         bg = palette_.headerPlate.brighter(0.2f);
     }
 
-    g.setColour(bg);
+    g.setColour(bg.withMultipliedAlpha(alpha));
     g.fillRoundedRectangle(bounds, 3.5f);
 
-    g.setColour(shouldDrawButtonAsHighlighted || button.getToggleState() || button.hasKeyboardFocus(false) ? palette_.accentPrimary : palette_.cardBorder);
+    const bool lit = button.isEnabled() && (shouldDrawButtonAsHighlighted || button.getToggleState() || button.hasKeyboardFocus(false));
+    g.setColour((lit ? palette_.accentPrimary : palette_.cardBorder).withMultipliedAlpha(alpha));
     g.drawRoundedRectangle(bounds, 3.5f, 1.0f);
 }
 
@@ -321,7 +346,7 @@ void GlitchLookAndFeel::drawButtonText(juce::Graphics& g,
                                        bool) {
     const bool on = button.getToggleState();
     const auto colourId = on ? juce::TextButton::textColourOnId : juce::TextButton::textColourOffId;
-    g.setColour(button.findColour(colourId));
+    g.setColour(button.findColour(colourId).withMultipliedAlpha(button.isEnabled() ? 1.0f : 0.4f));
     g.setFont(juce::FontOptions(14.0f, juce::Font::bold));
     g.drawFittedText(button.getButtonText(), button.getLocalBounds().reduced(3, 0), juce::Justification::centred, 1, 0.82f);
 }
@@ -331,10 +356,11 @@ void GlitchLookAndFeel::drawComboBox(juce::Graphics& g,
                                      bool /*isButtonDown*/,
                                      int /*buttonX*/, int /*buttonY*/, int /*buttonW*/, int /*buttonH*/,
                                      juce::ComboBox& box) {
+    const float alpha = box.isEnabled() ? 1.0f : 0.4f;
     const auto bounds = juce::Rectangle<float>(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height)).reduced(1.0f);
-    g.setColour(palette_.headerPlate);
+    g.setColour(palette_.headerPlate.withMultipliedAlpha(alpha));
     g.fillRoundedRectangle(bounds, 4.0f);
-    g.setColour(box.hasKeyboardFocus(true) ? palette_.accentPrimary : palette_.cardBorder);
+    g.setColour((box.isEnabled() && box.hasKeyboardFocus(true) ? palette_.accentPrimary : palette_.cardBorder).withMultipliedAlpha(alpha));
     g.drawRoundedRectangle(bounds, 4.0f, 1.0f);
 
     // Arrow triangle
@@ -342,7 +368,7 @@ void GlitchLookAndFeel::drawComboBox(juce::Graphics& g,
     const float ax = static_cast<float>(width) - 14.0f;
     const float ay = static_cast<float>(height) * 0.5f;
     arrow.addTriangle(ax - 4.0f, ay - 2.0f, ax + 4.0f, ay - 2.0f, ax, ay + 3.0f);
-    g.setColour(palette_.accentPrimary);
+    g.setColour(palette_.accentPrimary.withMultipliedAlpha(alpha));
     g.fillPath(arrow);
 }
 

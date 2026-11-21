@@ -177,6 +177,8 @@ void SuiteBar::rebuildList() {
 
 void SuiteBar::refresh() {
     rebuildList();
+    undoButton_.setEnabled(hooks_.canUndo == nullptr || hooks_.canUndo());
+    redoButton_.setEnabled(hooks_.canRedo == nullptr || hooks_.canRedo());
     const bool slotA = hooks_.abIsA == nullptr || hooks_.abIsA();
     aButton_.setToggleState(slotA, juce::dontSendNotification);
     bButton_.setToggleState(!slotA, juce::dontSendNotification);
