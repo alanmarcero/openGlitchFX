@@ -1,8 +1,47 @@
+#include "../Source/Plugin/PluginEditor.h"
 #include "../Source/Plugin/PluginProcessor.h"
 #include "../Source/Plugin/Parameters.h"
 #include "../Source/Plugin/StepSequencerComponent.h"
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
+
+namespace {
+
+template <typename Type, typename Predicate>
+Type* findDescendant(juce::Component& root, const Predicate& matches) {
+    Type* found = nullptr;
+    const bool isFound = std::ranges::any_of(root.getChildren(), [&](juce::Component* child) {
+        if (auto* typed = dynamic_cast<Type*>(child); typed != nullptr && matches(*typed)) {
+            found = typed;
+            return true;
+        }
+        found = findDescendant<Type>(*child, matches);
+        return found != nullptr;
+    });
+    return isFound ? found : nullptr;
+}
+
+} // namespace
+
+TEST_CASE("Editor text reads the same on every platform", "[plugin][gui]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    OpenGlitchFXProcessor processor;
+    OpenGlitchFXEditor editor(processor);
+    auto* brush = findDescendant<juce::ComboBox>(editor, [](juce::ComboBox& box) {
+        return box.getItemText(0) == "ALL ACTIVE FX (DEFAULT)";
+    });
+    REQUIRE(brush != nullptr);
+    const auto randomizeMenu = editor.createRandomizeMenu();
+    juce::StringArray randomizeItems;
+    for (juce::PopupMenu::MenuItemIterator item(randomizeMenu); item.next();) {
+        randomizeItems.add(item.getItem().text);
+    }
+
+    REQUIRE(OpenGlitchFXEditor::stepPillText(0, false, false) == "STEP 01/32 DRY");
+    REQUIRE(brush->getItemText(1) == "ONLY: BITCRUSH [BC]");
+    REQUIRE(randomizeItems == juce::StringArray{ "Randomize the full pattern", "Light (35% step density)",
+                                                 "Medium (55% step density)", "Wild (75% step density)" });
+}
 
 TEST_CASE("New FX routing and amounts survive a plugin state round trip", "[plugin][state]") {
     juce::ScopedJuceInitialiser_GUI gui;

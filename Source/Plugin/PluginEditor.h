@@ -22,6 +22,9 @@ public:
     bool keyPressed(const juce::KeyPress& key) override;
     juce::String getTooltip() override;
 
+    static juce::String stepPillText(int currentStep, bool gateOpen, bool midiMode);
+    juce::PopupMenu createRandomizeMenu();
+
 private:
     void timerCallback() override;
     void applyTheme(int themeIndex);

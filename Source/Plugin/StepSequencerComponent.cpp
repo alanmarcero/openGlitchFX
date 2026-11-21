@@ -366,7 +366,7 @@ void StepSequencerComponent::showStepContextMenu(int step) {
         const uint16_t singleBit = static_cast<uint16_t>(1u << fx);
         const bool isSoloed = stepOn && (mask == singleBit);
         menu.addItem(100 + fx,
-                     juce::String::formatted("Only %s (%s)", desc.name, desc.shortCode),
+                     "Only " + juce::String(desc.name) + " (" + desc.shortCode + ")",
                      true,
                      isSoloed);
     }
@@ -378,7 +378,7 @@ void StepSequencerComponent::showStepContextMenu(int step) {
         const uint16_t bit = static_cast<uint16_t>(1u << fx);
         const bool fxChecked = stepOn && ((mask & bit) != 0u);
         menu.addItem(200 + fx,
-                     juce::String::formatted("%d. %s [%s]", fx + 1, desc.name, desc.shortCode),
+                     juce::String(fx + 1) + ". " + desc.name + " [" + desc.shortCode + "]",
                      true,
                      fxChecked);
     }
@@ -389,8 +389,8 @@ void StepSequencerComponent::showStepContextMenu(int step) {
         splitSubMenu.addItem(400, juce::String::formatted("Disable Only Pad %02d (Split Block)", step + 1));
         for (int fx = 0; fx < kNumFx; ++fx) {
             const auto& desc = openglitch::params::kFxDescriptors[static_cast<size_t>(fx)];
-            splitSubMenu.addItem(410 + fx,
-                                 juce::String::formatted("Solo %s (%s) on Only Pad %02d", desc.name, desc.shortCode, step + 1));
+            splitSubMenu.addItem(410 + fx, "Solo " + juce::String(desc.name) + " (" + desc.shortCode + ") on Only Pad "
+                                               + juce::String(step + 1).paddedLeft('0', 2));
         }
         menu.addSeparator();
         menu.addSubMenu(juce::String::formatted("Split / Edit Single Pad %02d Only", step + 1), splitSubMenu);
@@ -591,9 +591,9 @@ void StepSequencerComponent::paint(juce::Graphics& g) {
         const auto hRun = findContiguousRun(hoveredStep_);
         const juce::String readout = (hMask == 0u)
             ? juce::String::formatted("PAD %02d/32: OFF (DRY)  |  CLICK TO TURN ON  |  RIGHT-CLICK FOR FX ROUTING", hoveredStep_ + 1)
-            : juce::String::formatted("PAD %02d/32  |  BLOCK %02d-%02d (%d/32)  |  FX: %s  |  RIGHT-CLICK FOR FX ROUTING",
-                                      hoveredStep_ + 1, hRun.startStep + 1, hRun.endStep + 1, hRun.length(),
-                                      formatStepFxBadge(hMask, 1).toRawUTF8());
+            : juce::String::formatted("PAD %02d/32  |  BLOCK %02d-%02d (%d/32)  |  FX: ",
+                                      hoveredStep_ + 1, hRun.startStep + 1, hRun.endStep + 1, hRun.length())
+                  + formatStepFxBadge(hMask, 1) + "  |  RIGHT-CLICK FOR FX ROUTING";
         const auto firstStepRect = getStepBounds(0);
         const auto lastStepRect = getStepBounds(31);
         const juce::Rectangle<float> header(firstStepRect.getX(), fullBounds.getY() + 5.0f,

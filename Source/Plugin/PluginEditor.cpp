@@ -44,7 +44,7 @@ OpenGlitchFXEditor::OpenGlitchFXEditor(OpenGlitchFXProcessor& owner)
     paintBrushBox_.addItem("ALL ACTIVE FX (DEFAULT)", 1);
     for (int fx = 0; fx < kNumUiFx; ++fx) {
         const auto& desc = openglitch::params::kFxDescriptors[static_cast<size_t>(fx)];
-        paintBrushBox_.addItem(juce::String::formatted("ONLY: %s [%s]", desc.name, desc.shortCode), fx + 2);
+        paintBrushBox_.addItem("ONLY: " + juce::String(desc.name) + " [" + desc.shortCode + "]", fx + 2);
     }
     paintBrushBox_.setSelectedId(1, juce::dontSendNotification);
     paintBrushBox_.setTooltip("What a left-click on a pad paints. You can also click an FX card's title to pick it.");
@@ -292,14 +292,18 @@ void OpenGlitchFXEditor::applyTheme(int themeIndex) {
     repaint();
 }
 
-void OpenGlitchFXEditor::showRandomizeMenu() {
+juce::PopupMenu OpenGlitchFXEditor::createRandomizeMenu() {
     juce::PopupMenu menu;
     menu.setLookAndFeel(&lookAndFeel_);
     menu.addSectionHeader(sequencerGrid_.getPaintTargetFx() >= 0 ? "Randomize selected FX lane" : "Randomize the full pattern");
-    menu.addItem(1, "Light  ·  35% step density");
-    menu.addItem(2, "Medium  ·  55% step density");
-    menu.addItem(3, "Wild  ·  75% step density");
-    menu.showMenuAsync(juce::PopupMenu::Options{}.withTargetComponent(&randomizeButton_),
+    menu.addItem(1, "Light (35% step density)");
+    menu.addItem(2, "Medium (55% step density)");
+    menu.addItem(3, "Wild (75% step density)");
+    return menu;
+}
+
+void OpenGlitchFXEditor::showRandomizeMenu() {
+    createRandomizeMenu().showMenuAsync(juce::PopupMenu::Options{}.withTargetComponent(&randomizeButton_),
                        [safeThis = juce::Component::SafePointer<OpenGlitchFXEditor>(this)](int choice) {
         if (safeThis != nullptr && choice > 0) {
             const auto seed = static_cast<uint32_t>(juce::Random::getSystemRandom().nextInt());
@@ -334,8 +338,8 @@ juce::String OpenGlitchFXEditor::getTooltip() {
         return {};
     }
     const int pads = sequencerGrid_.countStepsRoutingToFx(fx);
-    return juce::String::formatted("Click to %s this FX as the pad brush. Active on %d of 32 pads.",
-                                   sequencerGrid_.getPaintTargetFx() == fx ? "clear" : "select", pads);
+    return juce::String("Click to ") + (sequencerGrid_.getPaintTargetFx() == fx ? "clear" : "select")
+         + " this FX as the pad brush. Active on " + juce::String(pads) + " of 32 pads.";
 }
 
 void OpenGlitchFXEditor::timerCallback() {
@@ -462,9 +466,7 @@ void OpenGlitchFXEditor::paint(juce::Graphics& g) {
     g.drawRoundedRectangle(statusPill, 13.0f, 1.3f);
     g.setColour(gateOpen ? pal.textBright : pal.textMuted);
     g.setFont(juce::FontOptions(10.5f, juce::Font::bold));
-    const juce::String stepStr = midiMode ? juce::String(gateOpen ? "MIDI ACTIVE" : "MIDI DRY")
-                                          : juce::String::formatted("STEP %02d/32 %s", tel.currentStep + 1, gateOpen ? "ACTIVE" : "DRY");
-    g.drawText(stepStr, statusPill.toNearestInt(), juce::Justification::centred);
+    g.drawText(stepPillText(tel.currentStep, gateOpen, midiMode), statusPill.toNearestInt(), juce::Justification::centred);
 
     // Divider line
     g.setColour(pal.cardBorder);
@@ -604,6 +606,13 @@ void OpenGlitchFXEditor::paint(juce::Graphics& g) {
     g.setColour(pal.textMuted);
     g.setFont(juce::FontOptions(10.0f, juce::Font::plain));
     g.drawText("v" JucePlugin_VersionString, static_cast<int>(w - 180.0f), static_cast<int>(h - 20.0f), 150, 16, juce::Justification::centredRight);
+}
+
+juce::String OpenGlitchFXEditor::stepPillText(int currentStep, bool gateOpen, bool midiMode) {
+    if (midiMode) {
+        return gateOpen ? "MIDI ACTIVE" : "MIDI DRY";
+    }
+    return "STEP " + juce::String(currentStep + 1).paddedLeft('0', 2) + "/32" + (gateOpen ? " ACTIVE" : " DRY");
 }
 
 bool OpenGlitchFXEditor::keyPressed(const juce::KeyPress& key) {
