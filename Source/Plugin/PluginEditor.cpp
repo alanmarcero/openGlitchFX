@@ -354,6 +354,11 @@ int EditorContent::fxCardHeaderAt(juce::Point<float> position) const {
 }
 
 void EditorContent::mouseDown(const juce::MouseEvent& event) {
+    if (masterMeterBounds_.contains(event.position)) {
+        clipHold_ = 0.0f;
+        repaint(masterMeterBounds_.expanded(4.0f).toNearestInt());
+        return;
+    }
     // Clicking an FX card's top header plate toggles/selects that FX as the active Pad Brush!
     const int fx = fxCardHeaderAt(event.position);
     if (fx < 0) {
@@ -373,15 +378,22 @@ juce::String EditorContent::getTooltip() {
          + " this FX as the pad brush. Active on " + juce::String(pads) + " of " + juce::String(sequencerGrid_.loopLength()) + " pads.";
 }
 
+float EditorContent::meterNormDb(float peak) noexcept {
+    if (peak <= 1e-5f) return 0.0f;
+    const float db = 20.0f * std::log10(peak);
+    return std::clamp((db + 36.0f) / 39.0f, 0.0f, 1.0f);
+}
+
 void EditorContent::timerCallback() {
     const auto theme = static_cast<int>(processor_.parameters.getRawParameterValue(openglitch::params::kTheme)->load());
     if (theme != static_cast<int>(lookAndFeel_.getTheme())) applyTheme(theme);
     const auto tel = processor_.getTelemetry();
-    if (tel.clipOut) {
+    if (tel.clipOut || tel.peakL >= 1.0f || tel.peakR >= 1.0f) {
         clipHold_ = 1.0f;
-    } else {
-        clipHold_ = std::max(0.0f, clipHold_ - 0.05f);
     }
+    meterPeaks_[0].update(meterNormDb(std::max(tel.inputPeakL, tel.inputPeakR)));
+    meterPeaks_[1].update(meterNormDb(tel.peakL));
+    meterPeaks_[2].update(meterNormDb(tel.peakR));
     sequencerGrid_.setPlayheadState(tel.currentStep, tel.barPhase, tel.stepEnabled, tel.activeGate);
     sequencerGrid_.refreshPattern();
 
@@ -606,13 +618,7 @@ void EditorContent::paint(juce::Graphics& g) {
             g.setColour(pal.cardBorder);
             g.drawRoundedRectangle(mb, 4.0f, 1.0f);
 
-            auto toNormDb = [](float peak) noexcept -> float {
-                if (peak <= 1e-5f) return 0.0f;
-                const float db = 20.0f * std::log10(peak);
-                return std::clamp((db + 36.0f) / 39.0f, 0.0f, 1.0f);
-            };
-
-            auto drawBar = [&](float y, const char* label, float val01, juce::Colour col) {
+            auto drawBar = [&](float y, const char* label, float val01, juce::Colour col, float peak01 = -1.0f) {
                 g.setColour(pal.textMuted);
                 g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
                 g.drawText(label, static_cast<int>(mb.getX() + 5.0f), static_cast<int>(y - 3.0f), 42, 12, juce::Justification::centredLeft);
@@ -632,12 +638,17 @@ void EditorContent::paint(juce::Graphics& g) {
                         g.fillRect(track.getX() + static_cast<float>(s) * (segW + segGap), track.getY(), segW, track.getHeight());
                     }
                 }
+                if (peak01 > 0.005f) {
+                    const float px = track.getX() + std::clamp(peak01, 0.0f, 1.0f) * (track.getWidth() - 2.0f);
+                    g.setColour(peak01 >= 0.875f ? pal.accentSecondary : pal.textBright);
+                    g.fillRect(px, track.getY() - 1.0f, 2.0f, track.getHeight() + 2.0f);
+                }
             };
 
             const float inPeak = std::max(tel.inputPeakL, tel.inputPeakR);
-            drawBar(mb.getY() + 6.0f,  "IN",    toNormDb(inPeak),       pal.accentPrimary.withAlpha(0.85f));
-            drawBar(mb.getY() + 20.0f, "OUT L", toNormDb(tel.peakL),    pal.accentPrimary);
-            drawBar(mb.getY() + 34.0f, "OUT R", toNormDb(tel.peakR),    pal.accentPrimary);
+            drawBar(mb.getY() + 6.0f,  "IN",    meterNormDb(inPeak),    pal.accentPrimary.withAlpha(0.85f), meterPeaks_[0].value);
+            drawBar(mb.getY() + 20.0f, "OUT L", meterNormDb(tel.peakL), pal.accentPrimary,                   meterPeaks_[1].value);
+            drawBar(mb.getY() + 34.0f, "OUT R", meterNormDb(tel.peakR), pal.accentPrimary,                   meterPeaks_[2].value);
             drawBar(mb.getY() + 48.0f, "GATE",  std::clamp(tel.activeGate, 0.0f, 1.0f), pal.accentSecondary);
 
             // Digital dB & CLIP Indicator along bottom of telemetry box

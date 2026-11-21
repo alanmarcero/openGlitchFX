@@ -32,8 +32,44 @@ public:
     juce::PopupMenu createRandomizeMenu();
     // Public so a test can run one refresh without a message loop.
     void timerCallback() override;
+    bool isClipLatched() const noexcept { return clipHold_ > 0.1f; }
+    float meterPeakHold(int index) const noexcept {
+        return (index >= 0 && index < 3) ? meterPeaks_[static_cast<size_t>(index)].value : 0.0f;
+    }
+    juce::Rectangle<float> meterBounds() const noexcept { return masterMeterBounds_; }
+    void resetMeters() noexcept {
+        clipHold_ = 0.0f;
+        for (auto& peak : meterPeaks_) {
+            peak.reset();
+        }
+    }
 
 private:
+    struct MeterPeakHold {
+        static constexpr int kHoldTicks = 30;
+        float value = 0.0f;
+        int holdTicks = 0;
+
+        void update(float level) noexcept {
+            if (level >= value) {
+                value = level;
+                holdTicks = kHoldTicks;
+                return;
+            }
+            if (holdTicks > 0) {
+                --holdTicks;
+                return;
+            }
+            value = std::max(level, value * 0.85f);
+        }
+
+        void reset() noexcept {
+            value = 0.0f;
+            holdTicks = 0;
+        }
+    };
+
+    static float meterNormDb(float peak) noexcept;
     void applyTheme(int themeIndex);
     void showRandomizeMenu();
     int fxCardHeaderAt(juce::Point<float> position) const;
@@ -118,6 +154,7 @@ private:
     juce::Rectangle<float> masterCardBounds_;
     juce::Rectangle<float> masterMeterBounds_;
     float clipHold_ = 0.0f;
+    std::array<MeterPeakHold, 3> meterPeaks_{};
 
     openglitch::ui::DetailPanelComponent detailPanel_;
     int lastStateVersion_ = -1;

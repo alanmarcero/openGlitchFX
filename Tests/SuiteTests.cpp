@@ -481,3 +481,113 @@ TEST_CASE("Every slider, combo box, and button has a screen-reader title", "[plu
     visit(visit, *editor);
     REQUIRE(checked >= 60);
 }
+
+TEST_CASE("SuiteBar closes name prompt on save/rename error and marks edited preset with headings", "[plugin][presets]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    const auto directory = juce::File::getSpecialLocation(juce::File::tempDirectory)
+        .getChildFile("openglitch-suitebar-" + juce::String(juce::Random::getSystemRandom().nextInt64()));
+    directory.deleteRecursively();
+
+    openglitch::suite::PresetLibrary library("openGlitchFX", {});
+    library.setDirectoryForTests(directory);
+    juce::String dummyError;
+    REQUIRE(library.saveUser("Existing", juce::ValueTree("State"), dummyError));
+
+    bool isEdited = false;
+    juce::String currentLabel = "Factory One";
+    bool isFactory = true;
+    int factoryIndex = 0;
+
+    openglitch::suite::SuiteBar::Hooks hooks;
+    hooks.canUndo = [] { return false; };
+    hooks.canRedo = [] { return false; };
+    hooks.abIsA = [] { return true; };
+    hooks.currentLabel = [&] { return currentLabel; };
+    hooks.currentIsFactory = [&] { return isFactory; };
+    hooks.currentFactoryIndex = [&] { return factoryIndex; };
+    hooks.currentIsEdited = [&] { return isEdited; };
+    hooks.saveUser = [](const juce::String&, juce::String& error) {
+        error = "Save failed";
+        return false;
+    };
+    hooks.renameUser = [](const juce::String&, const juce::String&, juce::String& error) {
+        error = "Rename failed";
+        return false;
+    };
+
+    std::vector<openglitch::suite::FactoryPresetInfo> factories{
+        { "Factory One", "Factory" },
+        { "Factory Two", "Factory" },
+    };
+    openglitch::suite::PresetLibrary libWithFactory("openGlitchFX", factories);
+    libWithFactory.setDirectoryForTests(directory);
+    openglitch::suite::SuiteBar bar(libWithFactory, hooks);
+    bar.setSize(1200, 40);
+
+    juce::ComboBox* presetBox = nullptr;
+    juce::TextEditor* nameEditor = nullptr;
+    juce::TextButton* saveBtn = nullptr;
+    juce::TextButton* renameBtn = nullptr;
+    for (int i = 0; i < bar.getNumChildComponents(); ++i) {
+        auto* child = bar.getChildComponent(i);
+        if (auto* cb = dynamic_cast<juce::ComboBox*>(child)) {
+            presetBox = cb;
+        } else if (auto* te = dynamic_cast<juce::TextEditor*>(child)) {
+            if (te->getTitle() != "Search presets") {
+                nameEditor = te;
+            }
+        } else if (auto* btn = dynamic_cast<juce::TextButton*>(child)) {
+            if (btn->getButtonText() == "SAVE") saveBtn = btn;
+            if (btn->getButtonText() == "REN") renameBtn = btn;
+        }
+    }
+    REQUIRE(presetBox != nullptr);
+    REQUIRE(nameEditor != nullptr);
+    REQUIRE(saveBtn != nullptr);
+    REQUIRE(renameBtn != nullptr);
+
+    // Edited factory preset after section heading should mark the selected item, not the heading.
+    isEdited = true;
+    bar.refresh();
+    const int selectedId = presetBox->getSelectedId();
+    REQUIRE(selectedId > 0);
+    REQUIRE(presetBox->getItemText(presetBox->indexOfItemId(selectedId)) == "Factory One *");
+    REQUIRE(presetBox->getText() == "Factory One *");
+
+    // Failed save closes nameEditor_ so presetBox_ and error text are visible.
+    saveBtn->onClick();
+    REQUIRE(nameEditor->isVisible());
+    REQUIRE_FALSE(presetBox->isVisible());
+    nameEditor->setText("Bad Name", juce::dontSendNotification);
+    nameEditor->onReturnKey();
+    REQUIRE_FALSE(nameEditor->isVisible());
+    REQUIRE(presetBox->isVisible());
+    REQUIRE(presetBox->getText() == "Save failed");
+
+    // Failed rename closes nameEditor_ so presetBox_ and error text are visible.
+    isFactory = false;
+    currentLabel = "Existing";
+    bar.refresh();
+    renameBtn->onClick();
+    REQUIRE(nameEditor->isVisible());
+    nameEditor->setText("Bad Rename", juce::dontSendNotification);
+    nameEditor->onReturnKey();
+    REQUIRE_FALSE(nameEditor->isVisible());
+    REQUIRE(presetBox->isVisible());
+    REQUIRE(presetBox->getText() == "Rename failed");
+
+    directory.deleteRecursively();
+}
+
+TEST_CASE("Slot B inherits preset metadata on initial reset", "[plugin][ab]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    OpenGlitchFXProcessor processor;
+    const auto initialLabel = processor.currentPresetLabel();
+    REQUIRE(initialLabel.isNotEmpty());
+    REQUIRE(initialLabel != "Session");
+    REQUIRE_FALSE(processor.currentPresetIsEdited());
+
+    processor.selectAbSlot(false);
+    REQUIRE(processor.currentPresetLabel() == initialLabel);
+    REQUIRE_FALSE(processor.currentPresetIsEdited());
+}

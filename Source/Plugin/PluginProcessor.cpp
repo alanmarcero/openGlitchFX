@@ -63,7 +63,7 @@ OpenGlitchFXProcessor::OpenGlitchFXProcessor()
     }
     undo_.suspend();
     applyFactory(openglitch::patterns::defaultIndex());
-    ab_.reset(musicalState());
+    ab_.reset(slotState());
     undo_.resume();
     undo_.onEdit = [this] {
         if (!loadingPreset_) {
@@ -528,7 +528,7 @@ void OpenGlitchFXProcessor::setStateInformation(const void* data, int sizeInByte
             if (slots.isValid() && slots.getNumChildren() >= 2) {
                 ab_.setSlots(slots.getChild(0).createCopy(), slots.getChild(1).createCopy(), savedA);
             } else {
-                ab_.reset(musicalState());
+                ab_.reset(slotState());
             }
         }
     }

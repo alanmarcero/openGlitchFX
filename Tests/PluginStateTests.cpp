@@ -603,3 +603,66 @@ TEST_CASE("Full-pattern randomization is seeded, keeps routes in the selected co
     REQUIRE(activeSteps >= 6);
     REQUIRE(activeSteps <= 18);
 }
+
+TEST_CASE("Meters hold peaks for ~1s and latch clip indicator until clicked", "[plugin][meters]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    OpenGlitchFXProcessor processor;
+    processor.prepareToPlay(44100.0, 256);
+
+    EditorContent editor(processor);
+    editor.setSize(EditorContent::kDesignWidth, EditorContent::kDesignHeight);
+
+    // Wet mix 0% passes input directly to output so 1.5f triggers clip (> 0 dBFS).
+    auto* mix = processor.parameters.getParameter(openglitch::params::kMasterMix);
+    mix->setValueNotifyingHost(0.0f);
+
+    juce::AudioBuffer<float> hot(2, 256);
+    hot.clear();
+    for (int ch = 0; ch < 2; ++ch) {
+        auto* data = hot.getWritePointer(ch);
+        for (int i = 0; i < 256; ++i) {
+            data[i] = 1.5f;
+        }
+    }
+    juce::MidiBuffer midi;
+    processor.processBlock(hot, midi);
+    editor.timerCallback();
+
+    REQUIRE(editor.isClipLatched());
+    const float heldOutL = editor.meterPeakHold(1);
+    REQUIRE(heldOutL > 0.9f);
+    REQUIRE(editor.meterPeakHold(0) > 0.9f);
+    REQUIRE(editor.meterPeakHold(2) > 0.9f);
+
+    // Silence for 25 ticks (< 30 ticks = ~1s): peak holds steady, clip stays latched.
+    juce::AudioBuffer<float> silence(2, 256);
+    silence.clear();
+    for (int tick = 0; tick < 25; ++tick) {
+        processor.processBlock(silence, midi);
+        editor.timerCallback();
+    }
+    REQUIRE(editor.isClipLatched());
+    REQUIRE_THAT(editor.meterPeakHold(1), Catch::Matchers::WithinAbs(heldOutL, 1e-5f));
+
+    // After > 30 ticks total, peak hold decays while clip stays latched.
+    for (int tick = 0; tick < 10; ++tick) {
+        processor.processBlock(silence, midi);
+        editor.timerCallback();
+    }
+    REQUIRE(editor.isClipLatched());
+    REQUIRE(editor.meterPeakHold(1) < heldOutL);
+
+    // Clicking the meter area clears the clip latch.
+    const auto center = editor.meterBounds().getCentre();
+    const juce::MouseEvent click(juce::Desktop::getInstance().getMainMouseSource(),
+                                 center,
+                                 juce::ModifierKeys::leftButtonModifier,
+                                 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                                 &editor, &editor,
+                                 juce::Time::getCurrentTime(),
+                                 center,
+                                 juce::Time::getCurrentTime(),
+                                 1, false);
+    editor.mouseDown(click);
+    REQUIRE_FALSE(editor.isClipLatched());
+}

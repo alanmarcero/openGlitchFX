@@ -201,11 +201,13 @@ void SuiteBar::commitNamePrompt() {
             return;
         }
         if (hooks_.saveUser != nullptr && !hooks_.saveUser(name, error)) {
+            closeNamePrompt();
             showError(error);
             return;
         }
     } else if (promptMode_ == PromptMode::Rename) {
         if (hooks_.renameUser != nullptr && !hooks_.renameUser(pendingRenameFrom_, name, error)) {
+            closeNamePrompt();
             showError(error);
             return;
         }
@@ -279,7 +281,7 @@ void SuiteBar::refresh() {
     // An edit since the last load or save marks the name with " *".
     const juce::String editedMark = hooks_.currentIsEdited && hooks_.currentIsEdited() ? " *" : "";
     if (selected > 0) {
-        presetBox_.changeItemText(selected, presetBox_.getItemText(selected - 1) + editedMark);
+        presetBox_.changeItemText(selected, presetBox_.getItemText(presetBox_.indexOfItemId(selected)) + editedMark);
         presetBox_.setSelectedId(selected, juce::dontSendNotification);
     } else {
         presetBox_.setSelectedId(0, juce::dontSendNotification);
