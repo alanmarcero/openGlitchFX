@@ -24,6 +24,7 @@ public:
         std::function<bool(const juce::String& name, juce::String& error)> deleteUser;
         std::function<juce::String()> currentLabel;
         std::function<bool()> currentIsFactory;
+        std::function<bool()> currentIsEdited;
         std::function<int()> currentFactoryIndex;
     };
 

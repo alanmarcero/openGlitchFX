@@ -184,11 +184,14 @@ void SuiteBar::refresh() {
             }
         }
     }
+    // An edit since the last load or save marks the name with " *".
+    const juce::String editedMark = hooks_.currentIsEdited && hooks_.currentIsEdited() ? " *" : "";
     if (selected > 0) {
+        presetBox_.changeItemText(selected, presetBox_.getItemText(selected - 1) + editedMark);
         presetBox_.setSelectedId(selected, juce::dontSendNotification);
     } else {
         presetBox_.setSelectedId(0, juce::dontSendNotification);
-        presetBox_.setText(label.isNotEmpty() ? label : "Presets", juce::dontSendNotification);
+        presetBox_.setText((label.isNotEmpty() ? label : "Presets") + editedMark, juce::dontSendNotification);
     }
     const auto* entry = selectedEntry();
     favoriteButton_.setToggleState(entry != nullptr && entry->favorite, juce::dontSendNotification);

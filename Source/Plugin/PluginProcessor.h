@@ -48,6 +48,7 @@ public:
     bool abIsA() const { return ab_.isA(); }
     juce::String currentPresetLabel() const { return presetLabel_; }
     bool currentPresetIsFactory() const { return presetIsFactory_; }
+    bool currentPresetIsEdited() const { return presetEdited_; }
     float getEditorScale() const { return editorScale_.load(); }
     void setEditorScale(float scale) { editorScale_.store(scale); }
 
@@ -72,6 +73,8 @@ private:
     void applyFactory(int index);
     void resetEnvelopes();
     juce::ValueTree musicalState();
+    juce::ValueTree slotState();
+    void restoreSlot(const juce::ValueTree& slot);
     juce::ValueTree captureExtra() const;
     void applyExtra(const juce::ValueTree& extra);
     void restoreMusicalState(const juce::ValueTree& state);
@@ -82,6 +85,8 @@ private:
     int currentProgram_ = 0;
     bool programApplied_ = false;
     bool presetIsFactory_ = true;
+    bool presetEdited_ = false;
+    bool loadingPreset_ = false;
     juce::String presetLabel_;
 
     openglitch::core::GlitchProcessorCore core_;

@@ -264,6 +264,7 @@ EditorContent::EditorContent(OpenGlitchFXProcessor& owner)
     hooks.deleteUser = [this](const juce::String& name, juce::String& error) { return processor_.deleteUserPreset(name, error); };
     hooks.currentLabel = [this] { return processor_.currentPresetLabel(); };
     hooks.currentIsFactory = [this] { return processor_.currentPresetIsFactory(); };
+    hooks.currentIsEdited = [this] { return processor_.currentPresetIsEdited(); };
     hooks.currentFactoryIndex = [this] { return processor_.getCurrentProgram(); };
     suiteBar_ = std::make_unique<openglitch::suite::SuiteBar>(processor_.getPresets(), std::move(hooks));
     addAndMakeVisible(*suiteBar_);
@@ -417,7 +418,8 @@ void EditorContent::timerCallback() {
             + processor_.currentPresetLabel()
             + juce::String(processor_.getUndo().canUndo() ? 1 : 0)
             + juce::String(processor_.getUndo().canRedo() ? 1 : 0)
-            + juce::String(processor_.currentPresetIsFactory() ? 1 : 0);
+            + juce::String(processor_.currentPresetIsFactory() ? 1 : 0)
+            + juce::String(processor_.currentPresetIsEdited() ? 1 : 0);
         if (token != suiteToken_) {
             suiteToken_ = token;
             suiteBar_->refresh();

@@ -88,20 +88,32 @@ void ParameterUndo::commit(const juce::String& name) {
     if (!dirty_) {
         return;
     }
-    auto end = capture();
     dirty_ = false;
-    if (!same(start_, end)) {
-        undo_.beginNewTransaction(name);
-        undo_.perform(new Action(*this, std::move(start_), std::move(end)), name);
+    if (same(start_, capture())) {
+        return;
     }
+    if (onEdit != nullptr) {
+        onEdit();
+    }
+    auto end = capture();
+    manager().beginNewTransaction(name);
+    manager().perform(new Action(*this, std::move(start_), std::move(end)), name);
 }
 
 bool ParameterUndo::undo() {
-    return onMessageThread() && undo_.undo();
+    return onMessageThread() && manager().undo();
 }
 
 bool ParameterUndo::redo() {
-    return onMessageThread() && undo_.redo();
+    return onMessageThread() && manager().redo();
+}
+
+void ParameterUndo::useHistory(int slot) {
+    active_ = static_cast<size_t>(slot);
+}
+
+void ParameterUndo::clearHistory(int slot) {
+    histories_[static_cast<size_t>(slot)].clearUndoHistory();
 }
 
 void ParameterUndo::suspend() { ++suspendCount_; }

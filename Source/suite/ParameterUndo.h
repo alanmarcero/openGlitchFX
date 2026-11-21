@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <vector>
@@ -17,7 +18,7 @@ public:
     ParameterUndo(juce::AudioProcessor& processor, ExtraCapture captureExtra, ExtraApply applyExtra);
     ~ParameterUndo() override;
 
-    juce::UndoManager& manager() { return undo_; }
+    juce::UndoManager& manager() { return histories_[active_]; }
 
     void beginGesture(const juce::String& name);
     void endGesture();
@@ -26,8 +27,15 @@ public:
 
     bool undo();
     bool redo();
-    bool canUndo() const { return undo_.canUndo(); }
-    bool canRedo() const { return undo_.canRedo(); }
+    bool canUndo() const { return histories_[active_].canUndo(); }
+    bool canRedo() const { return histories_[active_].canRedo(); }
+
+    // Each A/B slot has its own history, so undo never applies a state taken in the other slot.
+    void useHistory(int slot);
+    void clearHistory(int slot);
+
+    // Runs when a gesture commits a change, before the undo step stores the new state.
+    std::function<void()> onEdit;
 
     void suspend();
     void resume();
@@ -53,7 +61,8 @@ private:
     ExtraApply applyExtra_;
     void commit(const juce::String& name);
 
-    juce::UndoManager undo_;
+    std::array<juce::UndoManager, 2> histories_;
+    size_t active_ = 0;
     int apiDepth_ = 0;
     int parameterDepth_ = 0;
     int suspendCount_ = 0;

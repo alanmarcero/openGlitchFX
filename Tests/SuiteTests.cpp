@@ -181,6 +181,48 @@ TEST_CASE("A/B slots copy and survive a session round trip", "[plugin][ab]") {
     REQUIRE(factory >= 0.0f);
 }
 
+TEST_CASE("Each A/B slot keeps its own undo history and preset name", "[plugin][ab]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    OpenGlitchFXProcessor processor;
+    auto& undo = processor.getUndo();
+    auto* amount = processor.parameters.getParameter(openglitch::params::kStutterAmt);
+    auto edit = [&](float value) {
+        amount->beginChangeGesture();
+        amount->setValueNotifyingHost(value);
+        amount->endChangeGesture();
+    };
+    processor.loadFactoryProgram(1);
+    const float loadedA = amount->getValue();
+    REQUIRE_FALSE(processor.currentPresetIsEdited());
+    edit(0.3f);
+    REQUIRE(processor.currentPresetIsEdited());
+    processor.selectAbSlot(false);
+    REQUIRE_FALSE(undo.canUndo());
+    processor.loadFactoryProgram(4);
+    const float loadedB = amount->getValue();
+    edit(0.6f);
+    REQUIRE(undo.undo());
+    REQUIRE_THAT(amount->getValue(), Catch::Matchers::WithinAbs(loadedB, 1e-4));
+
+    processor.selectAbSlot(true);
+    REQUIRE(processor.currentPresetLabel() == "Straight Gate");
+    REQUIRE(processor.currentPresetIsEdited());
+    REQUIRE(undo.undo());
+    REQUIRE_THAT(amount->getValue(), Catch::Matchers::WithinAbs(loadedA, 1e-4));
+    REQUIRE_FALSE(processor.currentPresetIsEdited());
+    juce::MemoryBlock saved;
+    processor.getStateInformation(saved);
+    OpenGlitchFXProcessor restored;
+    restored.setStateInformation(saved.getData(), static_cast<int>(saved.getSize()));
+    restored.selectAbSlot(false);
+    REQUIRE(restored.currentPresetLabel() == "Tape Stop Fill");
+    processor.copyAbAtoB();
+    processor.selectAbSlot(false);
+
+    REQUIRE_FALSE(undo.canUndo());
+    REQUIRE(processor.currentPresetLabel() == "Straight Gate");
+}
+
 TEST_CASE("User presets save, search, favorite, rename, and leave factory presets read-only", "[plugin][presets]") {
     juce::ScopedJuceInitialiser_GUI gui;
     OpenGlitchFXProcessor processor;

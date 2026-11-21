@@ -296,6 +296,25 @@ TEST_CASE("A preset load with the host idle repaints the pads and the FX cards",
     REQUIRE(differingPixels(before, after, tapeHeader) > 50);
 }
 
+TEST_CASE("The preset box marks an edit since the last load", "[plugin][gui]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    OpenGlitchFXProcessor processor;
+    EditorContent content(processor);
+    auto* presets = findDescendant<juce::ComboBox>(content, [](juce::ComboBox& box) {
+        return box.getTooltip().startsWith("Factory and user presets");
+    });
+    REQUIRE(presets != nullptr);
+    REQUIRE(presets->getText() == "Club Stutter");
+    auto* amount = processor.parameters.getParameter(openglitch::params::kChopperAmt);
+
+    amount->beginChangeGesture();
+    amount->setValueNotifyingHost(0.4f);
+    amount->endChangeGesture();
+    content.timerCallback();
+
+    REQUIRE(presets->getText() == "Club Stutter *");
+}
+
 TEST_CASE("The editor scales its content as one unit and reopens at the saved size", "[plugin][gui]") {
     juce::ScopedJuceInitialiser_GUI gui;
     OpenGlitchFXProcessor processor;
