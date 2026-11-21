@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.9.1
+
+- **UI & Suite Fixes:** UI polish, 11 px minimum labels, LENGTH/RATE grid accuracy, unit formatting and typed-value entry, peak-hold meters with clip latch, per-slot A/B undo, inline confirms, uniform scaling, and screen-reader titles.
+
 ## v1.9.0 — 2026-11-20
 
 - **Dual-head Buffer Stutter**: Crossfades overlapping read heads at loop wraps and retriggers to eliminate tremolo pumping at 1/64 divisions.
