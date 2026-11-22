@@ -65,6 +65,7 @@ if(OGFX_BUILD_PLUGIN)
 
     target_sources(openGlitchFX PRIVATE
         Source/Plugin/Parameters.cpp
+        Source/Plugin/ParamLockHelper.cpp
         Source/Plugin/GlitchLookAndFeel.cpp
         Source/Plugin/StepSequencerComponent.cpp
         Source/Plugin/EnvelopeEditorComponent.cpp

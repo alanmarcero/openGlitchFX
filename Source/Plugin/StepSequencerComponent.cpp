@@ -1,4 +1,5 @@
 #include "StepSequencerComponent.h"
+#include "ParamLockHelper.h"
 #include <algorithm>
 #include <bit>
 #include <numeric>
@@ -174,24 +175,65 @@ void StepSequencerComponent::setStepFxMaskParam(int stepIndex, uint16_t mask) {
     }
 }
 
+void StepSequencerComponent::setUnlockedStepFxMaskBits(int stepIndex, uint16_t desiredMask) {
+    if (stepIndex < 0 || stepIndex >= 32) return;
+    const uint16_t clamped = desiredMask & kAllFx;
+    const std::array<juce::String, 2> ids = { openglitch::params::stepFxParamId(stepIndex),
+                                            openglitch::params::stepExtraFxParamId(stepIndex) };
+    const std::array<uint16_t, 2> values = { static_cast<uint16_t>(clamped & 1023u),
+                                           static_cast<uint16_t>(clamped >> 10) };
+    for (size_t i = 0; i < ids.size(); ++i) {
+        if (isParamLocked(ids[i])) {
+            continue;
+        }
+        if (auto* param = apvts_.getParameter(ids[i])) {
+            param->beginChangeGesture();
+            param->setValueNotifyingHost(param->convertTo0to1(static_cast<float>(values[i])));
+            param->endChangeGesture();
+        }
+    }
+}
+
+bool StepSequencerComponent::isParamLocked(const juce::String& paramId) const {
+    return lockCallbacks_.isLocked ? lockCallbacks_.isLocked(paramId) : false;
+}
+
+bool StepSequencerComponent::isStepLocked(int stepIndex) const {
+    if (stepIndex < 0 || stepIndex >= 32) return false;
+    return isParamLocked(openglitch::params::stepParamId(stepIndex))
+        || isParamLocked(openglitch::params::stepFxParamId(stepIndex))
+        || isParamLocked(openglitch::params::stepExtraFxParamId(stepIndex));
+}
+
+void StepSequencerComponent::setStepLocked(int stepIndex, bool locked) {
+    if (stepIndex < 0 || stepIndex >= 32 || !lockCallbacks_.setLocked) return;
+    lockCallbacks_.setLocked(openglitch::params::stepParamId(stepIndex), locked);
+    lockCallbacks_.setLocked(openglitch::params::stepFxParamId(stepIndex), locked);
+    lockCallbacks_.setLocked(openglitch::params::stepExtraFxParamId(stepIndex), locked);
+}
+
 void StepSequencerComponent::ensureFxAudible(int fxIndex) {
     if (fxIndex < 0 || fxIndex >= kNumFx) return;
     const auto& desc = openglitch::params::kFxDescriptors[static_cast<size_t>(fxIndex)];
 
-    if (auto* onParam = apvts_.getParameter(desc.onParamId)) {
-        if (onParam->getValue() < 0.5f) {
-            onParam->beginChangeGesture();
-            onParam->setValueNotifyingHost(1.0f);
-            onParam->endChangeGesture();
+    if (!isParamLocked(desc.onParamId)) {
+        if (auto* onParam = apvts_.getParameter(desc.onParamId)) {
+            if (onParam->getValue() < 0.5f) {
+                onParam->beginChangeGesture();
+                onParam->setValueNotifyingHost(1.0f);
+                onParam->endChangeGesture();
+            }
         }
     }
 
-    if (auto* amtRaw = apvts_.getRawParameterValue(desc.amtParamId)) {
-        if (amtRaw->load() < 1.0f) {
-            if (auto* amtParam = apvts_.getParameter(desc.amtParamId)) {
-                amtParam->beginChangeGesture();
-                amtParam->setValueNotifyingHost(amtParam->convertTo0to1(50.0f));
-                amtParam->endChangeGesture();
+    if (!isParamLocked(desc.amtParamId)) {
+        if (auto* amtRaw = apvts_.getRawParameterValue(desc.amtParamId)) {
+            if (amtRaw->load() < 1.0f) {
+                if (auto* amtParam = apvts_.getParameter(desc.amtParamId)) {
+                    amtParam->beginChangeGesture();
+                    amtParam->setValueNotifyingHost(amtParam->convertTo0to1(50.0f));
+                    amtParam->endChangeGesture();
+                }
             }
         }
     }
@@ -202,12 +244,14 @@ void StepSequencerComponent::applyPreset(openglitch::core::StepPatternPreset pre
     tempSeq.applyPreset(preset);
     for (int i = 0; i < 32; ++i) {
         const bool stepOn = tempSeq.getStep(i);
-        setStepParam(i, stepOn);
+        if (!isParamLocked(openglitch::params::stepParamId(i))) {
+            setStepParam(i, stepOn);
+        }
         if (stepOn && paintTargetFx_ >= 0 && paintTargetFx_ < kNumFx) {
-            setStepFxMaskParam(i, static_cast<uint16_t>(1u << paintTargetFx_));
+            setUnlockedStepFxMaskBits(i, static_cast<uint16_t>(1u << paintTargetFx_));
             ensureFxAudible(paintTargetFx_);
         } else if (stepOn && getStepFxMaskParam(i) == 0u) {
-            setStepFxMaskParam(i, kAllFx);
+            setUnlockedStepFxMaskBits(i, kAllFx);
         }
     }
     repaint();
@@ -215,14 +259,16 @@ void StepSequencerComponent::applyPreset(openglitch::core::StepPatternPreset pre
 
 void StepSequencerComponent::invertPattern() {
     for (int i = 0; i < 32; ++i) {
-        setStepParam(i, !getStepParam(i));
+        if (!isParamLocked(openglitch::params::stepParamId(i))) {
+            setStepParam(i, !getStepParam(i));
+        }
     }
     repaint();
 }
 
 void StepSequencerComponent::resetAllStepFxMasksToAll() {
     for (int i = 0; i < 32; ++i) {
-        setStepFxMaskParam(i, kAllFx);
+        setUnlockedStepFxMaskBits(i, kAllFx);
     }
     repaint();
 }
@@ -243,7 +289,7 @@ void StepSequencerComponent::randomizePattern(uint32_t seed, int intensity) {
             const uint16_t updatedMask = routeSelectedFx
                 ? static_cast<uint16_t>(currentMask | selectedBit)
                 : static_cast<uint16_t>(currentMask & ~selectedBit);
-            setStepFxMaskParam(step, updatedMask);
+            setUnlockedStepFxMaskBits(step, updatedMask);
         }
         ensureFxAudible(paintTargetFx_);
         repaint();
@@ -256,7 +302,9 @@ void StepSequencerComponent::randomizePattern(uint32_t seed, int intensity) {
     int activeSteps = 0;
     for (int step = 0; step < 32; ++step) {
         const bool active = roll(generator) < activeThreshold;
-        setStepParam(step, active);
+        if (!isParamLocked(openglitch::params::stepParamId(step))) {
+            setStepParam(step, active);
+        }
         uint16_t fxMask = 0u;
         if (active) {
             fxMask = static_cast<uint16_t>(generator() & maskByIntensity);
@@ -267,14 +315,16 @@ void StepSequencerComponent::randomizePattern(uint32_t seed, int intensity) {
             usedFxMask |= fxMask;
             ++activeSteps;
         }
-        setStepFxMaskParam(step, fxMask);
+        setUnlockedStepFxMaskBits(step, fxMask);
     }
 
     if (activeSteps == 0) {
         const int fallbackFx = level == 3 ? allFx(generator) : commonFx(generator);
         const uint16_t fallbackMask = static_cast<uint16_t>(1u << fallbackFx);
-        setStepParam(0, true);
-        setStepFxMaskParam(0, fallbackMask);
+        if (!isParamLocked(openglitch::params::stepParamId(0))) {
+            setStepParam(0, true);
+        }
+        setUnlockedStepFxMaskBits(0, fallbackMask);
         usedFxMask |= fallbackMask;
     }
 
@@ -441,12 +491,34 @@ void StepSequencerComponent::showStepContextMenu(int step) {
     menu.addItem(300, juce::String::formatted("Copy This Pad (On/Off + FX) to Pads %02d-%02d", groupStart + 1, groupStart + 8));
     menu.addItem(301, "Copy FX Routing to All 32 Pads");
 
+    if (lockCallbacks_.isLocked && lockCallbacks_.setLocked) {
+        menu.addSeparator();
+        const bool stepLocked = isStepLocked(step);
+        menu.addItem(500, juce::String(stepLocked ? "Unlock " : "Lock ")
+                              + juce::String::formatted("Pad %02d", step + 1));
+        if (lockCallbacks_.hasAnyLocked && lockCallbacks_.hasAnyLocked()) {
+            menu.addItem(501, "Unlock all parameters");
+        }
+    }
+
     const int applyStart = isMergedGroup ? run.startStep : step;
     const int applyEnd   = isMergedGroup ? run.endStep   : step;
 
     menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this).withDeletionCheck(*this),
                        [this, step, stepOn, mask, applyStart, applyEnd](int result) {
         if (result == 0) return;
+        if (result == 500) {
+            setStepLocked(step, !isStepLocked(step));
+            repaint();
+            return;
+        }
+        if (result == 501) {
+            if (lockCallbacks_.unlockAll) {
+                lockCallbacks_.unlockAll();
+            }
+            repaint();
+            return;
+        }
         undo_.perform("Edit steps", [&] {
         auto applyToRange = [&](uint16_t newMask, bool newState) {
             for (int s = applyStart; s <= applyEnd; ++s) {
@@ -787,6 +859,15 @@ void StepSequencerComponent::paint(juce::Graphics& g) {
         }
 
         stepIdx = runEnd + 1;
+    }
+
+    for (int step = 0; step < 32; ++step) {
+        if (!isStepLocked(step)) {
+            continue;
+        }
+        const auto padRect = getStepBounds(step);
+        const juce::Rectangle<float> lockBounds(padRect.getRight() - 12.0f, padRect.getY() + 2.0f, 10.0f, 10.0f);
+        ParamLockOverlayHelper::drawPadlock(g, lockBounds, pal.accentPrimary, pal.cardBg);
     }
 
     // Pads past LENGTH stay editable but never play: hatch them and mark the loop end.

@@ -2,6 +2,7 @@
 
 #include "DetailPanelComponent.h"
 #include "GlitchLookAndFeel.h"
+#include "ParamLockHelper.h"
 #include "PluginProcessor.h"
 #include "StepSequencerComponent.h"
 #include "../suite/SuiteBar.h"
@@ -23,6 +24,7 @@ public:
     ~EditorContent() override;
 
     void paint(juce::Graphics& g) override;
+    void paintOverChildren(juce::Graphics& g) override;
     void resized() override;
     void mouseDown(const juce::MouseEvent& event) override;
     bool keyPressed(const juce::KeyPress& key) override;
@@ -158,6 +160,7 @@ private:
 
     openglitch::ui::DetailPanelComponent detailPanel_;
     int lastStateVersion_ = -1;
+    int lastLockVersion_ = -1;
     juce::TooltipWindow tooltipWindow_{ this, 500 };
     std::unique_ptr<openglitch::suite::SuiteBar> suiteBar_;
     juce::String suiteToken_;
@@ -179,6 +182,7 @@ private:
     std::unique_ptr<SliderAttachment> masterMixAttach_;
     std::unique_ptr<SliderAttachment> masterGainAttach_;
     std::unique_ptr<ButtonAttachment> masterPowerAttach_;
+    openglitch::ui::ParamLockOverlayHelper lockHelper_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(EditorContent)
 };

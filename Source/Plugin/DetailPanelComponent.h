@@ -2,6 +2,7 @@
 
 #include "EnvelopeEditorComponent.h"
 #include "GlitchLookAndFeel.h"
+#include "ParamLockHelper.h"
 #include "PluginProcessor.h"
 #include <array>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -19,6 +20,7 @@ public:
     void refreshDependencies();
 
     void paint(juce::Graphics& g) override;
+    void paintOverChildren(juce::Graphics& g) override;
     void resized() override;
 
 private:
@@ -78,6 +80,7 @@ private:
     std::vector<std::unique_ptr<ComboBoxAttachment>> comboAttachments_;
     std::vector<std::unique_ptr<ButtonAttachment>> buttonAttachments_;
     std::vector<std::unique_ptr<SliderAttachment>> sliderAttachments_;
+    ParamLockOverlayHelper lockHelper_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DetailPanelComponent)
 };

@@ -4,6 +4,7 @@
 #include "Parameters.h"
 #include "../Core/BeatStepSequencer.h"
 #include "../suite/ParameterUndo.h"
+#include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -11,10 +12,19 @@ namespace openglitch::ui {
 
 class StepSequencerComponent final : public juce::Component, public juce::TooltipClient {
 public:
+    struct LockCallbacks {
+        std::function<bool(const juce::String&)> isLocked;
+        std::function<void(const juce::String&, bool)> setLocked;
+        std::function<void()> unlockAll;
+        std::function<bool()> hasAnyLocked;
+    };
+
     StepSequencerComponent(juce::AudioProcessorValueTreeState& apvts,
                            const GlitchLookAndFeel& lnf,
                            openglitch::suite::ParameterUndo& undo);
     ~StepSequencerComponent() override;
+
+    void setLockCallbacks(LockCallbacks callbacks) { lockCallbacks_ = std::move(callbacks); }
 
     void setPlayheadState(int currentStep, float barPhase, bool isStepActive, float gateEnvelope);
     void setMidiTriggerMode(bool midiMode);
@@ -57,9 +67,14 @@ private:
     bool getStepParam(int stepIndex) const;
 
     void setStepFxMaskParam(int stepIndex, uint16_t mask);
+    void setUnlockedStepFxMaskBits(int stepIndex, uint16_t desiredMask);
     uint16_t getStepFxMaskParam(int stepIndex) const;
     uint16_t getEffectiveStepFxMask(int stepIndex) const;
     ContiguousRun findContiguousRun(int stepIndex) const;
+
+    bool isParamLocked(const juce::String& paramId) const;
+    bool isStepLocked(int stepIndex) const;
+    void setStepLocked(int stepIndex, bool locked);
 
     void ensureFxAudible(int fxIndex);
     void applyPaintBrushToStep(int stepIndex, bool isInitialClick);
@@ -69,6 +84,7 @@ private:
     juce::AudioProcessorValueTreeState& apvts_;
     const GlitchLookAndFeel& lnf_;
     openglitch::suite::ParameterUndo& undo_;
+    LockCallbacks lockCallbacks_;
     bool gestureOpen_ = false;
 
     int currentStep_ = 0;

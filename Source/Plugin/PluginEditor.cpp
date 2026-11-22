@@ -10,7 +10,8 @@ constexpr float kEnvelopeSteps = 64.0f;
 EditorContent::EditorContent(OpenGlitchFXProcessor& owner)
     : processor_(owner),
       sequencerGrid_(owner.parameters, lookAndFeel_, owner.getUndo()),
-      detailPanel_(owner, lookAndFeel_) {
+      detailPanel_(owner, lookAndFeel_),
+      lockHelper_(owner, *this) {
     setLookAndFeel(&lookAndFeel_);
 
     customLogoImage_ = juce::ImageCache::getFromMemory(BinaryData::alan_marcero_logo_jpg,
@@ -54,6 +55,12 @@ EditorContent::EditorContent(OpenGlitchFXProcessor& owner)
     addAndMakeVisible(internalBpmSlider_);
 
     // 32-Step Beat Sequencer Grid, Paint-Brush FX Selector & Quick Pattern Buttons
+    sequencerGrid_.setLockCallbacks({
+        [this](const juce::String& id) { return processor_.isParamLocked(id); },
+        [this](const juce::String& id, bool locked) { processor_.setParamLocked(id, locked); },
+        [this]() { processor_.unlockAllParams(); },
+        [this]() { return processor_.hasAnyLockedParams(); }
+    });
     addAndMakeVisible(sequencerGrid_);
 
     paintBrushLabel_.setFont(juce::FontOptions(14.0f, juce::Font::bold));
@@ -205,6 +212,8 @@ EditorContent::EditorContent(OpenGlitchFXProcessor& owner)
         slot.knobAttach = std::make_unique<SliderAttachment>(processor_.parameters, metas[i].amtId, slot.knob);
         slot.enableAttach = std::make_unique<ButtonAttachment>(processor_.parameters, metas[i].onId, slot.enableBtn);
         slot.knob.setDoubleClickReturnValue(true, metas[i].defaultPct);
+        lockHelper_.registerControl(slot.knob, metas[i].amtId, false);
+        lockHelper_.registerControl(slot.enableBtn, metas[i].onId, false);
     }
 
     // Master Controls
@@ -243,6 +252,19 @@ EditorContent::EditorContent(OpenGlitchFXProcessor& owner)
     masterMixAttach_   = std::make_unique<SliderAttachment>(processor_.parameters, kMasterMix, masterMixSlider_);
     masterGainAttach_  = std::make_unique<SliderAttachment>(processor_.parameters, kMasterGain, masterGainSlider_);
     masterPowerAttach_ = std::make_unique<ButtonAttachment>(processor_.parameters, kMasterPower, masterPowerButton_);
+
+    lockHelper_.registerControl(themeBox_, kTheme, true);
+    lockHelper_.registerControl(hostSyncButton_, kHostSync, false);
+    lockHelper_.registerControl(internalBpmSlider_, kInternalBpm, false);
+    lockHelper_.registerControl(sequenceLengthSlider_, kSequenceLength, false);
+    lockHelper_.registerControl(sequencerSwingSlider_, kSequencerSwing, false);
+    lockHelper_.registerControl(patternRateBox_, kPatternRate, true);
+    lockHelper_.registerControl(patternChanceSlider_, kPatternChance, false);
+    lockHelper_.registerControl(keepSubButton_, kKeepSub, false);
+    lockHelper_.registerControl(smoothSlider_, kSmoothMs, false);
+    lockHelper_.registerControl(masterMixSlider_, kMasterMix, false);
+    lockHelper_.registerControl(masterGainSlider_, kMasterGain, false);
+    lockHelper_.registerControl(masterPowerButton_, kMasterPower, false);
 
     internalBpmSlider_.setDoubleClickReturnValue(true, 120.0);
     smoothSlider_.setDoubleClickReturnValue(true, 2.5);
@@ -435,6 +457,12 @@ void EditorContent::timerCallback() {
         lastStateVersion_ = version;
         detailPanel_.refreshFromState();
     }
+    if (const int lockVersion = processor_.getLockVersion(); lockVersion != lastLockVersion_) {
+        lastLockVersion_ = lockVersion;
+        detailPanel_.repaint();
+        sequencerGrid_.repaint();
+        repaint();
+    }
     detailPanel_.setTelemetry(tel);
     detailPanel_.refreshDependencies();
     const auto scaleText = juce::String(juce::roundToInt(processor_.getEditorScale() * 100.0f)) + "%";
@@ -456,6 +484,11 @@ void EditorContent::timerCallback() {
     repaint(masterMeterBounds_.expanded(4.0f).toNearestInt());
     repaint(240, 12, 140, 34);
     repaint(385, 6, 144, 46);
+}
+
+void EditorContent::paintOverChildren(juce::Graphics& g) {
+    const auto& pal = lookAndFeel_.getPalette();
+    lockHelper_.paintLocks(g, pal.accentPrimary, pal.cardBg);
 }
 
 void EditorContent::paint(juce::Graphics& g) {

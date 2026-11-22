@@ -6,6 +6,10 @@
 #include "../suite/PresetLibrary.h"
 #include "Parameters.h"
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <mutex>
+#include <set>
+#include <utility>
+#include <vector>
 
 class OpenGlitchFXProcessor final : public juce::AudioProcessor {
 public:
@@ -65,6 +69,12 @@ public:
     // The editor reloads envelope points when this changes.
     int getStateVersion() const { return stateVersion_.load(); }
 
+    bool isParamLocked(const juce::String& paramId) const;
+    void setParamLocked(const juce::String& paramId, bool locked);
+    void unlockAllParams();
+    bool hasAnyLockedParams() const;
+    int getLockVersion() const { return lockVersion_.load(std::memory_order_relaxed); }
+
     juce::AudioProcessorValueTreeState parameters;
 
 private:
@@ -78,6 +88,8 @@ private:
     juce::ValueTree captureExtra() const;
     void applyExtra(const juce::ValueTree& extra);
     void restoreMusicalState(const juce::ValueTree& state);
+    std::vector<std::pair<juce::String, float>> snapshotLockedParameters() const;
+    void restoreLockedParameters(const std::vector<std::pair<juce::String, float>>& lockedValues);
 
     openglitch::suite::ParameterUndo undo_;
     openglitch::suite::AbCompare ab_;
@@ -92,7 +104,10 @@ private:
     openglitch::core::GlitchProcessorCore core_;
     std::atomic<float> visualBeat_{ 0.0f };
     std::atomic<int> stateVersion_{ 0 };
+    std::atomic<int> lockVersion_{ 0 };
     std::atomic<float> editorScale_{ 1.0f };
+    mutable std::mutex lockMutex_;
+    std::set<juce::String> lockedParams_;
     std::array<std::atomic<float>*, 32> stepParams_{};
     std::array<std::atomic<float>*, 32> stepFxParams_{};
     std::array<std::atomic<float>*, 32> stepExtraFxParams_{};

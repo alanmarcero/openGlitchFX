@@ -44,7 +44,7 @@ void place(juce::Component& component, juce::Rectangle<float> area) {
 } // namespace
 
 DetailPanelComponent::DetailPanelComponent(OpenGlitchFXProcessor& processor, const GlitchLookAndFeel& lnf)
-    : processor_(processor), lnf_(lnf), envEditor_(lnf) {
+    : processor_(processor), lnf_(lnf), envEditor_(lnf), lockHelper_(processor, *this) {
     using namespace openglitch::params;
 
     cards_[0] = { "BUFFER", "STUTTER OPTIONS", {} };
@@ -132,6 +132,16 @@ DetailPanelComponent::DetailPanelComponent(OpenGlitchFXProcessor& processor, con
 
     envTabs_[0].setToggleState(true, juce::dontSendNotification);
     selectEnvelope(0);
+
+    lockHelper_.registerDynamicControl(envOnButton_, [this] {
+        return openglitch::params::kEnvDescriptors[static_cast<size_t>(selectedEnv_)].onParamId;
+    }, false);
+    lockHelper_.registerDynamicControl(envRateBox_, [this] {
+        return openglitch::params::kEnvDescriptors[static_cast<size_t>(selectedEnv_)].rateParamId;
+    }, true);
+    lockHelper_.registerDynamicControl(envDepthSlider_, [this] {
+        return openglitch::params::kEnvDescriptors[static_cast<size_t>(selectedEnv_)].depthParamId;
+    }, false);
 }
 
 void DetailPanelComponent::setupCombo(juce::ComboBox& box, const char* paramId, const juce::String& caption, const juce::String& tooltip) {
@@ -143,6 +153,7 @@ void DetailPanelComponent::setupCombo(juce::ComboBox& box, const char* paramId, 
     captions_.emplace_back(&box, caption);
     addAndMakeVisible(box);
     comboAttachments_.push_back(std::make_unique<ComboBoxAttachment>(processor_.parameters, paramId, box));
+    lockHelper_.registerControl(box, paramId, true);
 }
 
 void DetailPanelComponent::setupToggle(juce::ToggleButton& button, const char* paramId, const juce::String& tooltip) {
@@ -150,6 +161,7 @@ void DetailPanelComponent::setupToggle(juce::ToggleButton& button, const char* p
     button.setTooltip(tooltip);
     addAndMakeVisible(button);
     buttonAttachments_.push_back(std::make_unique<ButtonAttachment>(processor_.parameters, paramId, button));
+    lockHelper_.registerControl(button, paramId, false);
 }
 
 void DetailPanelComponent::setupBar(juce::Slider& slider, const char* paramId, const juce::String& caption, const juce::String& tooltip) {
@@ -162,6 +174,7 @@ void DetailPanelComponent::setupBar(juce::Slider& slider, const char* paramId, c
     if (auto* param = processor_.parameters.getParameter(paramId)) {
         slider.setDoubleClickReturnValue(true, param->convertFrom0to1(param->getDefaultValue()));
     }
+    lockHelper_.registerControl(slider, paramId, false);
 }
 
 void DetailPanelComponent::selectEnvelope(int index) {
@@ -176,6 +189,7 @@ void DetailPanelComponent::selectEnvelope(int index) {
 
     envEditor_.setAxis(axis.top, axis.bottom, axis.centreLine, axis.valueSteps, axis.describe);
     envEditor_.setPoints(processor_.getEnvelopePoints(static_cast<EnvTarget>(selectedEnv_)));
+    repaint();
 }
 
 void DetailPanelComponent::refreshFromState() {
@@ -305,6 +319,11 @@ void DetailPanelComponent::resized() {
     place(triggerModeBox_,     columns(row(filter, 1), 2, 0));
     place(triggerStartBox_,    columns(row(filter, 1), 2, 1));
     place(mixModeBox_,         columns(row(filter, 2), 2, 0));
+}
+
+void DetailPanelComponent::paintOverChildren(juce::Graphics& g) {
+    const auto& pal = lnf_.getPalette();
+    lockHelper_.paintLocks(g, pal.accentPrimary, pal.cardBg);
 }
 
 void DetailPanelComponent::paint(juce::Graphics& g) {

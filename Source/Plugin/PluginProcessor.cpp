@@ -309,8 +309,10 @@ const juce::String OpenGlitchFXProcessor::getProgramName(int index) {
 void OpenGlitchFXProcessor::changeProgramName(int, const juce::String&) {}
 
 void OpenGlitchFXProcessor::applyFactory(int index) {
+    const auto locked = snapshotLockedParameters();
     openglitch::patterns::apply(parameters, index);
     resetEnvelopes();
+    restoreLockedParameters(locked);
     currentProgram_ = index;
     programApplied_ = true;
     presetIsFactory_ = true;
@@ -376,6 +378,7 @@ bool OpenGlitchFXProcessor::deleteUserPreset(const juce::String& name, juce::Str
 juce::ValueTree OpenGlitchFXProcessor::musicalState() {
     auto tree = parameters.copyState();
     tree.removeChild(tree.getChildWithName("SUITE_AB"), nullptr);
+    tree.removeChild(tree.getChildWithName("LOCKED_PARAMS"), nullptr);
     for (const char* property : { "suiteProgram", "abActive", "presetLabel", "presetFactory", "presetEdited" }) {
         tree.removeProperty(property, nullptr);
     }
@@ -432,10 +435,13 @@ void OpenGlitchFXProcessor::restoreMusicalState(const juce::ValueTree& state) {
     if (!state.isValid()) {
         return;
     }
+    const auto locked = snapshotLockedParameters();
     undo_.suspend();
     auto restored = state.createCopy();
     restored.removeChild(restored.getChildWithName("SUITE_AB"), nullptr);
+    restored.removeChild(restored.getChildWithName("LOCKED_PARAMS"), nullptr);
     parameters.replaceState(restored);
+    restoreLockedParameters(locked);
     syncParametersToCore();
     syncEnvelopePointsToCore();
     ++stateVersion_;
@@ -477,6 +483,18 @@ void OpenGlitchFXProcessor::getStateInformation(juce::MemoryBlock& destData) {
     slots.appendChild(slotA, nullptr);
     slots.appendChild(slotB, nullptr);
     tree.appendChild(slots, nullptr);
+    {
+        const std::lock_guard<std::mutex> guard(lockMutex_);
+        if (!lockedParams_.empty()) {
+            juce::ValueTree locks("LOCKED_PARAMS");
+            for (const auto& id : lockedParams_) {
+                juce::ValueTree item("LOCK");
+                item.setProperty("id", id, nullptr);
+                locks.appendChild(item, nullptr);
+            }
+            tree.appendChild(locks, nullptr);
+        }
+    }
     if (auto xmlState = tree.createXml()) {
         copyXmlToBinary(*xmlState, destData);
     }
@@ -500,6 +518,7 @@ void OpenGlitchFXProcessor::setStateInformation(const void* data, int sizeInByte
                 }
             }
             const auto slots = restored.getChildWithName("SUITE_AB");
+            const auto locks = restored.getChildWithName("LOCKED_PARAMS");
             const bool hadProgram = restored.hasProperty("suiteProgram");
             const int savedProgram = static_cast<int>(restored.getProperty("suiteProgram", 0));
             const auto savedLabel = restored.getProperty("presetLabel").toString();
@@ -511,6 +530,7 @@ void OpenGlitchFXProcessor::setStateInformation(const void* data, int sizeInByte
             const auto savedScale = static_cast<float>(restored.getProperty("editorScale", editorScale_.load()));
             editorScale_.store(std::clamp(savedScale, EditorContent::kMinScale, EditorContent::kMaxScale));
             restored.removeChild(restored.getChildWithName("SUITE_AB"), nullptr);
+            restored.removeChild(restored.getChildWithName("LOCKED_PARAMS"), nullptr);
             for (const char* property : { "suiteProgram", "abActive", "presetLabel", "presetFactory", "presetEdited", "editorScale" }) {
                 restored.removeProperty(property, nullptr);
             }
@@ -530,6 +550,71 @@ void OpenGlitchFXProcessor::setStateInformation(const void* data, int sizeInByte
             } else {
                 ab_.reset(slotState());
             }
+            {
+                const std::lock_guard<std::mutex> guard(lockMutex_);
+                lockedParams_.clear();
+                if (locks.isValid()) {
+                    for (int i = 0; i < locks.getNumChildren(); ++i) {
+                        const auto id = locks.getChild(i).getProperty("id").toString();
+                        if (id.isNotEmpty() && parameters.getParameter(id) != nullptr) {
+                            lockedParams_.insert(id);
+                        }
+                    }
+                }
+            }
+            ++lockVersion_;
+        }
+    }
+}
+
+bool OpenGlitchFXProcessor::isParamLocked(const juce::String& paramId) const {
+    const std::lock_guard<std::mutex> guard(lockMutex_);
+    return lockedParams_.count(paramId) != 0;
+}
+
+void OpenGlitchFXProcessor::setParamLocked(const juce::String& paramId, bool locked) {
+    {
+        const std::lock_guard<std::mutex> guard(lockMutex_);
+        if (locked) {
+            if (parameters.getParameter(paramId) != nullptr) {
+                lockedParams_.insert(paramId);
+            }
+        } else {
+            lockedParams_.erase(paramId);
+        }
+    }
+    ++lockVersion_;
+}
+
+void OpenGlitchFXProcessor::unlockAllParams() {
+    {
+        const std::lock_guard<std::mutex> guard(lockMutex_);
+        lockedParams_.clear();
+    }
+    ++lockVersion_;
+}
+
+bool OpenGlitchFXProcessor::hasAnyLockedParams() const {
+    const std::lock_guard<std::mutex> guard(lockMutex_);
+    return !lockedParams_.empty();
+}
+
+std::vector<std::pair<juce::String, float>> OpenGlitchFXProcessor::snapshotLockedParameters() const {
+    std::vector<std::pair<juce::String, float>> snapshot;
+    const std::lock_guard<std::mutex> guard(lockMutex_);
+    snapshot.reserve(lockedParams_.size());
+    for (const auto& id : lockedParams_) {
+        if (auto* param = parameters.getParameter(id)) {
+            snapshot.emplace_back(id, param->getValue());
+        }
+    }
+    return snapshot;
+}
+
+void OpenGlitchFXProcessor::restoreLockedParameters(const std::vector<std::pair<juce::String, float>>& lockedValues) {
+    for (const auto& [id, normalized] : lockedValues) {
+        if (auto* param = parameters.getParameter(id)) {
+            param->setValueNotifyingHost(normalized);
         }
     }
 }

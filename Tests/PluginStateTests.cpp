@@ -666,3 +666,62 @@ TEST_CASE("Meters hold peaks for ~1s and latch clip indicator until clicked", "[
     editor.mouseDown(click);
     REQUIRE_FALSE(editor.isClipLatched());
 }
+
+TEST_CASE("Every RangedAudioParameter can be locked, survives state round-trip, and is preserved across preset loads", "[plugin][locks]") {
+    OpenGlitchFXProcessor processor;
+    std::vector<std::pair<juce::String, float>> expectedValues;
+
+    for (auto* param : processor.getParameters()) {
+        auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(param);
+        REQUIRE(ranged != nullptr);
+        REQUIRE_FALSE(processor.isParamLocked(ranged->paramID));
+
+        const float targetNorm = ranged->getValue() > 0.5f ? 0.0f : 1.0f;
+        ranged->setValueNotifyingHost(targetNorm);
+        const float quantizedNorm = ranged->getValue();
+        expectedValues.emplace_back(ranged->paramID, quantizedNorm);
+
+        processor.setParamLocked(ranged->paramID, true);
+        REQUIRE(processor.isParamLocked(ranged->paramID));
+    }
+    REQUIRE(expectedValues.size() >= 160);
+    REQUIRE(processor.hasAnyLockedParams());
+
+    juce::MemoryBlock saved;
+    processor.getStateInformation(saved);
+
+    OpenGlitchFXProcessor restored;
+    restored.setStateInformation(saved.getData(), static_cast<int>(saved.getSize()));
+    REQUIRE(restored.hasAnyLockedParams());
+
+    for (const auto& [id, expectedNorm] : expectedValues) {
+        INFO("State round-trip for locked param: " << id.toStdString());
+        REQUIRE(restored.isParamLocked(id));
+        auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(restored.parameters.getParameter(id));
+        REQUIRE(ranged != nullptr);
+        REQUIRE_THAT(ranged->getValue(), Catch::Matchers::WithinAbs(expectedNorm, 1e-5f));
+    }
+
+    const int nextProgram = (restored.getCurrentProgram() + 1) % restored.getNumPrograms();
+    restored.setCurrentProgram(nextProgram);
+
+    for (const auto& [id, expectedNorm] : expectedValues) {
+        INFO("Preset load preservation for locked param: " << id.toStdString());
+        REQUIRE(restored.isParamLocked(id));
+        auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(restored.parameters.getParameter(id));
+        REQUIRE(ranged != nullptr);
+        REQUIRE_THAT(ranged->getValue(), Catch::Matchers::WithinAbs(expectedNorm, 1e-5f));
+    }
+
+    restored.unlockAllParams();
+    REQUIRE_FALSE(restored.hasAnyLockedParams());
+    for (const auto& [id, _] : expectedValues) {
+        REQUIRE_FALSE(restored.isParamLocked(id));
+    }
+
+    const int anotherProgram = (nextProgram + 1) % restored.getNumPrograms();
+    restored.setCurrentProgram(anotherProgram);
+    auto* mixParam = dynamic_cast<juce::RangedAudioParameter*>(restored.parameters.getParameter(openglitch::params::kMasterMix));
+    REQUIRE(mixParam != nullptr);
+    REQUIRE_THAT(mixParam->getValue(), Catch::Matchers::WithinAbs(1.0f, 1e-5f));
+}
