@@ -26,6 +26,8 @@ public:
     void paint(juce::Graphics& g) override;
     void paintOverChildren(juce::Graphics& g) override;
     void resized() override;
+    void mouseMove(const juce::MouseEvent& event) override;
+    void mouseExit(const juce::MouseEvent& event) override;
     void mouseDown(const juce::MouseEvent& event) override;
     bool keyPressed(const juce::KeyPress& key) override;
     juce::String getTooltip() override;
@@ -161,6 +163,7 @@ private:
     openglitch::ui::DetailPanelComponent detailPanel_;
     int lastStateVersion_ = -1;
     int lastLockVersion_ = -1;
+    int hoveredFxHeader_ = -1;
     juce::TooltipWindow tooltipWindow_{ this, 500 };
     std::unique_ptr<openglitch::suite::SuiteBar> suiteBar_;
     juce::String suiteToken_;

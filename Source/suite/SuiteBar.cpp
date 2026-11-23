@@ -31,7 +31,11 @@ SuiteBar::SuiteBar(PresetLibrary& library, Hooks hooks)
     search_.setTextToShowWhenEmpty("Search presets", juce::Colours::grey);
     search_.setTitle("Search presets");
     search_.setTooltip("Filter factory and user presets.");
-    search_.onTextChange = [this] { rebuildList(); };
+    search_.onTextChange = [this] {
+        clearConfirmState();
+        closeNamePrompt();
+        rebuildList();
+    };
     presetBox_.setTitle("Preset");
     presetBox_.setTooltip("Factory and user presets. Factory presets stay read-only.");
     presetBox_.onChange = [this] {
@@ -40,12 +44,12 @@ SuiteBar::SuiteBar(PresetLibrary& library, Hooks hooks)
         }
     };
 
-    undoButton_.onClick = [this] { if (hooks_.undo) hooks_.undo(); refresh(); };
-    redoButton_.onClick = [this] { if (hooks_.redo) hooks_.redo(); refresh(); };
-    aButton_.onClick = [this] { if (hooks_.selectA && hooks_.abIsA && !hooks_.abIsA()) hooks_.selectA(); refresh(); };
-    bButton_.onClick = [this] { if (hooks_.selectB && hooks_.abIsA && hooks_.abIsA()) hooks_.selectB(); refresh(); };
-    copyAtoBButton_.onClick = [this] { if (hooks_.copyAtoB) hooks_.copyAtoB(); refresh(); };
-    copyBtoAButton_.onClick = [this] { if (hooks_.copyBtoA) hooks_.copyBtoA(); refresh(); };
+    undoButton_.onClick = [this] { clearConfirmState(); closeNamePrompt(); if (hooks_.undo) hooks_.undo(); refresh(); };
+    redoButton_.onClick = [this] { clearConfirmState(); closeNamePrompt(); if (hooks_.redo) hooks_.redo(); refresh(); };
+    aButton_.onClick = [this] { clearConfirmState(); closeNamePrompt(); if (hooks_.selectA && hooks_.abIsA && !hooks_.abIsA()) hooks_.selectA(); refresh(); };
+    bButton_.onClick = [this] { clearConfirmState(); closeNamePrompt(); if (hooks_.selectB && hooks_.abIsA && hooks_.abIsA()) hooks_.selectB(); refresh(); };
+    copyAtoBButton_.onClick = [this] { clearConfirmState(); closeNamePrompt(); if (hooks_.copyAtoB) hooks_.copyAtoB(); refresh(); };
+    copyBtoAButton_.onClick = [this] { clearConfirmState(); closeNamePrompt(); if (hooks_.copyBtoA) hooks_.copyBtoA(); refresh(); };
     // Steps through the listed presets and wraps. With no listed preset loaded,
     // Next starts at the first entry and Previous at the last.
     auto step = [this](int delta) {
@@ -59,6 +63,13 @@ SuiteBar::SuiteBar(PresetLibrary& library, Hooks hooks)
     previousButton_.onClick = [step] { step(-1); };
     nextButton_.onClick = [step] { step(1); };
     nameEditor_.setTextToShowWhenEmpty("Preset name (Enter to save, Esc to cancel)", juce::Colours::grey);
+    nameEditor_.setTitle("Preset name");
+    nameEditor_.setTooltip("Type a preset name, then press Enter to save or Esc to cancel.");
+    nameEditor_.onTextChange = [this] {
+        if (confirmingReplace_) {
+            clearConfirmState();
+        }
+    };
     nameEditor_.onReturnKey = [this] { commitNamePrompt(); };
     nameEditor_.onEscapeKey = [this] { closeNamePrompt(); };
     addChildComponent(nameEditor_);
@@ -71,7 +82,9 @@ SuiteBar::SuiteBar(PresetLibrary& library, Hooks hooks)
             if (hooks_.saveUser != nullptr) {
                 juce::String error;
                 if (!hooks_.saveUser(target, error)) {
+                    refresh();
                     showError(error);
+                    return;
                 }
             }
             refresh();
@@ -122,7 +135,9 @@ SuiteBar::SuiteBar(PresetLibrary& library, Hooks hooks)
             if (hooks_.deleteUser != nullptr) {
                 juce::String error;
                 if (!hooks_.deleteUser(name, error)) {
+                    refresh();
                     showError(error);
+                    return;
                 }
             }
             refresh();
@@ -218,6 +233,7 @@ void SuiteBar::commitNamePrompt() {
 
 void SuiteBar::showError(const juce::String& error) {
     if (error.isNotEmpty()) {
+        presetBox_.setSelectedId(0, juce::dontSendNotification);
         presetBox_.setText(error, juce::dontSendNotification);
     }
 }
@@ -226,6 +242,8 @@ void SuiteBar::chooseListed(int comboId) {
     if (comboId <= 0 || comboId > static_cast<int>(shown_.size())) {
         return;
     }
+    clearConfirmState();
+    closeNamePrompt();
     const auto& entry = shown_[static_cast<size_t>(comboId - 1)];
     if (entry.factory) {
         if (hooks_.loadFactory) {
@@ -292,7 +310,8 @@ void SuiteBar::refresh() {
     favoriteButton_.setToggleState(entry != nullptr && entry->favorite, juce::dontSendNotification);
     renameButton_.setEnabled(isUser);
     deleteButton_.setEnabled(isUser);
-    if (confirmingDelete_ && (!isUser || entry->name != pendingDeleteName_)) {
+    if ((confirmingDelete_ && (!isUser || entry->name != pendingDeleteName_))
+        || (confirmingReplace_ && promptMode_ == PromptMode::None && (!isUser || entry->name != pendingReplaceName_))) {
         clearConfirmState();
     }
 }

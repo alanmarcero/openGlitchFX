@@ -26,6 +26,8 @@ public:
     std::function<void()> onEditEnded;
 
     void paint(juce::Graphics& g) override;
+    void mouseMove(const juce::MouseEvent& event) override;
+    void mouseExit(const juce::MouseEvent& event) override;
     void mouseDown(const juce::MouseEvent& event) override;
     void mouseDrag(const juce::MouseEvent& event) override;
     void mouseUp(const juce::MouseEvent& event) override;
@@ -52,6 +54,7 @@ private:
     bool active_ = false;
     bool editing_ = false;
     int dragIndex_ = -1;
+    int hoveredIndex_ = -1;
 };
 
 } // namespace openglitch::ui

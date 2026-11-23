@@ -375,9 +375,35 @@ int EditorContent::fxCardHeaderAt(juce::Point<float> position) const {
     return hit == fxSlots_.end() ? -1 : static_cast<int>(std::distance(fxSlots_.begin(), hit));
 }
 
+void EditorContent::mouseMove(const juce::MouseEvent& event) {
+    const int fx = fxCardHeaderAt(event.position);
+    const bool overMeter = masterMeterBounds_.contains(event.position);
+    setMouseCursor((fx >= 0 || overMeter) ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
+    if (fx != hoveredFxHeader_) {
+        if (hoveredFxHeader_ >= 0 && hoveredFxHeader_ < kNumUiFx) {
+            repaint(fxSlots_[static_cast<size_t>(hoveredFxHeader_)].cardBounds.expanded(3.0f).toNearestInt());
+        }
+        hoveredFxHeader_ = fx;
+        if (hoveredFxHeader_ >= 0 && hoveredFxHeader_ < kNumUiFx) {
+            repaint(fxSlots_[static_cast<size_t>(hoveredFxHeader_)].cardBounds.expanded(3.0f).toNearestInt());
+        }
+    }
+}
+
+void EditorContent::mouseExit(const juce::MouseEvent& /*event*/) {
+    setMouseCursor(juce::MouseCursor::NormalCursor);
+    if (hoveredFxHeader_ != -1) {
+        const int prev = hoveredFxHeader_;
+        hoveredFxHeader_ = -1;
+        if (prev >= 0 && prev < kNumUiFx) {
+            repaint(fxSlots_[static_cast<size_t>(prev)].cardBounds.expanded(3.0f).toNearestInt());
+        }
+    }
+}
+
 void EditorContent::mouseDown(const juce::MouseEvent& event) {
     if (masterMeterBounds_.contains(event.position)) {
-        clipHold_ = 0.0f;
+        resetMeters();
         repaint(masterMeterBounds_.expanded(4.0f).toNearestInt());
         return;
     }
@@ -391,7 +417,11 @@ void EditorContent::mouseDown(const juce::MouseEvent& event) {
 }
 
 juce::String EditorContent::getTooltip() {
-    const int fx = fxCardHeaderAt(getMouseXYRelative().toFloat());
+    const auto pos = getMouseXYRelative().toFloat();
+    if (masterMeterBounds_.contains(pos)) {
+        return "Input / Output peak meters. Click to clear CLIP and peak holds.";
+    }
+    const int fx = fxCardHeaderAt(pos);
     if (fx < 0) {
         return {};
     }
@@ -594,9 +624,14 @@ void EditorContent::paint(juce::Graphics& g) {
         g.setColour(firingNow ? pal.accentSecondary : (isBrushTarget ? pal.stepPlayheadOutline : (moduleArmed ? pal.cardActiveBorder : pal.cardBorder)));
         g.drawRoundedRectangle(r, 6.0f, (firingNow || isBrushTarget) ? 1.8f : (moduleArmed ? 1.4f : 1.0f));
 
+        const bool isHeaderHovered = (static_cast<int>(i) == hoveredFxHeader_);
         juce::Rectangle<float> hdr(r.getX() + 6.0f, r.getY() + 5.0f, r.getWidth() - 12.0f, 32.0f);
-        g.setColour(firingNow ? pal.accentSecondary.withAlpha(0.28f)
-                              : (isBrushTarget ? pal.accentPrimary.withAlpha(0.22f) : pal.headerPlate));
+        juce::Colour hdrCol = firingNow ? pal.accentSecondary.withAlpha(0.28f)
+                                        : (isBrushTarget ? pal.accentPrimary.withAlpha(0.22f) : pal.headerPlate);
+        if (isHeaderHovered) {
+            hdrCol = hdrCol.brighter(0.18f);
+        }
+        g.setColour(hdrCol);
         g.fillRoundedRectangle(hdr, 4.0f);
 
         // Per-FX Pad Routing Count Badge in top-right corner of header
@@ -769,19 +804,38 @@ void EditorContent::resized() {
 
     const int controlY = 262;
     const int controlH = 36;
-    sequenceLengthLabel_.setBounds(28, controlY, 58, controlH);
-    sequenceLengthSlider_.setBounds(90, controlY, 130, controlH);
-    sequenceLengthValueLabel_.setBounds(224, controlY, 72, controlH);
-    sequencerSwingLabel_.setBounds(302, controlY, 50, controlH);
-    sequencerSwingSlider_.setBounds(356, controlY, 130, controlH);
-    sequencerSwingValueLabel_.setBounds(490, controlY, 44, controlH);
-    patternRateLabel_.setBounds(540, controlY, 44, controlH);
-    patternRateBox_.setBounds(588, controlY, 80, controlH);
-    patternChanceLabel_.setBounds(676, controlY, 60, controlH);
-    patternChanceSlider_.setBounds(740, controlY, 120, controlH);
-    patternChanceValueLabel_.setBounds(864, controlY, 44, controlH);
-    keepSubButton_.setBounds(916, controlY, 114, controlH);
-    randomizeButton_.setBounds(1038, controlY, 136, controlH);
+    const int rowLeft = static_cast<int>(margin);
+    const int rowRight = static_cast<int>(w - margin);
+    const int rowW = rowRight - rowLeft;
+    constexpr int kGroupGap = 16;
+    constexpr int kInnerGap = 4;
+    constexpr int kKeepSubW = 122;
+    constexpr int kRandomizeW = 156;
+    constexpr int kFixedControlsW = 58 + 72 + 50 + 44 + 44 + 96 + 60 + 44 + kKeepSubW + kRandomizeW;
+    constexpr int kGapsW = 5 * kGroupGap + 7 * kInnerGap;
+    const int sliderArea = std::max(180, rowW - kFixedControlsW - kGapsW);
+    const int lenSliderW = juce::roundToInt(static_cast<float>(sliderArea) * 0.34f);
+    const int swingSliderW = juce::roundToInt(static_cast<float>(sliderArea) * 0.34f);
+    const int chanceSliderW = sliderArea - lenSliderW - swingSliderW;
+
+    int cx = rowLeft;
+    auto placeControl = [&](juce::Component& comp, int compW, int gapAfter) {
+        comp.setBounds(cx, controlY, compW, controlH);
+        cx += compW + gapAfter;
+    };
+    placeControl(sequenceLengthLabel_, 58, kInnerGap);
+    placeControl(sequenceLengthSlider_, lenSliderW, kInnerGap);
+    placeControl(sequenceLengthValueLabel_, 72, kGroupGap);
+    placeControl(sequencerSwingLabel_, 50, kInnerGap);
+    placeControl(sequencerSwingSlider_, swingSliderW, kInnerGap);
+    placeControl(sequencerSwingValueLabel_, 44, kGroupGap);
+    placeControl(patternRateLabel_, 44, kInnerGap);
+    placeControl(patternRateBox_, 96, kGroupGap);
+    placeControl(patternChanceLabel_, 60, kInnerGap);
+    placeControl(patternChanceSlider_, chanceSliderW, kInnerGap);
+    placeControl(patternChanceValueLabel_, 44, kGroupGap);
+    placeControl(keepSubButton_, kKeepSubW, kGroupGap);
+    randomizeButton_.setBounds(rowRight - kRandomizeW, controlY, kRandomizeW, controlH);
 
     // 15 Glitch FX Cards (3 Rows x 5 Columns) + Master Strip on Right
     const float detailH = 250.0f;

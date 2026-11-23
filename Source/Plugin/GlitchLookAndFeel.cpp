@@ -78,11 +78,11 @@ ThemePalette makePalette(Theme t) {
                 juce::Colour(0xef152026), // cardBg
                 juce::Colour(0xff283842), // cardBorder
                 juce::Colour(0xff48f0c8), // cardActiveBorder
-                juce::Colour(0xff152026), // headerPlate
+                juce::Colour(0xff1c2b33), // headerPlate
                 juce::Colour(0xff48f0c8), // accentPrimary
                 juce::Colour(0xffffbe3b), // accentSecondary
                 juce::Colour(0xff48f0c8), // stepActiveFill
-                juce::Colour(0xff152026), // stepInactiveFill
+                juce::Colour(0xff111a1f), // stepInactiveFill
                 juce::Colour(0xffe6f0f5), // stepPlayheadOutline
                 juce::Colour(0xff283842), // knobBodyTop
                 juce::Colour(0xff0d1317), // knobBodyBottom

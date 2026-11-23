@@ -187,9 +187,29 @@ void DetailPanelComponent::selectEnvelope(int index) {
     envDepthAttach_ = std::make_unique<SliderAttachment>(processor_.parameters, desc.depthParamId, envDepthSlider_);
     envDepthSlider_.setDoubleClickReturnValue(true, 100.0);
 
+    const auto prefix = envTabs_[static_cast<size_t>(selectedEnv_)].getButtonText() + " Envelope ";
+    envOnButton_.setTitle(prefix + "On");
+    envRateBox_.setTitle(prefix + "Length");
+    envDepthSlider_.setTitle(prefix + "Depth");
+
     envEditor_.setAxis(axis.top, axis.bottom, axis.centreLine, axis.valueSteps, axis.describe);
     envEditor_.setPoints(processor_.getEnvelopePoints(static_cast<EnvTarget>(selectedEnv_)));
+    envEditor_.setActive(isSelectedEnvelopeActive());
     repaint();
+}
+
+bool DetailPanelComponent::isSelectedEnvelopeActive() const {
+    using namespace openglitch::params;
+    const auto value = [this](const char* id) { return processor_.parameters.getRawParameterValue(id)->load(); };
+    const bool envOn = envOnButton_.getToggleState();
+    const auto target = static_cast<EnvTarget>(selectedEnv_);
+    if (target == EnvTarget::Filter) {
+        return envOn && value(kFilterMode) > 0.5f;
+    }
+    if (target == EnvTarget::Pitch) {
+        return envOn && value(kStutterOn) > 0.5f && value(kStutterAmt) > 0.1f;
+    }
+    return envOn;
 }
 
 void DetailPanelComponent::refreshFromState() {
@@ -236,6 +256,7 @@ void DetailPanelComponent::refreshDependencies() {
         return (control.first->getAlpha() < 1.0f) == control.second;
     });
     const bool subtitlesChanged = !std::ranges::equal(cards_, subtitles, {}, &Card::subtitle);
+    envEditor_.setActive(envActive);
     if (!dimmingChanged && !subtitlesChanged) {
         return;
     }
@@ -251,7 +272,7 @@ void DetailPanelComponent::setTelemetry(const openglitch::core::MeterTelemetry& 
         envTabs_[i].setColour(juce::TextButton::textColourOffId, on ? pal.accentPrimary : pal.textMuted);
         envTabs_[i].setColour(juce::TextButton::textColourOnId, on ? pal.accentPrimary : pal.textBright);
     }
-    envEditor_.setActive(envOnButton_.getToggleState());
+    envEditor_.setActive(isSelectedEnvelopeActive());
     envEditor_.setPlayhead(telemetry.modEnvelopePhases[static_cast<size_t>(selectedEnv_)], telemetry.activeGate > 0.25f);
 }
 

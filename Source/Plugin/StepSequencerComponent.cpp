@@ -365,13 +365,15 @@ int StepSequencerComponent::getStepAtPosition(juce::Point<float> pos) const {
 }
 
 void StepSequencerComponent::applyPaintBrushToStep(int step, bool isInitialClick) {
-    if (step < 0 || step >= 32) return;
+    if (step < 0 || step >= 32 || isStepLocked(step)) return;
 
     if (paintTargetFx_ < 0) {
         if (isInitialClick) {
             dragTargetState_ = !getStepParam(step);
         }
-        setStepParam(step, dragTargetState_);
+        if (!isParamLocked(openglitch::params::stepParamId(step))) {
+            setStepParam(step, dragTargetState_);
+        }
         if (dragTargetState_) {
             // Unify FX mask across the entire connected run of adjacent enabled pads so they link and sustain seamlessly!
             uint16_t targetMask = getStepFxMaskParam(step);
@@ -388,7 +390,9 @@ void StepSequencerComponent::applyPaintBrushToStep(int step, bool isInitialClick
             int s1 = step;
             while (s1 + 1 < 32 && getStepParam(s1 + 1)) ++s1;
             for (int s = s0; s <= s1; ++s) {
-                setStepFxMaskParam(s, targetMask);
+                if (!isStepLocked(s)) {
+                    setUnlockedStepFxMaskBits(s, targetMask);
+                }
             }
         }
     } else {
@@ -407,18 +411,22 @@ void StepSequencerComponent::applyPaintBrushToStep(int step, bool isInitialClick
         if (dragTargetState_) {
             ensureFxAudible(paintTargetFx_);
             if (!stepWasOn || oldMask == kAllFx) {
-                setStepFxMaskParam(step, fxBit);
+                setUnlockedStepFxMaskBits(step, fxBit);
             } else {
-                setStepFxMaskParam(step, static_cast<uint16_t>(oldMask | fxBit));
+                setUnlockedStepFxMaskBits(step, static_cast<uint16_t>(oldMask | fxBit));
             }
-            setStepParam(step, true);
+            if (!isParamLocked(openglitch::params::stepParamId(step))) {
+                setStepParam(step, true);
+            }
         } else {
             const uint16_t newMask = static_cast<uint16_t>(oldMask & ~fxBit);
             if (newMask == 0u) {
-                setStepParam(step, false);
-                setStepFxMaskParam(step, kAllFx);
+                if (!isParamLocked(openglitch::params::stepParamId(step))) {
+                    setStepParam(step, false);
+                }
+                setUnlockedStepFxMaskBits(step, kAllFx);
             } else {
-                setStepFxMaskParam(step, newMask);
+                setUnlockedStepFxMaskBits(step, newMask);
             }
         }
     }
@@ -522,8 +530,13 @@ void StepSequencerComponent::showStepContextMenu(int step) {
         undo_.perform("Edit steps", [&] {
         auto applyToRange = [&](uint16_t newMask, bool newState) {
             for (int s = applyStart; s <= applyEnd; ++s) {
-                setStepFxMaskParam(s, newMask);
-                setStepParam(s, newState);
+                if (isStepLocked(s)) {
+                    continue;
+                }
+                setUnlockedStepFxMaskBits(s, newMask);
+                if (!isParamLocked(openglitch::params::stepParamId(s))) {
+                    setStepParam(s, newState);
+                }
             }
         };
 
@@ -531,7 +544,9 @@ void StepSequencerComponent::showStepContextMenu(int step) {
             applyToRange(kAllFx, true);
         } else if (result == 2) {
             for (int s = applyStart; s <= applyEnd; ++s) {
-                setStepParam(s, false);
+                if (!isStepLocked(s) && !isParamLocked(openglitch::params::stepParamId(s))) {
+                    setStepParam(s, false);
+                }
             }
         } else if (result >= 100 && result < 100 + kNumFx) {
             const int fx = result - 100;
@@ -560,21 +575,34 @@ void StepSequencerComponent::showStepContextMenu(int step) {
                 }
             }
         } else if (result == 400) {
-            setStepParam(step, false);
+            if (!isStepLocked(step) && !isParamLocked(openglitch::params::stepParamId(step))) {
+                setStepParam(step, false);
+            }
         } else if (result >= 410 && result < 410 + kNumFx) {
-            const int fx = result - 410;
-            ensureFxAudible(fx);
-            setStepFxMaskParam(step, static_cast<uint16_t>(1u << fx));
-            setStepParam(step, true);
+            if (!isStepLocked(step)) {
+                const int fx = result - 410;
+                ensureFxAudible(fx);
+                setUnlockedStepFxMaskBits(step, static_cast<uint16_t>(1u << fx));
+                if (!isParamLocked(openglitch::params::stepParamId(step))) {
+                    setStepParam(step, true);
+                }
+            }
         } else if (result == 300) {
             const int beatStart = (step / 8) * 8;
             for (int i = beatStart; i < beatStart + 8; ++i) {
-                setStepFxMaskParam(i, mask);
-                setStepParam(i, stepOn);
+                if (isStepLocked(i)) {
+                    continue;
+                }
+                setUnlockedStepFxMaskBits(i, mask);
+                if (!isParamLocked(openglitch::params::stepParamId(i))) {
+                    setStepParam(i, stepOn);
+                }
             }
         } else if (result == 301) {
             for (int i = 0; i < 32; ++i) {
-                setStepFxMaskParam(i, mask);
+                if (!isStepLocked(i)) {
+                    setUnlockedStepFxMaskBits(i, mask);
+                }
             }
         }
         });
@@ -683,16 +711,17 @@ void StepSequencerComponent::paint(juce::Graphics& g) {
     if (hoveredStep_ >= 0 && hoveredStep_ < 32) {
         const uint16_t hMask = getEffectiveStepFxMask(hoveredStep_);
         const auto hRun = findContiguousRun(hoveredStep_);
+        const juce::String lockSuffix = isStepLocked(hoveredStep_) ? "  |  LOCKED" : "";
         const auto readout = [&]() -> juce::String {
             if (hoveredStep_ >= length) {
-                return juce::String::formatted("PAD %02d: AFTER LENGTH %d, NOT PLAYED  |  RIGHT-CLICK FOR FX ROUTING", hoveredStep_ + 1, length);
+                return juce::String::formatted("PAD %02d: AFTER LENGTH %d, NOT PLAYED  |  RIGHT-CLICK FOR FX ROUTING", hoveredStep_ + 1, length) + lockSuffix;
             }
             if (hMask == 0u) {
-                return juce::String::formatted("PAD %02d/%d: OFF (DRY)  |  CLICK TO TURN ON  |  RIGHT-CLICK FOR FX ROUTING", hoveredStep_ + 1, length);
+                return juce::String::formatted("PAD %02d/%d: OFF (DRY)  |  CLICK TO TURN ON  |  RIGHT-CLICK FOR FX ROUTING", hoveredStep_ + 1, length) + lockSuffix;
             }
             return juce::String::formatted("PAD %02d/%d  |  BLOCK %02d-%02d (", hoveredStep_ + 1, length, hRun.startStep + 1, hRun.endStep + 1)
                 + spanDuration(hRun.length(), beatSteps) + ")  |  FX: " + formatStepFxBadge(hMask, 1, beatSteps)
-                + "  |  RIGHT-CLICK FOR FX ROUTING";
+                + "  |  RIGHT-CLICK FOR FX ROUTING" + lockSuffix;
         }();
         const auto firstStepRect = getStepBounds(0);
         const auto lastStepRect = getStepBounds(31);
@@ -746,6 +775,9 @@ void StepSequencerComponent::paint(juce::Graphics& g) {
         g.drawRoundedRectangle(r, 3.5f, (isPlayhead || isHovered) ? 1.8f : 1.0f);
 
         auto topLabelRect = r.withHeight(16.0f).withY(r.getY() + 2.0f);
+        if (isStepLocked(i)) {
+            topLabelRect = topLabelRect.withTrimmedRight(11.0f);
+        }
         g.setColour(isSixteenthStart ? pal.textBright.withAlpha(0.75f) : pal.textMuted.withAlpha(0.65f));
         g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
         g.drawText(juce::String(i + 1), topLabelRect.toNearestInt(), juce::Justification::centred);
@@ -815,6 +847,9 @@ void StepSequencerComponent::paint(juce::Graphics& g) {
             }
 
             auto topNumRect = sr.withHeight(16.0f).withY(sr.getY() + 2.0f);
+            if (isStepLocked(s)) {
+                topNumRect = topNumRect.withTrimmedRight(11.0f);
+            }
             const bool isCurrentSubStep = (s == currentStep_);
             g.setColour(isCurrentSubStep ? pal.stepPlayheadOutline : juce::Colours::black.withAlpha(0.85f));
             g.setFont(juce::FontOptions(11.0f, juce::Font::bold));

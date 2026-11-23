@@ -112,6 +112,23 @@ void EnvelopeEditorComponent::endEdit() {
     }
 }
 
+void EnvelopeEditorComponent::mouseMove(const juce::MouseEvent& event) {
+    const int hit = hitTestPoint(event.position);
+    setMouseCursor(hit >= 0 ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::CrosshairCursor);
+    if (hit != hoveredIndex_) {
+        hoveredIndex_ = hit;
+        repaint();
+    }
+}
+
+void EnvelopeEditorComponent::mouseExit(const juce::MouseEvent& /*event*/) {
+    setMouseCursor(juce::MouseCursor::NormalCursor);
+    if (hoveredIndex_ != -1) {
+        hoveredIndex_ = -1;
+        repaint();
+    }
+}
+
 void EnvelopeEditorComponent::mouseDown(const juce::MouseEvent& event) {
     beginEdit();
     const int hit = hitTestPoint(event.position);
@@ -188,39 +205,59 @@ void EnvelopeEditorComponent::paint(juce::Graphics& g) {
         g.drawHorizontalLine(static_cast<int>(area.getCentreY()), area.getX(), area.getRight());
     }
 
-    g.setColour(pal.textMuted);
-    g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
-    const auto labelArea = area.reduced(kHitRadius + 2.0f, 0.0f);
-    g.drawText(topLabel_, labelArea.withHeight(14.0f).toNearestInt(), juce::Justification::topLeft);
-    g.drawText(bottomLabel_, labelArea.withTrimmedTop(labelArea.getHeight() - 14.0f).toNearestInt(), juce::Justification::bottomLeft);
+    if (!points_.empty()) {
+        juce::Path curve;
+        curve.startNewSubPath(area.getX(), toScreen(points_.front()).y);
+        for (const auto& p : points_) {
+            curve.lineTo(toScreen(p));
+        }
+        curve.lineTo(area.getRight(), toScreen(points_.back()).y);
+
+        const auto lineColour = active_ ? pal.accentPrimary : pal.textMuted;
+        juce::Path fill(curve);
+        fill.lineTo(area.getRight(), area.getBottom());
+        fill.lineTo(area.getX(), area.getBottom());
+        fill.closeSubPath();
+        g.setColour(lineColour.withAlpha(0.14f));
+        g.fillPath(fill);
+        g.setColour(lineColour);
+        g.strokePath(curve, juce::PathStrokeType(1.6f));
+
+        for (size_t i = 0; i < points_.size(); ++i) {
+            const auto c = toScreen(points_[i]);
+            const bool highlighted = (static_cast<int>(i) == hoveredIndex_ || static_cast<int>(i) == dragIndex_);
+            const float radius = highlighted ? kPointRadius + 1.5f : kPointRadius;
+            if (highlighted) {
+                g.setColour(lineColour.withAlpha(0.28f));
+                g.fillEllipse(c.x - radius - 2.5f, c.y - radius - 2.5f, (radius + 2.5f) * 2.0f, (radius + 2.5f) * 2.0f);
+            }
+            g.setColour(pal.textBright);
+            g.fillEllipse(c.x - radius, c.y - radius, radius * 2.0f, radius * 2.0f);
+            g.setColour(lineColour);
+            g.drawEllipse(c.x - radius, c.y - radius, radius * 2.0f, radius * 2.0f, highlighted ? 1.8f : 1.2f);
+        }
+    }
+
+    const juce::Font labelFont(juce::FontOptions(11.0f, juce::Font::bold));
+    g.setFont(labelFont);
+    auto drawAxisLabel = [&](const juce::String& text, bool isTop) {
+        if (text.isEmpty()) {
+            return;
+        }
+        const float textW = std::ceil(juce::GlyphArrangement::getStringWidth(labelFont, text)) + 8.0f;
+        const float x = area.getX() + kHitRadius + 6.0f;
+        const float y = isTop ? area.getY() + 1.0f : area.getBottom() - 15.0f;
+        const juce::Rectangle<float> pill(x, y, textW, 14.0f);
+        g.setColour(pal.bgBottom.withAlpha(0.84f));
+        g.fillRoundedRectangle(pill, 3.0f);
+        g.setColour(pal.textMuted);
+        g.drawText(text, pill.toNearestInt(), juce::Justification::centred);
+    };
+    drawAxisLabel(topLabel_, true);
+    drawAxisLabel(bottomLabel_, false);
 
     if (points_.empty()) {
         return;
-    }
-
-    juce::Path curve;
-    curve.startNewSubPath(area.getX(), toScreen(points_.front()).y);
-    for (const auto& p : points_) {
-        curve.lineTo(toScreen(p));
-    }
-    curve.lineTo(area.getRight(), toScreen(points_.back()).y);
-
-    const auto lineColour = active_ ? pal.accentPrimary : pal.textMuted;
-    juce::Path fill(curve);
-    fill.lineTo(area.getRight(), area.getBottom());
-    fill.lineTo(area.getX(), area.getBottom());
-    fill.closeSubPath();
-    g.setColour(lineColour.withAlpha(0.14f));
-    g.fillPath(fill);
-    g.setColour(lineColour);
-    g.strokePath(curve, juce::PathStrokeType(1.6f));
-
-    for (const auto& p : points_) {
-        const auto c = toScreen(p);
-        g.setColour(pal.textBright);
-        g.fillEllipse(c.x - kPointRadius, c.y - kPointRadius, kPointRadius * 2.0f, kPointRadius * 2.0f);
-        g.setColour(lineColour);
-        g.drawEllipse(c.x - kPointRadius, c.y - kPointRadius, kPointRadius * 2.0f, kPointRadius * 2.0f, 1.2f);
     }
 
     if (playheadVisible_) {

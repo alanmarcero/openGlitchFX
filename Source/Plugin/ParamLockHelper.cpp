@@ -82,9 +82,13 @@ void ParamLockOverlayHelper::paintLocks(juce::Graphics& g, const juce::Colour& a
             continue;
         }
         const auto bounds = host_.getLocalArea(entry.component, entry.component->getLocalBounds()).toFloat();
-        const float rightInset = entry.isComboBox ? 25.0f : 13.0f;
-        const juce::Rectangle<float> iconBounds(bounds.getRight() - rightInset, bounds.getY() + 2.0f, 11.0f, 11.0f);
-        drawPadlock(g, iconBounds, accent, bg);
+        const auto* slider = dynamic_cast<const juce::Slider*>(entry.component);
+        const bool isLinearHorizontal = slider != nullptr && slider->getSliderStyle() == juce::Slider::LinearHorizontal;
+        const float rightInset = entry.isComboBox ? 25.0f : (isLinearHorizontal ? 10.0f : 13.0f);
+        const float topOffset = isLinearHorizontal ? -1.0f : 2.0f;
+        const juce::Rectangle<float> iconBounds(bounds.getRight() - rightInset, bounds.getY() + topOffset, 11.0f, 11.0f);
+        const float alpha = entry.component->getAlpha();
+        drawPadlock(g, iconBounds, accent.withMultipliedAlpha(alpha), bg.withMultipliedAlpha(alpha));
     }
 }
 
@@ -92,9 +96,9 @@ void ParamLockOverlayHelper::drawPadlock(juce::Graphics& g,
                                          juce::Rectangle<float> iconBounds,
                                          const juce::Colour& accent,
                                          const juce::Colour& bg) {
-    g.setColour(bg.withAlpha(0.88f));
+    g.setColour(bg.withMultipliedAlpha(0.88f));
     g.fillRoundedRectangle(iconBounds, 2.5f);
-    g.setColour(accent.withAlpha(0.55f));
+    g.setColour(accent.withMultipliedAlpha(0.55f));
     g.drawRoundedRectangle(iconBounds, 2.5f, 0.8f);
 
     const auto inner = iconBounds.reduced(2.0f, 1.5f);

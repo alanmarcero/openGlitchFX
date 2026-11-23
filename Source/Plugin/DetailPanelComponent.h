@@ -38,6 +38,7 @@ private:
     void setupToggle(juce::ToggleButton& button, const char* paramId, const juce::String& tooltip);
     void setupBar(juce::Slider& slider, const char* paramId, const juce::String& caption, const juce::String& tooltip);
     void selectEnvelope(int index);
+    bool isSelectedEnvelopeActive() const;
 
     OpenGlitchFXProcessor& processor_;
     const GlitchLookAndFeel& lnf_;
