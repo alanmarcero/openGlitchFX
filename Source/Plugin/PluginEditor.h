@@ -88,8 +88,8 @@ private:
 
     // Header Controls
     juce::ComboBox themeBox_;
-    juce::Label themeLabel_{ {}, "THEME:" };
-    juce::Label scaleLabel_{ {}, "SCALE:" };
+    juce::Label themeLabel_{ {}, "THEME" };
+    juce::Label scaleLabel_{ {}, "SCALE" };
     juce::ComboBox scaleBox_;
     juce::ToggleButton hostSyncButton_{ "HOST SYNC" };
     juce::Slider internalBpmSlider_;
@@ -97,7 +97,7 @@ private:
 
     // 32-Step Beat Sequencer, Paint Brush Selector & Pattern Quick-Select Buttons
     openglitch::ui::StepSequencerComponent sequencerGrid_;
-    juce::Label paintBrushLabel_{ {}, "STEP BRUSH:" };
+    juce::Label paintBrushLabel_{ {}, "STEP BRUSH" };
     juce::ComboBox paintBrushBox_;
     juce::TextButton presetAllBtn_{ "ALL STEPS" };
     juce::TextButton presetLastBeatBtn_{ "LAST BEAT" };

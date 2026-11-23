@@ -562,9 +562,9 @@ void EditorContent::paint(juce::Graphics& g) {
         g.drawEllipse(logoRect.reduced(0.5f), 1.5f);
     }
 
-    g.setColour(pal.accentPrimary);
-    g.setFont(juce::FontOptions(13.0f, juce::Font::bold));
-    g.drawText("ALAN MARCERO", 86, 22, 160, 18, juce::Justification::centredLeft);
+    g.setColour(pal.accentPrimary.interpolatedWith(pal.textBright, 0.15f));
+    g.setFont(juce::FontOptions(14.5f, juce::Font::bold));
+    g.drawText("ALAN MARCERO", 86, 21, 148, 20, juce::Justification::centredLeft);
 
     if (sliceRegister_ != nullptr) {
         const juce::Rectangle<float> trace(393.0f, 12.0f, 128.0f, 32.0f);
@@ -586,21 +586,21 @@ void EditorContent::paint(juce::Graphics& g) {
     g.setColour(pal.textBright);
     g.setFont(juce::FontOptions(20.0f, juce::Font::bold));
     g.drawText("openGlitchFX", static_cast<int>(w * 0.5f - 160.0f), 15, 320, 22, juce::Justification::centred);
-    g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
-    g.setColour(pal.accentPrimary.withAlpha(0.75f));
-    g.drawText("15-ENGINE RACK  /  32-STEP GLITCH MATRIX", static_cast<int>(w * 0.5f - 160.0f), 38, 320, 14, juce::Justification::centred);
+    g.setFont(juce::FontOptions(11.5f, juce::Font::bold));
+    g.setColour(pal.accentPrimary.withAlpha(0.82f));
+    g.drawText("15-ENGINE RACK / 32-STEP GLITCH MATRIX", static_cast<int>(w * 0.5f - 160.0f), 38, 320, 15, juce::Justification::centred);
 
     // Live Gate Status Pill Indicator in Header
     const auto tel = processor_.getTelemetry();
     const bool gateOpen = tel.activeGate > 0.25f;
     const bool midiMode = sequencerGrid_.isMidiTriggerMode();
-    juce::Rectangle<float> statusPill(245.0f, 16.0f, 128.0f, 26.0f);
+    juce::Rectangle<float> statusPill(240.0f, 16.0f, 138.0f, 26.0f);
     g.setColour(gateOpen ? pal.accentPrimary.withAlpha(0.25f) : pal.stepInactiveFill);
     g.fillRoundedRectangle(statusPill, 13.0f);
-    g.setColour(gateOpen ? pal.accentPrimary : pal.cardBorder);
+    g.setColour(gateOpen ? pal.accentPrimary : pal.cardBorder.brighter(0.2f));
     g.drawRoundedRectangle(statusPill, 13.0f, 1.3f);
-    g.setColour(gateOpen ? pal.textBright : pal.textMuted);
-    g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
+    g.setColour(gateOpen ? pal.textBright : pal.textBright.withAlpha(0.82f));
+    g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
     g.drawText(stepPillText(tel.currentStep, sequencerGrid_.loopLength(), gateOpen, midiMode), statusPill.toNearestInt(),
                juce::Justification::centred);
 
@@ -640,16 +640,20 @@ void EditorContent::paint(juce::Graphics& g) {
         g.fillRoundedRectangle(hdr, 4.0f);
 
         // Per-FX Pad Routing Count Badge in top-right corner of header
-        juce::Rectangle<float> padBadge(hdr.getRight() - 56.0f, hdr.getY() + 2.0f, 53.0f, 15.0f);
-        g.setColour(padCount > 0 ? pal.accentPrimary.withAlpha(0.24f) : juce::Colours::black.withAlpha(0.55f));
+        juce::Rectangle<float> padBadge(hdr.getRight() - 58.0f, hdr.getY() + 2.0f, 56.0f, 16.0f);
+        g.setColour(padCount > 0 ? pal.accentPrimary.withAlpha(0.24f) : juce::Colours::black.withAlpha(0.45f));
         g.fillRoundedRectangle(padBadge, 3.0f);
-        g.setColour(padCount > 0 ? pal.accentPrimary : pal.textBright.withAlpha(0.85f));
-        g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
+        if (padCount == 0) {
+            g.setColour(pal.cardBorder.withAlpha(0.75f));
+            g.drawRoundedRectangle(padBadge, 3.0f, 0.8f);
+        }
+        g.setColour(padCount > 0 ? pal.accentPrimary : pal.textBright.withAlpha(0.92f));
+        g.setFont(juce::FontOptions(11.5f, juce::Font::bold));
         g.drawText(juce::String(padCount) + (padCount == 1 ? " PAD" : " PADS"), padBadge.toNearestInt(), juce::Justification::centred);
 
         g.setColour(firingNow ? pal.textBright : (moduleArmed ? pal.accentPrimary : pal.textBright));
         g.setFont(juce::FontOptions(12.5f, juce::Font::bold));
-        g.drawFittedText(slot.title, hdr.withTrimmedBottom(15.0f).withTrimmedRight(58.0f).withTrimmedLeft(4.0f).toNearestInt(),
+        g.drawFittedText(slot.title, hdr.withTrimmedBottom(15.0f).withTrimmedRight(60.0f).withTrimmedLeft(4.0f).toNearestInt(),
                          juce::Justification::centredLeft, 1);
 
         const bool silent = slot.look.silent;
@@ -693,11 +697,11 @@ void EditorContent::paint(juce::Graphics& g) {
             g.drawRoundedRectangle(mb, 4.0f, 1.0f);
 
             auto drawBar = [&](float y, const char* label, float val01, juce::Colour col, float peak01 = -1.0f) {
-                g.setColour(pal.textMuted);
-                g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
-                g.drawText(label, static_cast<int>(mb.getX() + 5.0f), static_cast<int>(y - 3.0f), 42, 12, juce::Justification::centredLeft);
+                g.setColour(pal.textBright.withAlpha(0.82f));
+                g.setFont(juce::FontOptions(11.5f, juce::Font::bold));
+                g.drawText(label, static_cast<int>(mb.getX() + 5.0f), static_cast<int>(y - 4.0f), 44, 14, juce::Justification::centredLeft);
 
-                juce::Rectangle<float> track(mb.getX() + 48.0f, y, mb.getWidth() - 54.0f, 6.0f);
+                juce::Rectangle<float> track(mb.getX() + 50.0f, y, mb.getWidth() - 56.0f, 6.0f);
                 g.setColour(pal.stepInactiveFill);
                 g.fillRoundedRectangle(track, 2.0f);
 
@@ -742,9 +746,9 @@ void EditorContent::paint(juce::Graphics& g) {
         }
     }
 
-    g.setColour(pal.textMuted);
-    g.setFont(juce::FontOptions(11.0f, juce::Font::plain));
-    g.drawText("v" JucePlugin_VersionString, static_cast<int>(w - 180.0f), static_cast<int>(h - 20.0f), 150, 16, juce::Justification::centredRight);
+    g.setColour(pal.textBright.withAlpha(0.68f));
+    g.setFont(juce::FontOptions(12.0f, juce::Font::plain));
+    g.drawText("v" JucePlugin_VersionString, static_cast<int>(w - 180.0f), static_cast<int>(h - 21.0f), 150, 17, juce::Justification::centredRight);
 }
 
 juce::String EditorContent::stepPillText(int currentStep, int loopLength, bool gateOpen, bool midiMode) {

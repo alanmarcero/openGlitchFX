@@ -730,7 +730,7 @@ void StepSequencerComponent::paint(juce::Graphics& g) {
         g.setColour(pal.accentSecondary.withAlpha(0.20f));
         g.fillRoundedRectangle(header, 3.0f);
         g.setColour(pal.textBright);
-        g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
+        g.setFont(juce::FontOptions(11.5f, juce::Font::bold));
         g.drawText(readout, header.toNearestInt(), juce::Justification::centred);
     }
 
@@ -746,8 +746,8 @@ void StepSequencerComponent::paint(juce::Graphics& g) {
         g.setColour(playheadInBeat ? pal.accentPrimary.withAlpha(0.18f) : pal.headerPlate.withAlpha(0.7f));
         g.fillRoundedRectangle(beatHeader, 3.0f);
 
-        g.setColour(playheadInBeat ? pal.accentPrimary : pal.textMuted.withAlpha(firstStep < length ? 1.0f : 0.45f));
-        g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
+        g.setColour(playheadInBeat ? pal.accentPrimary : pal.textBright.withAlpha(firstStep < length ? 0.85f : 0.50f));
+        g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
         g.drawText(juce::String::formatted("BEAT %d (%d-%d)", b + 1, firstStep + 1, lastStep + 1),
                    beatHeader.toNearestInt(), juce::Justification::centred);
     }

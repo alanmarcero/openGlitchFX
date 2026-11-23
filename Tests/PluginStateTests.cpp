@@ -385,9 +385,9 @@ TEST_CASE("Detail controls with no effect dim and name what turns them on", "[pl
     REQUIRE(cutoff != nullptr);
     REQUIRE(midiStart != nullptr);
     panel.refreshDependencies();
-    REQUIRE(cutoff->getAlpha() < 0.5f);
+    REQUIRE(cutoff->getAlpha() < 0.7f);
     REQUIRE(cutoff->getTooltip().contains("Needs FILTER on"));
-    REQUIRE(midiStart->getAlpha() < 0.5f);
+    REQUIRE(midiStart->getAlpha() < 0.7f);
     REQUIRE(midiStart->getTooltip().contains("Needs TRIGGER set to MIDI"));
 
     processor.parameters.getParameter(openglitch::params::kFilterMode)->setValueNotifyingHost(0.5f);

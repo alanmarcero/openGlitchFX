@@ -260,7 +260,7 @@ void DetailPanelComponent::refreshDependencies() {
     if (!dimmingChanged && !subtitlesChanged) {
         return;
     }
-    std::ranges::for_each(controls, [](const auto& control) { control.first->setAlpha(control.second ? 1.0f : 0.45f); });
+    std::ranges::for_each(controls, [](const auto& control) { control.first->setAlpha(control.second ? 1.0f : 0.65f); });
     std::ranges::for_each(std::views::iota(size_t{ 0 }, cards_.size()), [&](size_t i) { cards_[i].subtitle = subtitles[i]; });
     repaint();
 }
@@ -376,7 +376,7 @@ void DetailPanelComponent::paint(juce::Graphics& g) {
     g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
     for (const auto& [component, caption] : captions_) {
         const bool active = component->getAlpha() > 0.9f;
-        g.setColour(pal.textBright.withAlpha(active ? 0.84f : 0.54f));
+        g.setColour(pal.textBright.withAlpha(active ? 0.84f : 0.68f));
         const auto b = component->getBounds();
         g.drawText(caption, b.getX(), b.getY() - static_cast<int>(kCaptionH), b.getWidth(), static_cast<int>(kCaptionH),
                    juce::Justification::centredLeft);

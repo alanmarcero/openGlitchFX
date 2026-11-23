@@ -238,7 +238,7 @@ void EnvelopeEditorComponent::paint(juce::Graphics& g) {
         }
     }
 
-    const juce::Font labelFont(juce::FontOptions(11.0f, juce::Font::bold));
+    const juce::Font labelFont(juce::FontOptions(11.5f, juce::Font::bold));
     g.setFont(labelFont);
     auto drawAxisLabel = [&](const juce::String& text, bool isTop) {
         if (text.isEmpty()) {
@@ -246,8 +246,8 @@ void EnvelopeEditorComponent::paint(juce::Graphics& g) {
         }
         const float textW = std::ceil(juce::GlyphArrangement::getStringWidth(labelFont, text)) + 8.0f;
         const float x = area.getX() + kHitRadius + 6.0f;
-        const float y = isTop ? area.getY() + 1.0f : area.getBottom() - 15.0f;
-        const juce::Rectangle<float> pill(x, y, textW, 14.0f);
+        const float y = isTop ? area.getY() + 1.0f : area.getBottom() - 16.0f;
+        const juce::Rectangle<float> pill(x, y, textW, 15.0f);
         g.setColour(pal.bgBottom.withAlpha(0.84f));
         g.fillRoundedRectangle(pill, 3.0f);
         g.setColour(pal.textMuted);
@@ -272,7 +272,7 @@ void EnvelopeEditorComponent::paint(juce::Graphics& g) {
         g.setColour(pal.bgTop.withAlpha(0.92f));
         g.fillRoundedRectangle(box, 3.0f);
         g.setColour(pal.textBright);
-        g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
+        g.setFont(juce::FontOptions(11.5f, juce::Font::bold));
         g.drawText(readout, box, juce::Justification::centred);
     }
 }
