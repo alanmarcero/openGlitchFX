@@ -778,8 +778,8 @@ void StepSequencerComponent::paint(juce::Graphics& g) {
         if (isStepLocked(i)) {
             topLabelRect = topLabelRect.withTrimmedRight(11.0f);
         }
-        g.setColour(isSixteenthStart ? pal.textBright.withAlpha(0.75f) : pal.textMuted.withAlpha(0.65f));
-        g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
+        g.setColour(isSixteenthStart ? pal.textBright.withAlpha(0.92f) : pal.textMuted.brighter(0.25f));
+        g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
         g.drawText(juce::String(i + 1), topLabelRect.toNearestInt(), juce::Justification::centred);
     }
 
@@ -851,8 +851,8 @@ void StepSequencerComponent::paint(juce::Graphics& g) {
                 topNumRect = topNumRect.withTrimmedRight(11.0f);
             }
             const bool isCurrentSubStep = (s == currentStep_);
-            g.setColour(isCurrentSubStep ? pal.stepPlayheadOutline : juce::Colours::black.withAlpha(0.85f));
-            g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
+            g.setColour(isCurrentSubStep ? pal.stepPlayheadOutline : juce::Colours::black.withAlpha(0.90f));
+            g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
             g.drawText(juce::String(s + 1), topNumRect.toNearestInt(), juce::Justification::centred);
         }
 
@@ -862,12 +862,13 @@ void StepSequencerComponent::paint(juce::Graphics& g) {
 
         // Unified Center FX & Duration Badge across the combined block
         auto badgeRect = mergedRect.withY(mergedRect.getY() + 18.0f).withHeight(18.0f).reduced(3.0f, 0.0f);
-        g.setColour(juce::Colours::black.withAlpha(0.62f));
+        g.setColour(juce::Colours::black.withAlpha(0.72f));
         g.fillRoundedRectangle(badgeRect, 3.5f);
 
         g.setColour(isCustomMask ? pal.stepPlayheadOutline : pal.textBright);
-        g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
-        g.drawText(formatStepFxBadge(runMask, runLen, beatSteps), badgeRect.toNearestInt(), juce::Justification::centred);
+        g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
+        g.drawFittedText(formatStepFxBadge(runMask, runLen, beatSteps), badgeRect.toNearestInt(),
+                         juce::Justification::centred, 1, 0.80f);
 
         // Unified 3x5 Mini LED Dot Matrix centered at the bottom of the combined block
         const float maxMatrixW = std::min(mergedRect.getWidth() - 6.0f, 80.0f);

@@ -8,8 +8,8 @@ using openglitch::core::ModEnvelope;
 
 namespace {
 
-constexpr float kCardHeaderH = 30.0f;
-constexpr float kCaptionH = 14.0f;
+constexpr float kCardHeaderH = 32.0f;
+constexpr float kCaptionH = 16.0f;
 constexpr float kControlH = 36.0f;
 constexpr float kRowGap = 6.0f;
 constexpr float kColGap = 6.0f;
@@ -269,7 +269,7 @@ void DetailPanelComponent::setTelemetry(const openglitch::core::MeterTelemetry& 
     const auto& pal = lnf_.getPalette();
     for (size_t i = 0; i < envTabs_.size(); ++i) {
         const bool on = processor_.parameters.getRawParameterValue(openglitch::params::kEnvDescriptors[i].onParamId)->load() > 0.5f;
-        envTabs_[i].setColour(juce::TextButton::textColourOffId, on ? pal.accentPrimary : pal.textMuted);
+        envTabs_[i].setColour(juce::TextButton::textColourOffId, on ? pal.accentPrimary : pal.textBright.withAlpha(0.76f));
         envTabs_[i].setColour(juce::TextButton::textColourOnId, on ? pal.accentPrimary : pal.textBright);
     }
     envEditor_.setActive(isSelectedEnvelopeActive());
@@ -356,20 +356,27 @@ void DetailPanelComponent::paint(juce::Graphics& g) {
         g.setColour(pal.cardBorder);
         g.drawRoundedRectangle(card.bounds, 6.0f, 1.0f);
 
-        const juce::Rectangle<float> hdr(card.bounds.getX() + 6.0f, card.bounds.getY() + 5.0f, card.bounds.getWidth() - 12.0f, 22.0f);
+        const juce::Rectangle<float> hdr(card.bounds.getX() + 6.0f, card.bounds.getY() + 5.0f, card.bounds.getWidth() - 12.0f, 24.0f);
         g.setColour(pal.headerPlate);
         g.fillRoundedRectangle(hdr, 4.0f);
+        const auto hdrInner = hdr.reduced(9.0f, 0.0f);
+        const juce::Font titleFont(juce::FontOptions(12.5f, juce::Font::bold));
+        const float titleW = juce::GlyphArrangement::getStringWidth(titleFont, card.title) + 10.0f;
         g.setColour(pal.accentPrimary);
-        g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
-        g.drawText(card.title, hdr.reduced(8.0f, 0.0f).toNearestInt(), juce::Justification::centredLeft);
-        g.setColour(pal.textMuted);
-        g.setFont(juce::FontOptions(11.0f, juce::Font::plain));
-        g.drawText(card.subtitle, hdr.reduced(8.0f, 0.0f).toNearestInt(), juce::Justification::centredRight);
+        g.setFont(titleFont);
+        g.drawText(card.title, hdrInner.withWidth(std::min(titleW, hdrInner.getWidth())).toNearestInt(), juce::Justification::centredLeft);
+        if (card.subtitle.isNotEmpty() && hdrInner.getWidth() > titleW) {
+            g.setColour(pal.textBright.withAlpha(0.72f));
+            g.setFont(juce::FontOptions(11.5f, juce::Font::plain));
+            g.drawFittedText(card.subtitle, hdrInner.withTrimmedLeft(titleW).toNearestInt(),
+                             juce::Justification::centredRight, 1, 0.78f);
+        }
     }
 
-    g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
+    g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
     for (const auto& [component, caption] : captions_) {
-        g.setColour(pal.textMuted.withMultipliedAlpha(component->getAlpha()));
+        const bool active = component->getAlpha() > 0.9f;
+        g.setColour(pal.textBright.withAlpha(active ? 0.84f : 0.54f));
         const auto b = component->getBounds();
         g.drawText(caption, b.getX(), b.getY() - static_cast<int>(kCaptionH), b.getWidth(), static_cast<int>(kCaptionH),
                    juce::Justification::centredLeft);

@@ -89,6 +89,7 @@ private:
     // Header Controls
     juce::ComboBox themeBox_;
     juce::Label themeLabel_{ {}, "THEME:" };
+    juce::Label scaleLabel_{ {}, "SCALE:" };
     juce::ComboBox scaleBox_;
     juce::ToggleButton hostSyncButton_{ "HOST SYNC" };
     juce::Slider internalBpmSlider_;

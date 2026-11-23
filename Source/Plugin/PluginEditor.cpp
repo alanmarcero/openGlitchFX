@@ -24,10 +24,14 @@ EditorContent::EditorContent(OpenGlitchFXProcessor& owner)
     // Header Look Selector
     themeBox_.addItemList({ "Cyber Neon", "Industrial Amber", "Acid Matrix", "Arctic Glitch" }, 1);
     themeBox_.setTitle("Theme");
-    themeBox_.setTooltip("Choose a dark colour scheme for the rack, menus and envelopes.");
+    themeBox_.setTooltip("Choose a dark color scheme for the rack, menus and envelopes.");
     themeBox_.setJustificationType(juce::Justification::centred);
     themeBox_.onChange = [this]() { applyTheme(themeBox_.getSelectedItemIndex()); };
     addAndMakeVisible(themeBox_);
+
+    scaleLabel_.setFont(juce::FontOptions(14.0f, juce::Font::bold));
+    scaleLabel_.setJustificationType(juce::Justification::centredRight);
+    addAndMakeVisible(scaleLabel_);
 
     scaleBox_.addItemList({ "70%", "85%", "100%", "125%" }, 1);
     scaleBox_.setTitle("Editor Scale");
@@ -322,17 +326,18 @@ void EditorContent::applyTheme(int themeIndex) {
     lookAndFeel_.setTheme(static_cast<openglitch::ui::Theme>(themeIndex));
     const auto& pal = lookAndFeel_.getPalette();
 
-    themeLabel_.setColour(juce::Label::textColourId, pal.textMuted);
+    themeLabel_.setColour(juce::Label::textColourId, pal.textMuted.brighter(0.2f));
+    scaleLabel_.setColour(juce::Label::textColourId, pal.textMuted.brighter(0.2f));
     paintBrushLabel_.setColour(juce::Label::textColourId, pal.accentPrimary);
     smoothLabel_.setColour(juce::Label::textColourId, pal.textMuted);
     masterMixLabel_.setColour(juce::Label::textColourId, pal.textMuted);
     masterGainLabel_.setColour(juce::Label::textColourId, pal.textMuted);
-    sequenceLengthLabel_.setColour(juce::Label::textColourId, pal.textMuted);
+    sequenceLengthLabel_.setColour(juce::Label::textColourId, pal.textBright.withAlpha(0.85f));
     sequenceLengthValueLabel_.setColour(juce::Label::textColourId, pal.accentPrimary);
-    sequencerSwingLabel_.setColour(juce::Label::textColourId, pal.textMuted);
+    sequencerSwingLabel_.setColour(juce::Label::textColourId, pal.textBright.withAlpha(0.85f));
     sequencerSwingValueLabel_.setColour(juce::Label::textColourId, pal.accentPrimary);
-    patternRateLabel_.setColour(juce::Label::textColourId, pal.textMuted);
-    patternChanceLabel_.setColour(juce::Label::textColourId, pal.textMuted);
+    patternRateLabel_.setColour(juce::Label::textColourId, pal.textBright.withAlpha(0.85f));
+    patternChanceLabel_.setColour(juce::Label::textColourId, pal.textBright.withAlpha(0.85f));
     patternChanceValueLabel_.setColour(juce::Label::textColourId, pal.accentPrimary);
     sequenceLengthSlider_.setColour(juce::Slider::thumbColourId, pal.accentPrimary);
     sequenceLengthSlider_.setColour(juce::Slider::trackColourId, pal.accentPrimary);
@@ -625,7 +630,7 @@ void EditorContent::paint(juce::Graphics& g) {
         g.drawRoundedRectangle(r, 6.0f, (firingNow || isBrushTarget) ? 1.8f : (moduleArmed ? 1.4f : 1.0f));
 
         const bool isHeaderHovered = (static_cast<int>(i) == hoveredFxHeader_);
-        juce::Rectangle<float> hdr(r.getX() + 6.0f, r.getY() + 5.0f, r.getWidth() - 12.0f, 32.0f);
+        juce::Rectangle<float> hdr(r.getX() + 6.0f, r.getY() + 5.0f, r.getWidth() - 12.0f, 34.0f);
         juce::Colour hdrCol = firingNow ? pal.accentSecondary.withAlpha(0.28f)
                                         : (isBrushTarget ? pal.accentPrimary.withAlpha(0.22f) : pal.headerPlate);
         if (isHeaderHovered) {
@@ -643,16 +648,17 @@ void EditorContent::paint(juce::Graphics& g) {
         g.drawText(juce::String(padCount) + (padCount == 1 ? " PAD" : " PADS"), padBadge.toNearestInt(), juce::Justification::centred);
 
         g.setColour(firingNow ? pal.textBright : (moduleArmed ? pal.accentPrimary : pal.textBright));
-        g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
-        g.drawFittedText(slot.title, hdr.withTrimmedBottom(14.0f).withTrimmedRight(58.0f).withTrimmedLeft(4.0f).toNearestInt(),
+        g.setFont(juce::FontOptions(12.5f, juce::Font::bold));
+        g.drawFittedText(slot.title, hdr.withTrimmedBottom(15.0f).withTrimmedRight(58.0f).withTrimmedLeft(4.0f).toNearestInt(),
                          juce::Justification::centredLeft, 1);
 
         const bool silent = slot.look.silent;
         const juce::String subtitle = isBrushTarget ? juce::String("PAD BRUSH ACTIVE")
                                                     : (silent ? juce::String("AMOUNT 0%: NO EFFECT") : slot.subtitle);
-        g.setColour(isBrushTarget ? pal.stepPlayheadOutline : pal.textMuted);
-        g.setFont(juce::FontOptions(11.0f, juce::Font::plain));
-        g.drawText(subtitle, hdr.withTrimmedTop(15.0f).withTrimmedLeft(4.0f).toNearestInt(), juce::Justification::centredLeft);
+        g.setColour(isBrushTarget ? pal.stepPlayheadOutline : pal.textBright.withAlpha(0.72f));
+        g.setFont(juce::FontOptions(12.0f, juce::Font::plain));
+        g.drawFittedText(subtitle, hdr.withTrimmedTop(16.0f).withTrimmedBottom(2.0f).withTrimmedLeft(4.0f).withTrimmedRight(4.0f).toNearestInt(),
+                         juce::Justification::centredLeft, 1, 0.85f);
 
         // Live Per-FX Envelope Activity Bar along bottom of card header
         juce::Rectangle<float> envTrack(hdr.getX() + 2.0f, hdr.getBottom() - 2.2f, hdr.getWidth() - 4.0f, 2.0f);
@@ -723,15 +729,15 @@ void EditorContent::paint(juce::Graphics& g) {
             const float maxOut = std::max(tel.peakL, tel.peakR);
             const juce::String dbStr = (maxOut <= 1e-4f) ? "OUT: -INF dB"
                                                          : juce::String::formatted("OUT: %+.1f dB", 20.0f * std::log10(maxOut));
-            g.setColour(clipHold_ > 0.1f ? pal.accentSecondary : pal.textBright.withAlpha(0.85f));
-            g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
-            g.drawText(dbStr, static_cast<int>(mb.getX() + 6.0f), static_cast<int>(mb.getBottom() - 18.0f), 110, 14, juce::Justification::centredLeft);
+            g.setColour(clipHold_ > 0.1f ? pal.accentSecondary : pal.textBright);
+            g.setFont(juce::FontOptions(12.5f, juce::Font::bold));
+            g.drawText(dbStr, static_cast<int>(mb.getX() + 6.0f), static_cast<int>(mb.getBottom() - 20.0f), 112, 16, juce::Justification::centredLeft);
 
-            juce::Rectangle<float> clipBadge(mb.getRight() - 44.0f, mb.getBottom() - 18.0f, 38.0f, 14.0f);
+            juce::Rectangle<float> clipBadge(mb.getRight() - 46.0f, mb.getBottom() - 20.0f, 40.0f, 16.0f);
             g.setColour(clipHold_ > 0.1f ? pal.accentSecondary : pal.stepInactiveFill);
             g.fillRoundedRectangle(clipBadge, 3.0f);
-            g.setColour(clipHold_ > 0.1f ? pal.textBright : pal.textMuted);
-            g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
+            g.setColour(clipHold_ > 0.1f ? pal.textBright : pal.textMuted.brighter(0.2f));
+            g.setFont(juce::FontOptions(11.5f, juce::Font::bold));
             g.drawText("CLIP", clipBadge.toNearestInt(), juce::Justification::centred);
         }
     }
@@ -773,11 +779,12 @@ void EditorContent::resized() {
     }
 
     // Header Controls (Right Side)
-    hostSyncButton_.setBounds(static_cast<int>(w - 566.0f), 12, 116, 36);
-    internalBpmSlider_.setBounds(static_cast<int>(w - 446.0f), 12, 92, 36);
-    themeLabel_.setBounds(static_cast<int>(w - 350.0f), 12, 62, 36);
-    themeBox_.setBounds(static_cast<int>(w - 282.0f), 12, 160, 36);
-    scaleBox_.setBounds(static_cast<int>(w - 116.0f), 12, 84, 36);
+    hostSyncButton_.setBounds(static_cast<int>(w - 582.0f), 12, 108, 36);
+    internalBpmSlider_.setBounds(static_cast<int>(w - 468.0f), 12, 86, 36);
+    themeLabel_.setBounds(static_cast<int>(w - 376.0f), 12, 58, 36);
+    themeBox_.setBounds(static_cast<int>(w - 314.0f), 12, 142, 36);
+    scaleLabel_.setBounds(static_cast<int>(w - 166.0f), 12, 50, 36);
+    scaleBox_.setBounds(static_cast<int>(w - 112.0f), 12, 84, 36);
 
     // 32-Step Beat Sequencer Section
     sequencerGrid_.setBounds(static_cast<int>(margin), 106, static_cast<int>(w - margin * 2.0f), 112);
@@ -863,7 +870,7 @@ void EditorContent::resized() {
         slot.cardBounds = { cx, cy, cardW, cardH };
 
         auto inner = slot.cardBounds.reduced(8.0f);
-        inner.removeFromTop(34.0f);
+        inner.removeFromTop(36.0f);
         auto btnArea = inner.removeFromBottom(36.0f);
         slot.knob.setBounds(inner.toNearestInt());
         slot.enableBtn.setBounds(btnArea.reduced(8.0f, 0.0f).toNearestInt());

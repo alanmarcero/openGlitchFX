@@ -259,13 +259,35 @@ void GlitchLookAndFeel::drawLinearSlider(juce::Graphics& g,
     }
     if (!slider.isBar()) {
         LookAndFeel_V4::drawLinearSlider(g, x, y, width, height, sliderPos, minSliderPos, maxSliderPos, style, slider);
-    } else {
-        // A light fill keeps the value text readable.
-        const float zeroX = static_cast<float>(x) + static_cast<float>(width) * zeroProportion(slider);
-        g.setColour(slider.findColour(juce::Slider::trackColourId).withAlpha(0.3f));
-        g.fillRect(juce::Rectangle<float>::leftTopRightBottom(std::min(zeroX, sliderPos), static_cast<float>(y) + 0.5f,
-                                                              std::max(zeroX, sliderPos), static_cast<float>(y + height) - 0.5f));
+        if (!enabled) {
+            g.endTransparencyLayer();
+        }
+        return;
     }
+
+    const auto bounds = juce::Rectangle<float>(static_cast<float>(x), static_cast<float>(y),
+                                               static_cast<float>(width), static_cast<float>(height));
+    const auto inner = bounds.reduced(1.0f);
+    const float zeroX = static_cast<float>(x) + static_cast<float>(width) * zeroProportion(slider);
+    const float fillLeft = std::clamp(std::min(zeroX, sliderPos), inner.getX(), inner.getRight());
+    const float fillRight = std::clamp(std::max(zeroX, sliderPos), inner.getX(), inner.getRight());
+    const auto trackCol = slider.findColour(juce::Slider::trackColourId);
+
+    // Subtle body fill + center scrim + bottom-edge bar keep centered text readable without a harsh vertical bisection.
+    g.setColour(trackCol.withAlpha(0.18f));
+    g.fillRoundedRectangle(juce::Rectangle<float>::leftTopRightBottom(fillLeft, inner.getY(), fillRight, inner.getBottom()), 3.5f);
+
+    if (inner.getWidth() > 28.0f) {
+        g.setColour(palette_.bgBottom.withAlpha(0.55f));
+        g.fillRoundedRectangle(inner.reduced(12.0f, 5.0f), 3.0f);
+    }
+
+    g.setColour(trackCol.withAlpha(0.90f));
+    g.fillRoundedRectangle(juce::Rectangle<float>::leftTopRightBottom(fillLeft, inner.getBottom() - 3.0f, fillRight, inner.getBottom()), 1.5f);
+
+    g.setColour(slider.hasKeyboardFocus(true) ? palette_.accentPrimary : palette_.cardBorder.brighter(0.25f));
+    g.drawRoundedRectangle(inner, 4.0f, 1.0f);
+
     if (!enabled) {
         g.endTransparencyLayer();
     }
@@ -336,8 +358,8 @@ void GlitchLookAndFeel::drawButtonBackground(juce::Graphics& g,
     g.fillRoundedRectangle(bounds, 3.5f);
 
     const bool lit = button.isEnabled() && (shouldDrawButtonAsHighlighted || button.getToggleState() || button.hasKeyboardFocus(false));
-    g.setColour((lit ? palette_.accentPrimary : palette_.cardBorder).withMultipliedAlpha(alpha));
-    g.drawRoundedRectangle(bounds, 3.5f, 1.0f);
+    g.setColour((lit ? palette_.accentPrimary : palette_.cardBorder.brighter(0.35f)).withMultipliedAlpha(alpha));
+    g.drawRoundedRectangle(bounds, 3.5f, lit ? 1.4f : 1.15f);
 }
 
 void GlitchLookAndFeel::drawButtonText(juce::Graphics& g,
