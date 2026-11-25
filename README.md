@@ -65,4 +65,4 @@ Install with [OpenVST Manager](https://github.com/alanmarcero/alan-m-OpenVSTMana
 
 ## License
 
-openGlitchFX uses the MIT license. See [LICENSE](LICENSE).
+openGlitchFX uses AGPL-3.0. See [LICENSE](LICENSE).
