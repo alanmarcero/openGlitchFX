@@ -591,3 +591,21 @@ TEST_CASE("Slot B inherits preset metadata on initial reset", "[plugin][ab]") {
     REQUIRE(processor.currentPresetLabel() == initialLabel);
     REQUIRE_FALSE(processor.currentPresetIsEdited());
 }
+
+TEST_CASE("EnvelopeEditorComponent ignores stale drag index if points shrink mid-drag", "[ui][envelope]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    openglitch::ui::GlitchLookAndFeel lnf;
+    openglitch::ui::EnvelopeEditorComponent editor(lnf);
+    editor.setBounds(0, 0, 200, 100);
+    editor.setPoints({ { 0.0f, 0.5f }, { 0.5f, 0.8f }, { 1.0f, 0.2f } });
+
+    const auto source = juce::Desktop::getInstance().getMainMouseSource();
+    const juce::MouseEvent downEvent(source, juce::Point<float>(100.0f, 20.0f), juce::ModifierKeys(),
+                                     1.0f, 0.0f, 0.0f, 0.0f, 0.0f, &editor, &editor,
+                                     juce::Time::getCurrentTime(), juce::Point<float>(100.0f, 20.0f),
+                                     juce::Time::getCurrentTime(), 1, false);
+    editor.mouseDown(downEvent);
+    editor.setPoints({ { 0.0f, 0.5f }, { 1.0f, 0.2f } });
+    editor.mouseDrag(downEvent);
+    REQUIRE(editor.dragReadout().isEmpty());
+}

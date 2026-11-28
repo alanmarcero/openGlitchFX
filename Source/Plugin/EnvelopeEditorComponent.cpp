@@ -19,6 +19,8 @@ EnvelopeEditorComponent::EnvelopeEditorComponent(const GlitchLookAndFeel& lnf) :
 void EnvelopeEditorComponent::setPoints(std::vector<EnvelopePoint> points) {
     std::ranges::sort(points, {}, &EnvelopePoint::x);
     points_ = std::move(points);
+    dragIndex_ = -1;
+    hoveredIndex_ = -1;
     repaint();
 }
 
@@ -33,7 +35,7 @@ void EnvelopeEditorComponent::setAxis(const juce::String& top, const juce::Strin
 }
 
 juce::String EnvelopeEditorComponent::dragReadout() const {
-    if (dragIndex_ < 0 || describeValue_ == nullptr) {
+    if (dragIndex_ < 0 || static_cast<size_t>(dragIndex_) >= points_.size() || describeValue_ == nullptr) {
         return {};
     }
     const auto& point = points_[static_cast<size_t>(dragIndex_)];
@@ -84,8 +86,13 @@ int EnvelopeEditorComponent::hitTestPoint(juce::Point<float> pos) const {
 }
 
 void EnvelopeEditorComponent::removePoint(int index) {
-    if (index < 0 || static_cast<int>(points_.size()) <= kMinPoints) {
+    if (index < 0 || index >= static_cast<int>(points_.size()) || static_cast<int>(points_.size()) <= kMinPoints) {
         return;
+    }
+    if (dragIndex_ == index) {
+        dragIndex_ = -1;
+    } else if (dragIndex_ > index) {
+        --dragIndex_;
     }
     points_.erase(points_.begin() + index);
     if (onPointsChanged) {
@@ -155,7 +162,7 @@ void EnvelopeEditorComponent::mouseDown(const juce::MouseEvent& event) {
 }
 
 void EnvelopeEditorComponent::mouseDrag(const juce::MouseEvent& event) {
-    if (dragIndex_ < 0 || event.mods.isPopupMenu()) {
+    if (dragIndex_ < 0 || static_cast<size_t>(dragIndex_) >= points_.size() || event.mods.isPopupMenu()) {
         return;
     }
     // Points keep their time order.
@@ -266,7 +273,8 @@ void EnvelopeEditorComponent::paint(juce::Graphics& g) {
         g.drawLine(x, area.getY(), x, area.getBottom(), 1.5f);
     }
 
-    if (const auto readout = dragReadout(); readout.isNotEmpty()) {
+    if (const auto readout = dragReadout(); readout.isNotEmpty()
+        && dragIndex_ >= 0 && static_cast<size_t>(dragIndex_) < points_.size()) {
         const auto point = toScreen(points_[static_cast<size_t>(dragIndex_)]);
         const auto box = juce::Rectangle<float>(112.0f, 18.0f).withCentre({ point.x, point.y - 16.0f }).constrainedWithin(bounds.reduced(2.0f));
         g.setColour(pal.bgTop.withAlpha(0.92f));
