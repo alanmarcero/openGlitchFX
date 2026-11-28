@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.9.4
+
+- Resets or bounds-checks `dragIndex_` when envelope points change or are removed during a drag.
+
 ## v1.9.3
 
 - Fixes editor layout, lock enforcement, and control polish.
